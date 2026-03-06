@@ -1,20 +1,22 @@
-# Rust
-target/
-*.rs.bk
-Cargo.lock
-
-# Go
+# Go binaries
 *.exe
 *.exe~
 *.test
 *.out
 vendor/
 
-# C / C++
+# The compiled greenies binary (we distribute source, not binaries)
+greenies
+
+# Data and secrets — never commit these to GitHub.
+# ~/.greenies/ is where the program stores task data, config, and future API keys.
+# Each user has their own copy of this folder on their own machine.
+~/.greenies/
+
+# C / C++ (kept from initial setup)
 *.o
 *.a
 *.so
-*.out
 build/
 cmake-build-*/
 CMakeFiles/
