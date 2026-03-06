@@ -11,6 +11,7 @@
 //	greenies list  --week YYYY-MM-DD
 //	greenies edit  <id> [--title "new title"] [--notes "new notes"] [--date YYYY-MM-DD]
 //	greenies delete <id>
+//	greenies clear
 package main
 
 import (
@@ -47,6 +48,8 @@ func main() {
 		runEdit(os.Args[2:])
 	case "delete":
 		runDelete(os.Args[2:])
+	case "clear":
+		runClear()
 	default:
 		fmt.Printf("Unknown command: %q\n\n", subcommand)
 		printUsage()
@@ -261,6 +264,29 @@ func runDelete(args []string) {
 	fmt.Printf("Task %s deleted.\n", id)
 }
 
+// runClear deletes every task in the store after asking for confirmation.
+// Useful during development and testing. The confirmation step is a safety net
+// so a mistyped command cannot accidentally wipe the whole schedule.
+func runClear() {
+	fmt.Print("This will delete ALL tasks. Type \"yes\" to confirm: ")
+
+	var response string
+	fmt.Scanln(&response)
+
+	if response != "yes" {
+		fmt.Println("Cancelled — nothing was deleted.")
+		return
+	}
+
+	// Save an empty list, which overwrites the existing file.
+	if err := store.Save([]task.Task{}); err != nil {
+		fmt.Printf("Error clearing tasks: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("All tasks deleted.")
+}
+
 // printUsage prints a friendly summary of available commands.
 // This is shown when the user types "greenies" with no arguments, or types
 // an unrecognised command.
@@ -272,6 +298,7 @@ Usage:
   greenies list   [--date YYYY-MM-DD | --week YYYY-MM-DD]
   greenies edit   <id> [--title "new"] [--notes "new"] [--date YYYY-MM-DD]
   greenies delete <id>
+  greenies clear
 
 Examples:
   greenies add --date 2026-03-05 --title "Sow sunflowers" --notes "2 trays"
