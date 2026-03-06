@@ -14,11 +14,6 @@ import (
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
-// dateFormat is the layout string Go uses to parse and format dates.
-// "2006-01-02" is Go's reference date — in Go, you always use this exact
-// date (Jan 2, 2006) as a template. It looks odd but it is how Go works.
-const dateFormat = "2006-01-02"
-
 // PrintDay displays all tasks for a single date in the day-view format.
 //
 // Example output:
@@ -37,7 +32,7 @@ func PrintDay(date string, tasks []task.Task) {
 
 	// Parse the date string into a time.Time value so we can extract the
 	// day name (e.g. "Thursday") and format it nicely.
-	t, err := time.Parse(dateFormat, date)
+	t, err := time.Parse(task.DateFormat, date)
 	if err != nil {
 		// If the date string is malformed, fall back to displaying it as-is
 		// rather than crashing. This should not happen in normal use.
@@ -79,19 +74,19 @@ func PrintDay(date string, tasks []task.Task) {
 // startDate and endDate are inclusive — both dates will be shown.
 // This is used by the "list --week" command to show 7 days at a glance.
 func PrintRange(startDate, endDate string, tasks []task.Task) error {
-	start, err := time.Parse(dateFormat, startDate)
+	start, err := time.Parse(task.DateFormat, startDate)
 	if err != nil {
 		return fmt.Errorf("invalid start date %q — use the format YYYY-MM-DD (e.g. 2026-03-05): %w", startDate, err)
 	}
 
-	end, err := time.Parse(dateFormat, endDate)
+	end, err := time.Parse(task.DateFormat, endDate)
 	if err != nil {
 		return fmt.Errorf("invalid end date %q — use the format YYYY-MM-DD (e.g. 2026-03-05): %w", endDate, err)
 	}
 
 	// Walk forward one day at a time from start to end, printing each day.
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		PrintDay(d.Format(dateFormat), tasks)
+		PrintDay(d.Format(task.DateFormat), tasks)
 	}
 
 	return nil

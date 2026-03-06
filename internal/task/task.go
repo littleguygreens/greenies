@@ -11,10 +11,19 @@
 package task
 
 import (
-	"crypto/rand" // Go's built-in secure random number generator
+	"crypto/rand"  // Go's built-in secure random number generator
 	"encoding/hex" // converts random bytes into a readable string of letters and numbers
 	"time"         // Go's built-in package for working with dates and times
 )
+
+// DateFormat is the single source of truth for how all dates are stored and
+// displayed throughout the program. The format "2006-01-02" is Go's way of
+// expressing YYYY-MM-DD — Go uses this specific reference date as a template
+// rather than letters like Y, M, D. Odd, but that's just how Go works.
+//
+// Defined here in the task package because Task.Date is the field that owns
+// this format — every other package that deals with dates borrows it from here.
+const DateFormat = "2006-01-02"
 
 // Task represents a single item on the calendar.
 //

@@ -25,8 +25,6 @@ import (
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
-// dateFormat is the expected date layout for all user-facing date input and output.
-const dateFormat = "2006-01-02"
 
 func main() {
 	// os.Args is the list of words the user typed. os.Args[0] is always the
@@ -81,7 +79,7 @@ func runAdd(args []string) {
 
 	// Validate the date format before saving — give a clear error if the
 	// user typed something like "March 5" instead of "2026-03-05".
-	if _, err := time.Parse(dateFormat, *dateFlag); err != nil {
+	if _, err := time.Parse(task.DateFormat, *dateFlag); err != nil {
 		fmt.Printf("Error: date %q is not in the right format. Use YYYY-MM-DD (e.g. 2026-03-05)\n", *dateFlag)
 		os.Exit(1)
 	}
@@ -136,21 +134,21 @@ func runList(args []string) {
 
 	case *weekFlag != "":
 		// Show 7 days starting from the given date.
-		start, err := time.Parse(dateFormat, *weekFlag)
+		start, err := time.Parse(task.DateFormat, *weekFlag)
 		if err != nil {
 			fmt.Printf("Error: date %q is not in the right format. Use YYYY-MM-DD (e.g. 2026-03-05)\n", *weekFlag)
 			os.Exit(1)
 		}
 		// AddDate(0, 0, 6) adds 6 days to the start date, giving a 7-day window.
 		end := start.AddDate(0, 0, 6)
-		if err := calendar.PrintRange(*weekFlag, end.Format(dateFormat), tasks); err != nil {
+		if err := calendar.PrintRange(*weekFlag, end.Format(task.DateFormat), tasks); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
 
 	default:
 		// If no flag was given, default to showing today.
-		today := time.Now().Format(dateFormat)
+		today := time.Now().Format(task.DateFormat)
 		calendar.PrintDay(today, tasks)
 	}
 }
@@ -195,7 +193,7 @@ func runEdit(args []string) {
 				tasks[i].Notes = *notesFlag
 			}
 			if *dateFlag != "" {
-				if _, err := time.Parse(dateFormat, *dateFlag); err != nil {
+				if _, err := time.Parse(task.DateFormat, *dateFlag); err != nil {
 					fmt.Printf("Error: date %q is not valid. Use YYYY-MM-DD (e.g. 2026-03-05)\n", *dateFlag)
 					os.Exit(1)
 				}
