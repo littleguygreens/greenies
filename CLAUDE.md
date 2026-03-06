@@ -1,0 +1,270 @@
+# Claude Session Instructions
+
+## Who I Am
+I am a complete beginner to programming and IDEs. I have no formal coding background.
+I am building a **microgreens crop scheduling CLI tool in Go** as a personal project.
+I am using **VS Code with Claude Code** on **Linux Mint**.
+
+## How I Need You to Communicate
+- Explain everything like I am 5 years old. Assume I know nothing about programming terminology.
+- When you use a technical term for the first time, define it immediately in plain English.
+- Never assume I know what an acronym means — spell it out the first time.
+- Use real-world analogies wherever possible (e.g. the Stardew Valley crop calendar comparison).
+- Keep explanations short and conversational. Do not write walls of text.
+
+## How I Need You to Write Code
+- Before writing any code, explain in plain English what you are about to do and why.
+- Before choosing any external library, explain what it does, why you are choosing it over alternatives, and what its tradeoffs are.
+- Never use a library without justifying it first.
+- Write code in small, testable pieces rather than large blocks all at once.
+- After writing code, explain what it does line by line if it introduces new concepts.
+- **Comment the code extensively.** This codebase should be readable by someone with
+  no programming background. Every function (a reusable block of code that does one
+  job), every data structure (a container that holds related information), and every
+  non-obvious decision should have a plain-English comment explaining what it is,
+  what it does, and — most importantly — *why* it exists.
+- Comments should explain intent, not just restate the code. For example:
+  - Bad comment: `// add 1 to the counter`
+  - Good comment: `// each tray needs a unique ID number so we can tell them apart
+    even if they contain the same crop variety`
+- Write comments as if the reader is a curious small business owner who wants to
+  understand and eventually modify the program, not as if the reader is a developer.
+
+## Core Philosophy
+This tool should embody the same minimalism as the farm it serves.
+- **Keep the codebase as small as possible.** If a problem can be solved with 10 lines
+  of standard library code, do not reach for an external library to do it in 2.
+- Every external dependency (a library written by someone else that we add to the
+  project) must justify its existence. If in doubt, leave it out.
+- The program will run on an old, low-powered laptop. Optimise for fast startup,
+  low memory usage, and minimal resource consumption at all times.
+- Prefer simple, readable code over clever code. If a solution is hard to explain
+  in plain English, it is probably too complicated.
+- When there are two valid approaches, always choose the smaller and simpler one.
+- **Portability is a core requirement.** One of the reasons Go was chosen is that it
+  compiles to a single self-contained binary (one file that contains the entire program,
+  with no external dependencies required on the machine running it). Never make
+  architectural decisions that compromise this — the finished program should be movable
+  to any computer by copying a single file.
+- **The long-term goal is to publish this as open source software** (software whose
+  code is publicly available for anyone to read, use, and contribute to). Plan for
+  this from the start:
+  - Never hardcode personal information (my name, farm name, email address, file
+    paths specific to my machine) directly into the code. These should always live
+    in a separate configuration file that each user customises for themselves.
+  - Never hardcode secrets (passwords, API keys — the private codes that grant access
+    to services like Google Calendar) into the code. These must always be stored
+    separately and never committed to Git where they would become publicly visible.
+  - The program should work out of the box for a new user with sensible defaults —
+    a first-time setup should require minimal configuration to get started.
+  - Remind me to add a LICENSE file and a README file (a plain-English introduction
+    to the project for anyone who finds it) before the project is made public.
+
+## Project Context
+- The core tool is a CLI (Command Line Interface — a program you control by typing
+  commands in a terminal rather than clicking buttons) for scheduling microgreens
+  crop cycles.
+- The architecture should be designed for extensibility — future phases will add
+  output destinations (e.g. Google Calendar, CSV export, email) and notification
+  channels (e.g. Slack, SMS). Use interfaces to keep these decoupled from the core
+  scheduler.
+- **Crop parameters are stored in a human-readable CSV file** (a plain text file
+  that opens in any spreadsheet program). The intended human editor for this file
+  is **Google Sheets** (free, browser-based, no installation required, works on
+  any device). A grower should be able to add or edit a crop variety by editing
+  a row in their spreadsheet — no programming knowledge required.
+- **Architecture decision to make in Phase 2:** decide whether the program reads
+  a locally exported CSV file, or syncs directly with Google Sheets via its API.
+  Both approaches have tradeoffs to discuss when we get there.
+- JSON must never be used for any file that a human is expected to read or edit.
+- Target: Go 1.22+, standard library preferred, no unnecessary dependencies.
+
+## Git Workflow
+- I am a complete beginner to Git. Explain every Git action in plain English before
+  asking me to run it in the terminal.
+- At logical checkpoints in development, remind me to commit my work and suggest a
+  plain-English commit message that describes what was just built.
+- Never assume I know Git terminology. Define terms like branch, commit, push, pull,
+  merge, and repository the first time they appear.
+- Prefer simple, linear Git workflows — do not introduce branching strategies or
+  advanced Git concepts until the basics are solid.
+
+## Reminders for Claude
+- If you are about to make an architectural decision, explain it in plain English
+  before implementing it — do not just write code and explain afterward.
+- If there are multiple valid approaches to something, briefly describe the options
+  and ask which direction I prefer before proceeding.
+- Do not truncate code. Always write complete files.
+- Remind me to commit my work to Git at logical checkpoints in development.
+
+---
+
+## Farm Domain Knowledge
+
+This section describes the physical reality of the farm. Use it whenever making
+decisions about the data model. Never assume anything about the farm that is not
+written here.
+
+### Terminology
+- **Grow tray** — a tray with drilled holes. The crop lives in this tray for its
+  entire lifecycle from sowing through harvest.
+- **Bottom tray** — a solid tray with no holes. Paired with a grow tray during
+  germ and blackout only, used for an irrigation practice called bottom watering.
+  Returned to inventory the moment the grow tray moves to light.
+- **Tray pair** — one grow tray nestled into one bottom tray. Exists only during
+  the germ and blackout stages.
+
+### The Three Stages of a Crop Lifecycle
+Every crop passes through some or all of these stages in order:
+
+1. **Germ (Germination)** — begins on Day 0 or Day 1 depending on the crop.
+   Some crops require an overnight seed soak on Day 0 before trays are prepared.
+   During Day 0, no trays are consumed from inventory and no slots are occupied.
+   Trays enter blackout slots as soon as seed is sown.
+
+2. **Blackout** — grow trays (in tray pairs) occupy blackout slots. Daily tasks
+   vary by crop variety and may include spraying, bottom watering, rotating, and
+   stacking or unstacking. The number of blackout days varies by crop.
+
+3. **Light** — grow trays occupy lit rack slots. The bottom tray is returned to
+   inventory at the moment of the move-to-light task — this is tied to the event,
+   not a fixed day number. Watering is automated on lit racks, so some crops have
+   do-nothing days where no tasks are required. The grow tray is returned to
+   inventory at harvest.
+
+### Slot Accounting Rules
+- One blackout slot is reserved per grow tray from the moment trays are sown,
+  regardless of whether trays are physically stacked in bundles.
+- Stacked bundles (e.g. 4 tray pairs per bundle) have a smaller physical
+  footprint but watering requires room to move — always count one slot per
+  grow tray, no exceptions.
+- One lit rack slot is occupied per grow tray from move-to-light until harvest.
+- Day 0 soak crops occupy zero slots and consume zero inventory until Day 1.
+
+### Inventory Tracked
+The farm visualizer tracks the following physical inventory. The system must be
+extensible — new item types should be addable without rewriting existing code:
+- **Grow trays** — in circulation (on the farm) or available (in inventory)
+- **Bottom trays** — in circulation (paired in blackout) or available (in inventory)
+- **Seeds** — quantity on hand per crop variety
+- **Grow medium** (dirt) — quantity on hand
+- **Foodservice containers** — and any other consumables to be added later
+
+### Physical Farm Layout
+
+The farm consists of one shared blackout room and multiple lit environments.
+Each environment is independently configured and tracks its own slot usage.
+The layout is defined in a configuration file — never hardcoded.
+
+**Blackout room**
+- Single shared space used by all crops regardless of destination lit environment
+- Slot capacity: to be confirmed (treat as effectively unlimited for now)
+- The capacity field must exist in config from day one, ready to be filled in
+
+**Main tent**
+- 4 racks × 4 shelves × 4 slots per shelf = 64 lit slots total
+
+**Test tent**
+- 1 rack × 16 slots = 16 lit slots total
+
+### Rules for Multiple Lit Environments
+- A crop cycle is assigned to a specific lit environment at the moment it moves
+  to light — not before. Blackout is environment-agnostic.
+- Each lit environment tracks its own slot occupancy independently.
+- The conflict checker must check slot availability per environment, not across
+  the farm as a whole.
+- The number of lit environments is variable — the system must support any number
+  of named environments, each with their own rack/shelf/slot configuration.
+- Environment conditions (temperature, humidity) do not affect crop parameters
+  or scheduling logic — environments are purely physical spaces for slot tracking.
+
+### Reference Crop Cycles
+
+**Sunflower** (9-day cycle, no Day 0 soak)
+
+| Day | Stage    | Tasks |
+|-----|----------|-------|
+| 1   | Germ     | Measure seed, soak seed 4 hours, prepare tray pairs + add 1L dirt, sow seed, saturate dirt, spray seed surface, stack in bundles of 4 pairs |
+| 2   | Blackout | Spray seed surface, rotate stack |
+| 3   | Blackout | Spray seed surface, rotate stack |
+| 4   | Blackout | Bottom water, spray seed surface, rotate stack |
+| 5   | Blackout | Bottom water, spray seed surface, unstack |
+| 6   | Light    | Move to lit rack (bottom tray returns to inventory) |
+| 7   | Light    | Mist, dehusk |
+| 8   | Light    | Mist, dehusk |
+| 9   | Harvest  | Harvest (grow tray returns to inventory) |
+
+**Peas** (8-day cycle, Day 0 overnight soak)
+
+| Day | Stage    | Tasks |
+|-----|----------|-------|
+| 0   | Germ     | Measure seed, soak overnight (no slots occupied, no inventory consumed) |
+| 1   | Germ     | Drain seed, prepare tray pairs + add dirt, sow seed, saturate dirt, spray seed surface |
+| 2   | Blackout | Bottom water |
+| 3   | Blackout | Bottom water |
+| 4   | Blackout | Bottom water |
+| 5   | Light    | Move to lit rack (bottom tray returns to inventory) |
+| 6   | Light    | (no tasks — watering is automated on lit racks) |
+| 7   | Light    | (no tasks — watering is automated on lit racks) |
+| 8   | Harvest  | Harvest (grow tray returns to inventory) |
+
+### Key Scheduling Rules
+- The bottom tray return event is always tied to the move-to-light task, never
+  to a fixed day number.
+- Do-nothing days are valid and expected — the scheduler must never assume every
+  day in a cycle has at least one task.
+- Day 0 is a valid cycle day for some crops. It occupies no physical resources
+  but should appear on the calendar as a reminder to soak seed.
+- All per-crop parameters (cycle length, tasks per day, dirt quantity, soak
+  duration) are configurable per variety and must never be hardcoded.
+
+---
+
+## Roadmap
+
+### Phase 1 — The Calendar Foundation ✅ COMPLETE
+- Text-based calendar with day-view and week-view display
+- Add, edit, delete, and clear tasks manually
+- Data persisted to `~/.greenies/tasks.json`
+- Exporter interface in place for future output destinations
+
+### Phase 2 — Crop Cycles on the Calendar
+- Crop library stored as a CSV file (editable in Google Sheets)
+- Schedule a full crop cycle from a crop + start date
+- Four planning modes: forward/backward, fixed trays/yield-driven
+- Extensible crop parameter data structure
+
+### Phase 3 — Farm Visualizer
+- Model physical farm layout (configurable shelves and slots)
+- Live text view of every tray slot: what's growing, when planted, harvest due
+- Individually addressable slot records (ready for future GUI)
+
+### Phase 4 — Conflict Checker
+- Tray capacity conflict alerts
+- Timing conflict alerts
+- Schedule ripple awareness
+- Harvest log (persistent record of every harvest with expected vs actual yield)
+
+### Phase 5 — Google Calendar Integration
+- OAuth2 authentication (browser-based, no passwords stored)
+- Export crop cycles and tasks as Google Calendar events
+- CSV export for any date range
+
+### Phase 6 — Crop Trialing
+- Trial crops with temporary parameters
+- Observation log per active trial tray
+- Promote or discard trials
+
+### Phase 7 — Mid-Cycle Tray Adjustments
+- Edit parameters for individual active trays without touching the crop template
+- Automatic schedule ripple-forward after any adjustment
+- Conflict checker re-runs automatically
+
+### Phase 8 — Graphical User Interface (GUI)
+- Browser-based GUI on top of existing scheduling logic
+- Core views: calendar, farm visualizer, crop library, active trays
+- CLI remains fully functional alongside the GUI
+
+### Phase 9 — Discord Integration (optional)
+- Standalone bot that reads from the scheduler's local data files
+- Daily task summary, task logging, harvest notifications
