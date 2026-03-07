@@ -18,8 +18,8 @@ import (
 type ConsoleExporter struct{}
 
 // Export prints each task in the list to the terminal in a simple format.
-// This is used internally by the calendar display; you will not normally
-// call it directly.
+// This satisfies the Exporter interface and will be wired into the display
+// path in Phase 5 when the Google Calendar exporter is added alongside it.
 func (c ConsoleExporter) Export(tasks []task.Task) error {
 	for _, t := range tasks {
 		// Print a compact single-line summary of the task.

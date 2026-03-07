@@ -32,7 +32,7 @@ import (
 
 func main() {
 	// os.Args is the list of words the user typed. os.Args[0] is always the
-	// program name itself ("greenies"). The subcommand (add, list, etc.) is
+	// program name itself ("greenies"). The subcommand (list, delete, etc.) is
 	// os.Args[1] if it exists.
 	if len(os.Args) < 2 {
 		printUsage()
@@ -60,8 +60,9 @@ func main() {
 }
 
 // runList handles the "greenies list" command.
-// It immediately shows the current 7-day week, then optionally lets the user
-// view a custom date range or the full current month.
+// It asks upfront what the user wants to see, defaulting to the current week
+// on a blank Enter press. This avoids printing the week view when the user
+// already knows they want something else.
 func runList() {
 	// Load all tasks from disk.
 	tasks, err := store.Load()
@@ -70,19 +71,9 @@ func runList() {
 		os.Exit(1)
 	}
 
-	// Always show the current week first — today through 6 days from now.
 	now := time.Now()
-	weekEnd := now.AddDate(0, 0, 6)
-	if err := calendar.PrintRange(
-		now.Format(task.DateFormat),
-		weekEnd.Format(task.DateFormat),
-		tasks,
-	); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
 
-	// Ask if they want to see something else.
+	// bufio.NewReader lets us read a full line of input including spaces.
 	reader := bufio.NewReader(os.Stdin)
 	ask := func(prompt string) string {
 		fmt.Print(prompt)
@@ -90,10 +81,28 @@ func runList() {
 		return strings.TrimSpace(line)
 	}
 
-	choice := ask("View something else? (range / month): ")
+	// Ask which view they want before printing anything.
+	// Blank input or anything unrecognised defaults to the current week.
+	choice := ask("View (w)eek / (m)onth / (r)ange [w]: ")
 
 	switch strings.ToLower(choice) {
-	case "range":
+	case "m", "month":
+		// Show every day of the current calendar month.
+		// The first day is always the 1st; the last day is found by going to
+		// the 1st of next month and stepping back one day.
+		firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		firstOfNext := firstOfMonth.AddDate(0, 1, 0)
+		lastOfMonth := firstOfNext.AddDate(0, 0, -1)
+		if err := calendar.PrintRange(
+			firstOfMonth.Format(task.DateFormat),
+			lastOfMonth.Format(task.DateFormat),
+			tasks,
+		); err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "r", "range":
 		// Ask for a start and end date using the same flexible format as plan.
 		startDate, err := parseHarvestDate(ask("Start date (MM-DD or YYYY-MM-DD): "))
 		if err != nil {
@@ -110,25 +119,18 @@ func runList() {
 			os.Exit(1)
 		}
 
-	case "month":
-		// Show every day of the current calendar month.
-		// The first day is always the 1st; the last day is found by going to
-		// the 1st of next month and stepping back one day.
-		firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		firstOfNext := firstOfMonth.AddDate(0, 1, 0)
-		lastOfMonth := firstOfNext.AddDate(0, 0, -1)
+	default:
+		// Blank input, "w", "week", or anything unrecognised — show the current
+		// 7-day week (today through 6 days from now).
+		weekEnd := now.AddDate(0, 0, 6)
 		if err := calendar.PrintRange(
-			firstOfMonth.Format(task.DateFormat),
-			lastOfMonth.Format(task.DateFormat),
+			now.Format(task.DateFormat),
+			weekEnd.Format(task.DateFormat),
 			tasks,
 		); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
-
-	default:
-		// Empty input or anything unrecognised — just exit quietly.
-		// The user has already seen the week view, so nothing more is needed.
 	}
 }
 
@@ -269,8 +271,8 @@ func runCrops() {
 }
 
 // runPlan handles the "greenies plan" command.
-// Instead of flags, it asks the user three questions interactively, then
-// shows a full preview and asks for confirmation before saving anything.
+// It asks the user a series of questions interactively, then shows a full
+// preview and asks for confirmation before saving anything.
 func runPlan() {
 	// Load the crop library up front so we can show the available varieties
 	// before asking which one the user wants.
@@ -549,8 +551,9 @@ func runPlan() {
 	fmt.Println("Run \"greenies list\" to see the schedule.")
 }
 
-// parseHarvestDate accepts a harvest date in either MM-DD or YYYY-MM-DD format
-// and always returns a full YYYY-MM-DD string.
+// parseHarvestDate parses a date entered by the user and always returns a full
+// YYYY-MM-DD string. Despite the name it is used for both harvest dates and
+// sow dates — wherever the user needs to enter a date.
 //
 // MM-DD is the convenient shorthand for dates in the current year.
 // YYYY-MM-DD lets the user cross a year boundary — e.g. scheduling in December

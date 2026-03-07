@@ -61,7 +61,7 @@ func PrintDay(date string, tasks []task.Task) {
 		}
 
 		// Print the task's short ID so the user can reference it in
-		// edit and delete commands.
+		// the delete command.
 		fmt.Printf("      ID: %s\n", task.ID)
 
 		// A blank line between tasks makes the list easier to scan.
@@ -72,7 +72,7 @@ func PrintDay(date string, tasks []task.Task) {
 // PrintRange displays tasks for a consecutive range of dates, one day at a time.
 //
 // startDate and endDate are inclusive — both dates will be shown.
-// This is used by the "list --week" command to show 7 days at a glance.
+// Used by the week, month, and range views in the list command.
 func PrintRange(startDate, endDate string, tasks []task.Task) error {
 	start, err := time.Parse(task.DateFormat, startDate)
 	if err != nil {
