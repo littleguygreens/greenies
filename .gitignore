@@ -1,24 +1,15 @@
-# Go binaries
+# The compiled greenies binary.
+# We distribute source code, not binaries — each user builds their own.
+greenies
+
+# Go build artefacts
 *.exe
 *.exe~
 *.test
 *.out
 vendor/
 
-# The compiled greenies binary (we distribute source, not binaries)
-greenies
-
-# Data and secrets — never commit these to GitHub.
-# ~/.greenies/ is where the program stores task data, config, and future API keys.
-# Each user has their own copy of this folder on their own machine.
-~/.greenies/
-
-# C / C++ (kept from initial setup)
-*.o
-*.a
-*.so
-build/
-cmake-build-*/
-CMakeFiles/
-CMakeCache.txt
-*.cmake
+# VS Code editor settings — personal to each developer's machine.
+# The .vscode/ folder holds things like keyboard shortcuts and build tasks
+# that vary from person to person and don't belong in the shared codebase.
+.vscode/
