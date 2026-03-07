@@ -1,4 +1,4 @@
-# Claude Session Instructions
+1# Claude Session Instructions
 
 ## Who I Am
 I am a complete beginner to programming and IDEs. I have no formal coding background.
@@ -96,6 +96,10 @@ This tool should embody the same minimalism as the farm it serves.
   and ask which direction I prefer before proceeding.
 - Do not truncate code. Always write complete files.
 - Remind me to commit my work to Git at logical checkpoints in development.
+- **At the end of every phase:** run `/phase-review` before declaring the phase
+  complete. Any blocking issues found must be resolved before Phase N+1 begins.
+  Any architectural notes for future phases should be added to the relevant phase
+  entry in the Roadmap section below.
 
 ---
 
@@ -249,6 +253,11 @@ The layout is defined in a configuration file — never hardcoded.
 - OAuth2 authentication (browser-based, no passwords stored)
 - Export crop cycles and tasks as Google Calendar events
 - CSV export for any date range
+- **Architecture note (flagged in Phase 1 review):** The `Exporter` interface in
+  `internal/export/exporter.go` is defined but not yet wired into the live display
+  flow — `main.go` calls `calendar.PrintDay` directly rather than going through the
+  interface. Before building the Google Calendar exporter, connect the interface to
+  the display path so that swapping output destinations actually works end-to-end.
 
 ### Phase 6 — Crop Trialing
 - Trial crops with temporary parameters

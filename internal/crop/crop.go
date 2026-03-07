@@ -37,9 +37,13 @@ type Crop struct {
 	// Name is the crop's display name as written in the CSV, e.g. "sunnies".
 	Name string
 
-	// CycleDays is the total length of the grow cycle. The harvest always
-	// falls on this day number. Used to calculate sow date from harvest date.
+	// CycleDays is the total length of the grow cycle — the day number of the
+	// final (harvest) row. Used to calculate sow date from harvest date.
 	// Example: sunnies = 9, peas = 8.
+	//
+	// This value is derived automatically by the CSV loader from the last day
+	// row in the crop's block. It is never read directly from the CSV, so it
+	// can never get out of sync with the actual schedule.
 	CycleDays int
 
 	// OvernightSoak is true if this crop requires a seed soak the night

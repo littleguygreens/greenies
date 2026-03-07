@@ -6,10 +6,8 @@
 //
 // Commands:
 //
-//	greenies add      --date YYYY-MM-DD --title "label" [--notes "text"]
 //	greenies list
-//	greenies edit     <id> [--title "new title"] [--notes "new notes"] [--date YYYY-MM-DD]
-//	greenies delete   <id>
+//	greenies delete
 //	greenies clear
 //	greenies crops
 //	greenies plan
@@ -17,8 +15,8 @@ package main
 
 import (
 	"bufio"   // for reading a full line of user input from the terminal
-	"flag"    // Go's built-in package for reading command-line flags (the --date, --title parts)
 	"fmt"
+	"math"    // for math.Ceil, which rounds a decimal up to the next whole number
 	"os"      // for os.Exit and reading command-line arguments
 	"strconv" // for converting text like "2" into the number 2
 	"strings" // for string utilities used in the crops and schedule commands
@@ -44,14 +42,10 @@ func main() {
 	// Route to the correct function based on the first word after "greenies".
 	subcommand := os.Args[1]
 	switch subcommand {
-	case "add":
-		runAdd(os.Args[2:])
 	case "list":
 		runList()
-	case "edit":
-		runEdit(os.Args[2:])
 	case "delete":
-		runDelete(os.Args[2:])
+		runDelete()
 	case "clear":
 		runClear()
 	case "crops":
@@ -63,63 +57,6 @@ func main() {
 		printUsage()
 		os.Exit(1)
 	}
-}
-
-// runAdd handles the "greenies add" command.
-// It reads the flags the user typed, creates a new task, and saves it.
-func runAdd(args []string) {
-	// Create a new set of flags specific to the "add" subcommand.
-	// Each flag.String call defines one flag: its name, its default value,
-	// and a description shown in help text.
-	fs := flag.NewFlagSet("add", flag.ExitOnError)
-	dateFlag  := fs.String("date",  "", "The date for this task, in YYYY-MM-DD format (e.g. 2026-03-05)")
-	titleFlag := fs.String("title", "", "A short label for the task (e.g. \"Sow sunflowers\")")
-	notesFlag := fs.String("notes", "", "Optional extra detail (e.g. \"2 trays, main tent\")")
-	fs.Parse(args)
-
-	// Validate that the required flags were provided.
-	if *dateFlag == "" {
-		fmt.Println("Error: --date is required. Example: --date 2026-03-05")
-		os.Exit(1)
-	}
-	if *titleFlag == "" {
-		fmt.Println("Error: --title is required. Example: --title \"Sow sunflowers\"")
-		os.Exit(1)
-	}
-
-	// Validate the date format before saving — give a clear error if the
-	// user typed something like "March 5" instead of "2026-03-05".
-	if _, err := time.Parse(task.DateFormat, *dateFlag); err != nil {
-		fmt.Printf("Error: date %q is not in the right format. Use YYYY-MM-DD (e.g. 2026-03-05)\n", *dateFlag)
-		os.Exit(1)
-	}
-
-	// Create the new task.
-	t, err := task.New(*titleFlag, *dateFlag, *notesFlag)
-	if err != nil {
-		fmt.Printf("Error creating task: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Load the existing tasks from disk so we can append to them.
-	tasks, err := store.Load()
-	if err != nil {
-		fmt.Printf("Error loading tasks: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Append the new task to the list and save everything back to disk.
-	tasks = append(tasks, t)
-	if err := store.Save(tasks); err != nil {
-		fmt.Printf("Error saving tasks: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Task added (ID: %s)\n", t.ID)
-
-	// Show the day view for the task's date so the user can immediately
-	// see it on the calendar.
-	calendar.PrintDay(*dateFlag, tasks)
 }
 
 // runList handles the "greenies list" command.
@@ -195,22 +132,18 @@ func runList() {
 	}
 }
 
-// runEdit handles the "greenies edit <id>" command.
-// It finds the task with the given ID and updates whichever fields were provided.
-func runEdit(args []string) {
-	if len(args) == 0 {
-		fmt.Println("Error: edit requires a task ID. Example: greenies edit a3f2c81b9d047e56")
-		os.Exit(1)
+// runDelete handles the "greenies delete" command.
+// It removes a task by ID. If the task belongs to a planned crop cycle
+// (i.e. it has a CycleID), the user is offered the choice to delete just
+// that one task or the entire cycle at once.
+func runDelete() {
+	fmt.Print("Task ID to delete: ")
+	var id string
+	fmt.Scanln(&id)
+	if id == "" {
+		fmt.Println("No ID entered — cancelled.")
+		return
 	}
-
-	// The task ID is the first argument, before any flags.
-	id := args[0]
-
-	fs := flag.NewFlagSet("edit", flag.ExitOnError)
-	titleFlag := fs.String("title", "", "New title for the task")
-	notesFlag := fs.String("notes", "", "New notes for the task")
-	dateFlag  := fs.String("date",  "", "New date for the task (YYYY-MM-DD)")
-	fs.Parse(args[1:])
 
 	tasks, err := store.Load()
 	if err != nil {
@@ -218,82 +151,55 @@ func runEdit(args []string) {
 		os.Exit(1)
 	}
 
-	// Find the task with the matching ID and update it.
-	// We use a pointer (the & symbol) to edit the task in-place inside the
-	// slice rather than working on a copy that would be thrown away.
-	found := false
+	// Find the target task so we can check whether it has a CycleID.
+	var target *task.Task
 	for i := range tasks {
 		if tasks[i].ID == id {
-			found = true
-
-			// Only update a field if the user actually provided a new value
-			// for it — leaving a flag blank means "keep the existing value".
-			if *titleFlag != "" {
-				tasks[i].Title = *titleFlag
-			}
-			if *notesFlag != "" {
-				tasks[i].Notes = *notesFlag
-			}
-			if *dateFlag != "" {
-				if _, err := time.Parse(task.DateFormat, *dateFlag); err != nil {
-					fmt.Printf("Error: date %q is not valid. Use YYYY-MM-DD (e.g. 2026-03-05)\n", *dateFlag)
-					os.Exit(1)
-				}
-				tasks[i].Date = *dateFlag
-			}
-
-			// Stamp the updated time so we have an accurate record of when
-			// this task was last changed.
-			tasks[i].UpdatedAt = time.Now()
-
-			fmt.Printf("Task %s updated.\n", id)
+			target = &tasks[i]
 			break
 		}
 	}
-
-	if !found {
+	if target == nil {
 		fmt.Printf("No task found with ID %q. Use \"greenies list\" to see task IDs.\n", id)
 		os.Exit(1)
 	}
 
-	if err := store.Save(tasks); err != nil {
-		fmt.Printf("Error saving tasks: %v\n", err)
-		os.Exit(1)
-	}
-}
+	// Decide whether to delete just this one task or the whole cycle.
+	// deleteByID is the set of task IDs we will actually remove.
+	deleteByID := map[string]bool{id: true}
 
-// runDelete handles the "greenies delete <id>" command.
-// It removes the task with the given ID permanently.
-func runDelete(args []string) {
-	if len(args) == 0 {
-		fmt.Println("Error: delete requires a task ID. Example: greenies delete a3f2c81b9d047e56")
-		os.Exit(1)
-	}
-
-	id := args[0]
-
-	tasks, err := store.Load()
-	if err != nil {
-		fmt.Printf("Error loading tasks: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Build a new list that contains every task except the one being deleted.
-	// This is a common Go pattern for removing an item from a list.
-	var updated []task.Task
-	found := false
-	for _, t := range tasks {
-		if t.ID == id {
-			found = true
-			// Skip this task — it is being deleted.
-			continue
+	if target.CycleID != "" {
+		// Count how many tasks share this cycle so we can tell the user.
+		cycleCount := 0
+		for _, t := range tasks {
+			if t.CycleID == target.CycleID {
+				cycleCount++
+			}
 		}
-		updated = append(updated, t)
+
+		fmt.Printf("Task: %q (%s)\n", target.Title, target.Date)
+		fmt.Printf("This task belongs to a planned cycle (%d tasks total).\n", cycleCount)
+		fmt.Print("Delete just this task, or the whole cycle? [t/c]: ")
+
+		var choice string
+		fmt.Scanln(&choice)
+
+		if strings.ToLower(choice) == "c" {
+			// Mark every task in this cycle for deletion.
+			for _, t := range tasks {
+				if t.CycleID == target.CycleID {
+					deleteByID[t.ID] = true
+				}
+			}
+		}
 	}
 
-	if !found {
-		fmt.Printf("No task found with ID %q. Use \"greenies list\" to see task IDs.\n", id)
-		os.Exit(1)
+	// Build the kept list by skipping anything in the delete set.
+	var updated []task.Task
+	for _, t := range tasks {
+		if !deleteByID[t.ID] {
+			updated = append(updated, t)
+		}
 	}
 
 	if err := store.Save(updated); err != nil {
@@ -301,7 +207,12 @@ func runDelete(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Task %s deleted.\n", id)
+	removed := len(tasks) - len(updated)
+	if removed == 1 {
+		fmt.Printf("1 task deleted.\n")
+	} else {
+		fmt.Printf("%d tasks deleted.\n", removed)
+	}
 }
 
 // runClear deletes every task in the store after asking for confirmation.
@@ -388,51 +299,163 @@ func runPlan() {
 	}
 
 	// --- Question 1: which crop? ---
+	// Show a numbered list so the user can pick by number, by full name, or by
+	// any unique prefix — whichever is quickest to type.
 	fmt.Println("Available crops:")
-	for _, c := range crops {
-		fmt.Printf("  %s\n", c.Name)
+	for i, c := range crops {
+		// Wrap the first letter in parentheses to hint that it can be used
+		// as a shortcut — e.g. "(s)unnies" means typing "s" selects sunnies.
+		fmt.Printf("  %d. (%c)%s\n", i+1, c.Name[0], c.Name[1:])
 	}
 	fmt.Println()
 
-	cropName := ask("Which crop? ")
-	if cropName == "" {
+	cropInput := ask("Which crop? (name, number, or unique prefix): ")
+	if cropInput == "" {
 		fmt.Println("No crop entered — cancelled.")
 		return
 	}
 
-	// Find the crop by name (case-insensitive).
-	var found *crop.Crop
-	for i := range crops {
-		if strings.EqualFold(crops[i].Name, cropName) {
-			found = &crops[i]
-			break
+	// findCrop resolves the user's input to one crop, or explains the problem.
+	// It accepts:
+	//   - a number ("1", "2", …) — picks the crop at that position in the list
+	//   - a full name or any prefix ("sun", "p", "daikon") — matches by prefix
+	//     and succeeds only if exactly one crop matches
+	found := func() *crop.Crop {
+		// Try it as a number first.
+		if n, err := strconv.Atoi(cropInput); err == nil {
+			if n >= 1 && n <= len(crops) {
+				return &crops[n-1]
+			}
+			fmt.Printf("Number %d is out of range — pick 1 to %d.\n", n, len(crops))
+			return nil
 		}
-	}
+
+		// Otherwise match by prefix (case-insensitive).
+		// Collect every crop whose name starts with what the user typed.
+		var matches []*crop.Crop
+		lower := strings.ToLower(cropInput)
+		for i := range crops {
+			if strings.HasPrefix(strings.ToLower(crops[i].Name), lower) {
+				matches = append(matches, &crops[i])
+			}
+		}
+
+		switch len(matches) {
+		case 0:
+			fmt.Printf("No crop found matching %q. Check the spelling and try again.\n", cropInput)
+			return nil
+		case 1:
+			return matches[0]
+		default:
+			// Two or more crops share this prefix — the user needs to be more specific.
+			fmt.Printf("%q matches more than one crop:\n", cropInput)
+			for _, m := range matches {
+				fmt.Printf("  %s\n", m.Name)
+			}
+			fmt.Println("Please type more letters, or use the number from the list.")
+			return nil
+		}
+	}()
+
 	if found == nil {
-		fmt.Printf("Crop %q not found in the library. Check the spelling and try again.\n", cropName)
 		os.Exit(1)
 	}
 
-	// --- Question 2: how many trays? ---
-	traysStr := ask("How many trays? ")
-	trays, err := strconv.Atoi(traysStr)
-	if err != nil || trays < 1 {
-		fmt.Println("Please enter a whole number greater than zero (e.g. 2).")
-		os.Exit(1)
+	// --- Question 2: plan by tray count or desired yield? ---
+	// "Tray count" mode is straightforward — the grower knows how many trays
+	// they want to plant. "Yield" mode works backwards: the grower says how
+	// many grams they need and the program figures out how many trays to plant.
+	planMode := ask("Plan by (t)ray count or (y)ield target? [t/y]: ")
+
+	var trays int
+
+	switch strings.ToLower(planMode) {
+	case "y", "yield":
+		// Make sure this crop has yield data before trying to use it.
+		if found.YieldGrams == 0 {
+			fmt.Printf("No yield data found for %s in the crop library.\n", capitalize(found.Name))
+			fmt.Println("Add a yield_grams value to crops.csv, or plan by tray count instead.")
+			os.Exit(1)
+		}
+
+		yieldStr := ask(fmt.Sprintf("Desired yield in grams? (%s yields ~%dg per tray): ",
+			capitalize(found.Name), found.YieldGrams))
+		desiredYield, err := strconv.Atoi(yieldStr)
+		if err != nil || desiredYield < 1 {
+			fmt.Println("Please enter a whole number greater than zero (e.g. 500).")
+			os.Exit(1)
+		}
+
+		// Divide the target yield by the per-tray yield and round up.
+		// Rounding up ensures the grower meets or exceeds their target —
+		// for example, 700g ÷ 500g/tray = 1.4, which rounds up to 2 trays
+		// (yielding ~1000g, which covers the 700g need with some surplus).
+		trays = int(math.Ceil(float64(desiredYield) / float64(found.YieldGrams)))
+
+		trayWord := "tray"
+		if trays != 1 {
+			trayWord = "trays"
+		}
+		fmt.Printf("→ %d %s needed to yield ~%dg (target: %dg)\n",
+			trays, trayWord, trays*found.YieldGrams, desiredYield)
+
+	default:
+		// "t", "tray", blank, or anything unrecognised — default to tray count.
+		traysStr := ask("How many trays? ")
+		n, err := strconv.Atoi(traysStr)
+		if err != nil || n < 1 {
+			fmt.Println("Please enter a whole number greater than zero (e.g. 2).")
+			os.Exit(1)
+		}
+		trays = n
 	}
 
-	// --- Question 3: harvest date? ---
-	harvestDate, err := parseHarvestDate(ask("Harvest date (MM-DD or YYYY-MM-DD): "))
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
+	// --- Question 3: plan direction — from harvest date or sow date? ---
+	// Backward (harvest date) is useful when you have a market day or deadline
+	// and need to work out when to sow. Forward (sow date) is useful when you
+	// know you have trays free on a specific day and want to know when to expect
+	// the harvest.
+	directionInput := ask("Plan from (h)arvest date or (s)ow date? [h/s]: ")
 
-	// Generate the schedule — a preview of every day plus the saveable tasks.
-	preview, newTasks, err := scheduler.Schedule(*found, harvestDate, trays)
-	if err != nil {
-		fmt.Printf("Error generating schedule: %v\n", err)
-		os.Exit(1)
+	// fromHarvest is true if the grower wants to plan backward from a harvest date.
+	// It is false if they want to plan forward from a sow date.
+	// Blank input or anything unrecognised defaults to harvest (backward) mode.
+	fromHarvest := strings.ToLower(directionInput) != "s" && strings.ToLower(directionInput) != "sow"
+
+	var preview []scheduler.ScheduledDay
+	var newTasks []task.Task
+	var displayDate string // the date shown in the preview header
+
+	if !fromHarvest {
+		// Forward scheduling: the grower enters the sow date (Day 1).
+		// For overnight-soak crops, Day 0 is automatically placed the day before.
+		sowDate, err := parseHarvestDate(ask("Sow date (MM-DD or YYYY-MM-DD): "))
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		displayDate = sowDate
+
+		preview, newTasks, err = scheduler.ScheduleForward(*found, sowDate, trays)
+		if err != nil {
+			fmt.Printf("Error generating schedule: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		// Backward scheduling: the grower enters the harvest date and the program
+		// counts backward to find the sow date and every day in between.
+		harvestDate, err := parseHarvestDate(ask("Harvest date (MM-DD or YYYY-MM-DD): "))
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		displayDate = harvestDate
+
+		preview, newTasks, err = scheduler.Schedule(*found, harvestDate, trays)
+		if err != nil {
+			fmt.Printf("Error generating schedule: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Show the full preview so the user can check everything looks right.
@@ -440,8 +463,14 @@ func runPlan() {
 	if trays != 1 {
 		trayWord = "trays"
 	}
-	fmt.Printf("\n%s — %d %s — harvest %s\n\n",
-		capitalize(found.Name), trays, trayWord, harvestDate)
+	// The header shows the anchor date — harvest date for backward scheduling,
+	// sow date for forward scheduling — so the user knows what they entered.
+	anchorLabel := "harvest"
+	if !fromHarvest {
+		anchorLabel = "sow"
+	}
+	fmt.Printf("\n%s — %d %s — %s %s\n\n",
+		capitalize(found.Name), trays, trayWord, anchorLabel, displayDate)
 
 	for _, d := range preview {
 		tasks := d.CropDay.Tasks
@@ -476,14 +505,22 @@ func runPlan() {
 			os.Exit(1)
 		}
 
-		// Parse the original harvest date so we can add weeks to it.
-		baseHarvest, _ := time.Parse(task.DateFormat, harvestDate)
+		// Parse the anchor date (sow or harvest) so we can shift it by weeks.
+		// Safe to ignore the error here — displayDate was already validated by
+		// parseHarvestDate earlier in this function, so we know it's a valid date.
+		baseDate, _ := time.Parse(task.DateFormat, displayDate)
 
 		for week := 1; week <= additionalWeeks; week++ {
-			// Shift the harvest date forward by 7 days per additional week.
-			weeklyHarvest := baseHarvest.AddDate(0, 0, week*7).Format(task.DateFormat)
+			// Shift the anchor date forward by 7 days per additional week.
+			weeklyDate := baseDate.AddDate(0, 0, week*7).Format(task.DateFormat)
 
-			_, weekTasks, err := scheduler.Schedule(*found, weeklyHarvest, trays)
+			// Use the same scheduling direction as the first cycle.
+			var weekTasks []task.Task
+			if !fromHarvest {
+				_, weekTasks, err = scheduler.ScheduleForward(*found, weeklyDate, trays)
+			} else {
+				_, weekTasks, err = scheduler.Schedule(*found, weeklyDate, trays)
+			}
 			if err != nil {
 				fmt.Printf("Error generating week %d schedule: %v\n", week, err)
 				os.Exit(1)
@@ -541,6 +578,10 @@ func parseHarvestDate(input string) (string, error) {
 // capitalize uppercases the first letter of a string and leaves the rest alone.
 // Used to display crop names from the CSV (which are lowercase) with a capital
 // at the start of a sentence or title.
+//
+// Note: an identical copy of this function exists in internal/scheduler/scheduler.go.
+// Go does not allow sharing unexported (lowercase) helpers across packages, so both
+// packages keep their own copy. If you change one, change the other too.
 func capitalize(s string) string {
 	if s == "" {
 		return ""
@@ -555,19 +596,14 @@ func printUsage() {
 	fmt.Println(`Greenies — microgreens farm scheduler
 
 Usage:
-  greenies add      --date YYYY-MM-DD --title "label" [--notes "text"]
   greenies list
-  greenies edit     <id> [--title "new"] [--notes "new"] [--date YYYY-MM-DD]
-  greenies delete   <id>
+  greenies delete
   greenies clear
   greenies crops
   greenies plan
 
 Examples:
-  greenies add --date 2026-03-05 --title "Sow sunflowers" --notes "2 trays"
   greenies list
-  greenies edit a3f2c81b --title "Sow peas"
-  greenies delete a3f2c81b
   greenies crops
   greenies plan`)
 }

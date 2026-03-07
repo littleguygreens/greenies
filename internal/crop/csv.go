@@ -88,8 +88,13 @@ func (s CSVSource) LoadCrops() ([]Crop, error) {
 
 		if name != "" {
 			// A non-empty name signals the start of a new crop block.
-			// Save whatever crop we were building and start fresh.
+			// Before moving on, set the previous crop's CycleDays from its
+			// last day row — this is more reliable than asking the grower to
+			// type it manually, because it can never get out of sync.
 			if current != nil {
+				if len(current.Days) > 0 {
+					current.CycleDays = current.Days[len(current.Days)-1].Day
+				}
 				crops = append(crops, *current)
 			}
 
@@ -115,7 +120,11 @@ func (s CSVSource) LoadCrops() ([]Crop, error) {
 
 	// The loop only appends a crop when a new name is found, so the very last
 	// crop in the file never gets appended inside the loop — do it here.
+	// Also set its CycleDays from the last day row, same as above.
 	if current != nil {
+		if len(current.Days) > 0 {
+			current.CycleDays = current.Days[len(current.Days)-1].Day
+		}
 		crops = append(crops, *current)
 	}
 
@@ -164,10 +173,6 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 		return v == "true" || v == "yes"
 	}
 
-	cycleDays, err := parseInt("cycle_days")
-	if err != nil {
-		return Crop{}, err
-	}
 	soakHours, err := parseInt("soak_hours")
 	if err != nil {
 		return Crop{}, err
@@ -195,7 +200,8 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 
 	return Crop{
 		Name:          get(row, "name"),
-		CycleDays:     cycleDays,
+		// CycleDays is not set here — it is derived from the last day row
+		// after all day entries for this crop have been loaded. See LoadCrops.
 		OvernightSoak: parseBool("overnight_soak"),
 		SoakHours:     soakHours,
 		SeedGrams:     seedGrams,

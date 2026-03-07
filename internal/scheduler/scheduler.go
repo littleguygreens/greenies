@@ -47,6 +47,14 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 		return nil, nil, fmt.Errorf("invalid harvest date %q — use YYYY-MM-DD format", harvestDate)
 	}
 
+	// Generate one shared CycleID for this entire batch of tasks.
+	// Every task created in this call gets the same CycleID stamped on it,
+	// so the delete command can find and remove the whole cycle at once.
+	cycleID, err := task.GenerateID()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not generate cycle ID: %w", err)
+	}
+
 	var preview []ScheduledDay
 	var tasks []task.Task
 
@@ -86,6 +94,80 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 			return nil, nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
 		}
 
+		// Stamp the shared batch ID so this task can be found and deleted
+		// together with all other tasks from this same planning session.
+		t.CycleID = cycleID
+
+		tasks = append(tasks, t)
+	}
+
+	return preview, tasks, nil
+}
+
+// ScheduleForward takes a crop, a sow date, and a number of trays, and returns
+// the same two things as Schedule — a preview slice and a tasks slice — but
+// this time calculated forward from the sow date instead of backward from
+// the harvest date.
+//
+// "Sow date" always means Day 1 for every crop (the day seed is actually sown).
+// For crops that have an overnight soak (Day 0), the soak task is placed on
+// the day before the sow date automatically. So if you enter Monday as the
+// sow date for peas, the program will put the soak reminder on Sunday.
+//
+// Example: peas is an 8-day cycle. Sow date = Monday 9 March:
+//
+//	day 0 = Sunday 8 March   (soak overnight — placed 1 day before sow date)
+//	day 1 = Monday 9 March   (drain, sow)
+//	day 8 = Monday 16 March  (harvest)
+func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []task.Task, error) {
+	// Day 1 maps to the sow date. Every other day is offset from there.
+	// Day 0 is 1 day before sow date (-1 offset).
+	// Day 2 is 1 day after sow date (+1 offset), and so on.
+	sow, err := time.Parse(task.DateFormat, sowDate)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid sow date %q — use YYYY-MM-DD format", sowDate)
+	}
+
+	// Same as Schedule — one shared CycleID for all tasks in this batch.
+	cycleID, err := task.GenerateID()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not generate cycle ID: %w", err)
+	}
+
+	var preview []ScheduledDay
+	var tasks []task.Task
+
+	for _, day := range c.Days {
+		// Offset from sow date: Day 1 → 0 days, Day 0 → -1 day, Day 2 → +1 day.
+		daysFromSow := day.Day - 1
+		date := sow.AddDate(0, 0, daysFromSow)
+		dateStr := date.Format(task.DateFormat)
+
+		preview = append(preview, ScheduledDay{
+			Date:    dateStr,
+			CropDay: day,
+		})
+
+		title := fmt.Sprintf("%s — Day %d (%s)", capitalize(c.Name), day.Day, day.Stage)
+
+		trayWord := "tray"
+		if trays != 1 {
+			trayWord = "trays"
+		}
+		var notes string
+		if strings.TrimSpace(day.Tasks) == "" {
+			notes = fmt.Sprintf("%d %s · no tasks today", trays, trayWord)
+		} else {
+			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
+		}
+
+		t, err := task.New(title, dateStr, notes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+		}
+
+		t.CycleID = cycleID
+
 		tasks = append(tasks, t)
 	}
 
@@ -99,6 +181,10 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 // We write this ourselves rather than using a library function because the
 // standard library's strings.Title is deprecated and the replacement requires
 // an external dependency — overkill for capitalising one word.
+//
+// Note: an identical copy of this function exists in main.go.
+// Go does not allow sharing unexported (lowercase) helpers across packages, so both
+// packages keep their own copy. If you change one, change the other too.
 func capitalize(s string) string {
 	if s == "" {
 		return ""

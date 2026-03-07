@@ -38,6 +38,19 @@ type Task struct {
 	// Maps to: Google Calendar event "id" field.
 	ID string
 
+	// CycleID groups all the tasks that were created together by a single
+	// "greenies plan" run. Think of it like a batch number on a production
+	// line — every day in one planned crop cycle gets the same CycleID
+	// stamped on it. This lets the delete command wipe an entire cycle at
+	// once without having to specify every individual task.
+	//
+	// Tasks created outside of a plan (e.g. manual adds) leave this blank.
+	// Each weekly repeat within a plan gets its own separate CycleID, so
+	// you can delete "week 2 of sunnies" without touching week 1 or week 3.
+	//
+	// Maps to: Google Calendar event series "recurringEventId" concept.
+	CycleID string
+
 	// Title is the short label shown on the calendar — e.g. "Sow sunflowers"
 	// or "Move peas to light". Keep it brief; use Notes for detail.
 	//
@@ -76,7 +89,7 @@ type Task struct {
 //
 //	t := task.New("Sow sunflowers", "2026-03-05", "2 trays, main tent")
 func New(title, date, notes string) (Task, error) {
-	id, err := generateID()
+	id, err := GenerateID()
 	if err != nil {
 		// If we can't generate a random ID (very unlikely — this would mean
 		// the operating system's random number source has failed), we return
@@ -97,13 +110,16 @@ func New(title, date, notes string) (Task, error) {
 	}, nil
 }
 
-// generateID creates a short, unique identifier string.
+// GenerateID creates a short, unique identifier string.
 //
 // It reads 8 random bytes from the operating system's secure random source
 // and converts them to a 16-character string of letters and numbers
 // (e.g. "a3f2c81b9d047e56"). This is short enough to type but random enough
 // that two IDs will never collide in practice.
-func generateID() (string, error) {
+//
+// Exported (capital G) so that other packages — like the scheduler — can
+// generate IDs in the same format for things like CycleID.
+func GenerateID() (string, error) {
 	// Make a slice (a variable-length list) to hold 8 random bytes.
 	// 8 bytes gives us 16 hex characters — short and unique enough for our needs.
 	bytes := make([]byte, 8)

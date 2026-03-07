@@ -1,5 +1,5 @@
-name,day,stage,tasks,cycle_days,overnight_soak,soak_hours,seed_grams,dirt_litres,dark_days,light_days,yield_grams
-sunnies,1,sow,"measure seed, soak 4 hours, drain seed, prepare trays, sow seed, saturate dirt, top water, stack",9,FALSE,4,150,1,4,3,500
+name,day,stage,tasks,overnight_soak,soak_hours,seed_grams,dirt_litres,dark_days,light_days,yield_grams
+sunnies,1,sow,"measure seed, soak 4 hours, drain seed, prepare trays, sow seed, saturate dirt, top water, stack",FALSE,4,150,1,4,3,500
 ,2,dark,"top water, rotate stack",,,,,,,,
 ,3,dark,"top water, rotate stack",,,,,,,,
 ,4,dark,"bottom water, top water, rotate stack",,,,,,,,
@@ -8,7 +8,7 @@ sunnies,1,sow,"measure seed, soak 4 hours, drain seed, prepare trays, sow seed, 
 ,7,light,"mist, dehusk",,,,,,,,
 ,8,light,"mist, dehusk",,,,,,,,
 ,9,harvest,"harvest, wash",,,,,,,,
-pea,0,sow,"measure seed, soak overnight",8,TRUE,12,250,1,3,3,350
+pea,0,sow,"measure seed, soak overnight",TRUE,12,250,1,3,3,350
 ,1,sow,"drain seed, prepare trays, sow seed, saturate dirt, top water",,,,,,,,
 ,2,dark,bottom water,,,,,,,,
 ,3,dark,bottom water,,,,,,,,
@@ -17,7 +17,7 @@ pea,0,sow,"measure seed, soak overnight",8,TRUE,12,250,1,3,3,350
 ,6,light,,,,,,,,,
 ,7,light,,,,,,,,,
 ,8,harvest,harvest,,,,,,,,
-daikon,0,sow,"measure seed, soak overnight",8,TRUE,12,45,1,3,3,250
+daikon,0,sow,"measure seed, soak overnight",TRUE,12,45,1,3,3,250
 ,1,sow,"drain seed, prepare trays, sow seed, saturate dirt, top water",,,,,,,,
 ,2,dark,bottom water,,,,,,,,
 ,3,dark,bottom water,,,,,,,,
@@ -26,7 +26,7 @@ daikon,0,sow,"measure seed, soak overnight",8,TRUE,12,45,1,3,3,250
 ,6,light,,,,,,,,,
 ,7,light,,,,,,,,,
 ,8,harvest,harvest,,,,,,,,
-broccoli,1,sow,"measure seed, prepare trays, sow seed, saturate dirt, top water, stack",12,FALSE,0,30,1,6,4,200
+broccoli,1,sow,"measure seed, prepare trays, sow seed, saturate dirt, top water, stack",FALSE,0,30,1,4,4,200
 ,2,dark,"top water, unstack",,,,,,,,
 ,3,dark,bottom water,,,,,,,,
 ,4,dark,bottom water,,,,,,,,
