@@ -184,33 +184,33 @@ The layout is defined in a configuration file — never hardcoded.
 
 ### Reference Crop Cycles
 
-**Sunflower** (9-day cycle, no Day 0 soak)
+**Sunnies** (9-day cycle, no Day 0 soak)
 
-| Day | Stage    | Tasks |
-|-----|----------|-------|
-| 1   | Germ     | Measure seed, soak seed 4 hours, prepare tray pairs + add 1L dirt, sow seed, saturate dirt, spray seed surface, stack in bundles of 4 pairs |
-| 2   | Blackout | Spray seed surface, rotate stack |
-| 3   | Blackout | Spray seed surface, rotate stack |
-| 4   | Blackout | Bottom water, spray seed surface, rotate stack |
-| 5   | Blackout | Bottom water, spray seed surface, unstack |
-| 6   | Light    | Move to lit rack (bottom tray returns to inventory) |
-| 7   | Light    | Mist, dehusk |
-| 8   | Light    | Mist, dehusk |
-| 9   | Harvest  | Harvest (grow tray returns to inventory) |
+| Day | Stage   | Tasks |
+|-----|---------|-------|
+| 1   | sow     | Measure seed, soak 4 hours, drain seed, prepare trays, sow seed, saturate dirt, top water, stack |
+| 2   | dark    | Top water, rotate stack |
+| 3   | dark    | Top water, rotate stack |
+| 4   | dark    | Bottom water, top water, rotate stack |
+| 5   | dark    | Bottom water, top water, unstack |
+| 6   | light   | Move to lit rack |
+| 7   | light   | Mist, dehusk |
+| 8   | light   | Mist, dehusk |
+| 9   | harvest | Harvest, wash |
 
-**Peas** (8-day cycle, Day 0 overnight soak)
+**Pea** (8-day cycle, Day 0 overnight soak)
 
-| Day | Stage    | Tasks |
-|-----|----------|-------|
-| 0   | Germ     | Measure seed, soak overnight (no slots occupied, no inventory consumed) |
-| 1   | Germ     | Drain seed, prepare tray pairs + add dirt, sow seed, saturate dirt, spray seed surface |
-| 2   | Blackout | Bottom water |
-| 3   | Blackout | Bottom water |
-| 4   | Blackout | Bottom water |
-| 5   | Light    | Move to lit rack (bottom tray returns to inventory) |
-| 6   | Light    | (no tasks — watering is automated on lit racks) |
-| 7   | Light    | (no tasks — watering is automated on lit racks) |
-| 8   | Harvest  | Harvest (grow tray returns to inventory) |
+| Day | Stage   | Tasks |
+|-----|---------|-------|
+| 0   | sow     | Measure seed, soak overnight (no slots occupied, no inventory consumed) |
+| 1   | sow     | Drain seed, prepare trays, sow seed, saturate dirt, top water |
+| 2   | dark    | Bottom water |
+| 3   | dark    | Bottom water |
+| 4   | dark    | Bottom water |
+| 5   | light   | Move to lit rack |
+| 6   | light   | (no tasks — watering is automated on lit racks) |
+| 7   | light   | (no tasks — watering is automated on lit racks) |
+| 8   | harvest | Harvest |
 
 ### Key Scheduling Rules
 - The bottom tray return event is always tied to the move-to-light task, never
