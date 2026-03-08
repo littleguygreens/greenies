@@ -1,4 +1,4 @@
-1# Claude Session Instructions
+# Claude Session Instructions
 
 ## Who I Am
 I am a complete beginner to programming and IDEs. I have no formal coding background.
@@ -241,7 +241,6 @@ The layout is defined in a configuration file — never hardcoded.
 ### Phase 3 — Farm Visualizer
 - Model physical farm layout (configurable shelves and slots)
 - Live text view of every tray slot: what's growing, when planted, harvest due
-- Individually addressable slot records (ready for future GUI)
 
 ### Phase 4 — Conflict Checker
 - Tray capacity conflict alerts
@@ -274,6 +273,9 @@ The layout is defined in a configuration file — never hardcoded.
 - Core views: calendar, farm visualizer, crop library, active trays
 - CLI remains fully functional alongside the GUI
 
-### Phase 9 — Discord Integration (optional)
-- Standalone bot that reads from the scheduler's local data files
-- Daily task summary, task logging, harvest notifications
+### Phase 9 — Future Features (optional)
+- **Individually addressable slot records** — track which specific physical slot
+  (rack, shelf, position) each tray occupies; required before a GUI can show a
+  true map of the farm
+- **Discord integration** — standalone bot that reads from the scheduler's local
+  data files; daily task summary, task logging, harvest notifications

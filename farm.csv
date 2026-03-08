@@ -1,0 +1,6 @@
+name,type,capacity
+blackout,blackout,100
+main_tent,lit,64
+test_tent,lit,16
+grow_trays,inventory,150
+bottom_trays,inventory,150

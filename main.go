@@ -11,6 +11,7 @@
 //	greenies clear
 //	greenies crops
 //	greenies plan
+//	greenies snapshot
 package main
 
 import (
@@ -19,14 +20,16 @@ import (
 	"math"    // for math.Ceil, which rounds a decimal up to the next whole number
 	"os"      // for os.Exit and reading command-line arguments
 	"strconv" // for converting text like "2" into the number 2
-	"strings" // for string utilities used in the crops and schedule commands
+	"strings" // for string utilities used throughout
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/calendar"
 	"github.com/littleguygreens/greenies/internal/crop"
+	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/task"
+	"github.com/littleguygreens/greenies/internal/visualizer"
 )
 
 
@@ -52,6 +55,8 @@ func main() {
 		runCrops()
 	case "plan":
 		runPlan()
+	case "snapshot":
+		runSnapshot()
 	default:
 		fmt.Printf("Unknown command: %q\n\n", subcommand)
 		printUsage()
@@ -104,12 +109,12 @@ func runList() {
 
 	case "r", "range":
 		// Ask for a start and end date using the same flexible format as plan.
-		startDate, err := parseHarvestDate(ask("Start date (MM-DD or YYYY-MM-DD): "))
+		startDate, err := parseDate(ask("Start date (MM-DD or YYYY-MM-DD): "))
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
-		endDate, err := parseHarvestDate(ask("End date (MM-DD or YYYY-MM-DD): "))
+		endDate, err := parseDate(ask("End date (MM-DD or YYYY-MM-DD): "))
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
@@ -270,10 +275,46 @@ func runCrops() {
 	fmt.Println("Run \"greenies plan\" to plan a crop cycle.")
 }
 
+// runSnapshot handles the "greenies snapshot" command.
+// It reads the farm layout config and the saved cycle records, then prints a
+// live picture of the farm showing what is currently growing in each space.
+func runSnapshot() {
+	envs, err := farm.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error loading farm config: %v\n", err)
+		os.Exit(1)
+	}
+
+	cycles, err := farm.LoadCycles()
+	if err != nil {
+		fmt.Printf("Error loading cycle records: %v\n", err)
+		os.Exit(1)
+	}
+
+	visualizer.PrintSnapshot(envs, cycles, time.Now())
+}
+
 // runPlan handles the "greenies plan" command.
 // It asks the user a series of questions interactively, then shows a full
 // preview and asks for confirmation before saving anything.
 func runPlan() {
+	// Load the farm layout config so we can offer environment choices when the
+	// user confirms their plan. We load it early — at the start of the function
+	// — so any config error surfaces before the user types all their answers.
+	farmEnvs, err := farm.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error loading farm config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Extract only the lit environments (blackout is automatic and not a choice).
+	var litEnvs []farm.Environment
+	for _, e := range farmEnvs {
+		if e.Type == "lit" {
+			litEnvs = append(litEnvs, e)
+		}
+	}
+
 	// Load the crop library up front so we can show the available varieties
 	// before asking which one the user wants.
 	path, err := crop.CropsFilePath()
@@ -431,7 +472,7 @@ func runPlan() {
 	if !fromHarvest {
 		// Forward scheduling: the grower enters the sow date (Day 1).
 		// For overnight-soak crops, Day 0 is automatically placed the day before.
-		sowDate, err := parseHarvestDate(ask("Sow date (MM-DD or YYYY-MM-DD): "))
+		sowDate, err := parseDate(ask("Sow date (MM-DD or YYYY-MM-DD): "))
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
@@ -446,7 +487,7 @@ func runPlan() {
 	} else {
 		// Backward scheduling: the grower enters the harvest date and the program
 		// counts backward to find the sow date and every day in between.
-		harvestDate, err := parseHarvestDate(ask("Harvest date (MM-DD or YYYY-MM-DD): "))
+		harvestDate, err := parseDate(ask("Harvest date (MM-DD or YYYY-MM-DD): "))
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
@@ -492,6 +533,75 @@ func runPlan() {
 		return
 	}
 
+	// --- Extract key dates from the preview ---
+	// The sow date (Day 1) and harvest date (last day) are needed to create the
+	// cycle record that powers "greenies snapshot". We read them from the preview
+	// slice rather than asking the user again.
+	//
+	// For crops with an overnight soak, the preview starts with Day 0 (the soak
+	// reminder) followed by Day 1. We skip Day 0 and find Day 1.
+	var sowDateStr string
+	for _, d := range preview {
+		if d.CropDay.Day == 1 {
+			sowDateStr = d.Date
+			break
+		}
+	}
+	harvestDateStr := preview[len(preview)-1].Date
+
+	// Parse the sow date so we can do date arithmetic for the cycle record.
+	// Ignoring the error here is safe: sowDateStr was produced by the scheduler,
+	// which already validated and formatted it correctly.
+	baseSow, _ := time.Parse(task.DateFormat, sowDateStr)
+	baseHarvest, _ := time.Parse(task.DateFormat, harvestDateStr)
+
+	// Compute the move-to-light date: the first day trays spend on a lit rack.
+	//
+	// Day 1 is the sow day. Days 2 through DarkDays+1 are dark days.
+	// Day DarkDays+2 is the first light day.
+	// Days from sow to first light = DarkDays + 1.
+	//
+	// Example: sunnies DarkDays=4 → first light = Day 6 = sow + 5 days ✓
+	// Example: peas    DarkDays=3 → first light = Day 5 = sow + 4 days ✓
+	//
+	// NOTE: This formula has been verified on paper. Test it carefully with
+	// greenies snapshot after planning real cycles.
+	baseMoveToLight := baseSow.AddDate(0, 0, found.DarkDays+1)
+
+	// --- Question 4: which lit environment? ---
+	// Every tray goes through the blackout room first — that's automatic.
+	// This question asks where the trays are headed once they move to light.
+	var litEnv string
+
+	if len(litEnvs) == 0 {
+		// No lit environments are configured in farm.csv.
+		// Default to "either" so the cycle record is still saved.
+		litEnv = "either"
+	} else {
+		// Build a compact prompt from the list of lit environments in the config.
+		// Example: "Which lit environment? (1) main tent / (2) test tent / (e) either [1]: "
+		var promptParts []string
+		for i, e := range litEnvs {
+			promptParts = append(promptParts, fmt.Sprintf("(%d) %s", i+1, farm.DisplayName(e.Name)))
+		}
+		promptParts = append(promptParts, "(e) either")
+		envInput := ask("Which lit environment? " + strings.Join(promptParts, " / ") + " [1]: ")
+		litEnv = resolveLitEnv(envInput, litEnvs)
+	}
+
+	// Create the cycle record for this base planning session.
+	// This is what "greenies snapshot" reads to know what is on the farm.
+	var newCycleRecords []farm.Cycle
+	newCycleRecords = append(newCycleRecords, farm.Cycle{
+		CycleID:         newTasks[0].CycleID,
+		CropName:        found.Name,
+		Trays:           trays,
+		SowDate:         sowDateStr,
+		HarvestDate:     harvestDateStr,
+		MoveToLightDate: baseMoveToLight.Format(task.DateFormat),
+		LitEnvironment:  litEnv,
+	})
+
 	// --- Optional: weekly repetition ---
 	// Many growers sow the same crop every week to maintain a steady harvest
 	// rhythm. If the user wants repeats, we generate additional copies of the
@@ -509,7 +619,7 @@ func runPlan() {
 
 		// Parse the anchor date (sow or harvest) so we can shift it by weeks.
 		// Safe to ignore the error here — displayDate was already validated by
-		// parseHarvestDate earlier in this function, so we know it's a valid date.
+		// parseDate earlier in this function, so we know it's a valid date.
 		baseDate, _ := time.Parse(task.DateFormat, displayDate)
 
 		for week := 1; week <= additionalWeeks; week++ {
@@ -528,6 +638,22 @@ func runPlan() {
 				os.Exit(1)
 			}
 			allNewTasks = append(allNewTasks, weekTasks...)
+
+			// Create a cycle record for this week's repeat.
+			// All dates for week i are shifted by exactly i×7 days from the base.
+			weekSow := baseSow.AddDate(0, 0, week*7)
+			weekHarvest := baseHarvest.AddDate(0, 0, week*7)
+			weekMoveToLight := baseMoveToLight.AddDate(0, 0, week*7)
+
+			newCycleRecords = append(newCycleRecords, farm.Cycle{
+				CycleID:         weekTasks[0].CycleID,
+				CropName:        found.Name,
+				Trays:           trays,
+				SowDate:         weekSow.Format(task.DateFormat),
+				HarvestDate:     weekHarvest.Format(task.DateFormat),
+				MoveToLightDate: weekMoveToLight.Format(task.DateFormat),
+				LitEnvironment:  litEnv,
+			})
 		}
 
 		fmt.Printf("%d cycles scheduled (%d weeks total).\n",
@@ -547,18 +673,81 @@ func runPlan() {
 		os.Exit(1)
 	}
 
+	// Also save the cycle records so "greenies snapshot" can track this batch.
+	// We use a warning rather than a fatal error here because the calendar tasks
+	// are already saved — the core scheduling functionality is intact. The
+	// snapshot just won't show this cycle until the records are re-created.
+	existingCycles, err := farm.LoadCycles()
+	if err != nil {
+		fmt.Printf("Warning: could not load existing cycle records: %v\n", err)
+	} else {
+		allCycles := append(existingCycles, newCycleRecords...)
+		if err := farm.SaveCycles(allCycles); err != nil {
+			fmt.Printf("Warning: could not save cycle records: %v\n", err)
+		}
+	}
+
 	fmt.Printf("%d tasks added to the calendar.\n", len(allNewTasks))
 	fmt.Println("Run \"greenies list\" to see the schedule.")
+	fmt.Println("Run \"greenies snapshot\" to see the farm view.")
 }
 
-// parseHarvestDate parses a date entered by the user and always returns a full
-// YYYY-MM-DD string. Despite the name it is used for both harvest dates and
-// sow dates — wherever the user needs to enter a date.
+// resolveLitEnv maps what the user typed to a lit environment name.
+//
+// Accepts any of:
+//   - a number ("1", "2") — picks the environment at that position
+//   - a full name or unique prefix ("main", "test") — matched case-insensitively
+//   - "e" or "either" — leaves the environment unassigned until snapshot time
+//   - blank — defaults to the first lit environment in the config
+//
+// If nothing matches, defaults to the first lit environment.
+func resolveLitEnv(input string, litEnvs []farm.Environment) string {
+	if len(litEnvs) == 0 {
+		return "either"
+	}
+
+	input = strings.TrimSpace(input)
+
+	// Blank → first lit environment (the default shown in the prompt).
+	if input == "" {
+		return litEnvs[0].Name
+	}
+
+	lower := strings.ToLower(input)
+
+	// "e" or "either" → explicitly unassigned; resolved at snapshot time.
+	if lower == "e" || lower == "either" {
+		return "either"
+	}
+
+	// Number → pick by 1-based index.
+	if n, err := strconv.Atoi(input); err == nil {
+		if n >= 1 && n <= len(litEnvs) {
+			return litEnvs[n-1].Name
+		}
+		// Out of range — default to first.
+		return litEnvs[0].Name
+	}
+
+	// Prefix match (case-insensitive) — e.g. "main" matches "main_tent".
+	for _, e := range litEnvs {
+		if strings.HasPrefix(strings.ToLower(e.Name), lower) {
+			return e.Name
+		}
+	}
+
+	// No match at all — default to first.
+	return litEnvs[0].Name
+}
+
+// parseDate parses a date entered by the user and always returns a full
+// YYYY-MM-DD string. Used for both harvest dates and sow dates — wherever
+// the user needs to enter a date.
 //
 // MM-DD is the convenient shorthand for dates in the current year.
 // YYYY-MM-DD lets the user cross a year boundary — e.g. scheduling in December
 // for a January harvest.
-func parseHarvestDate(input string) (string, error) {
+func parseDate(input string) (string, error) {
 	input = strings.TrimSpace(input)
 
 	// MM-DD: 5 characters, dash in the middle (e.g. "03-15").
@@ -604,9 +793,11 @@ Usage:
   greenies clear
   greenies crops
   greenies plan
+  greenies snapshot
 
 Examples:
   greenies list
   greenies crops
-  greenies plan`)
+  greenies plan
+  greenies snapshot`)
 }
