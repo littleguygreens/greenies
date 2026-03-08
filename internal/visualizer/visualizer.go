@@ -13,6 +13,7 @@ import (
 	"strings" // for strings.Repeat (the separator line)
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/checker"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/task"
 )
@@ -26,7 +27,8 @@ import (
 // "completed" and "tooFar" are silently excluded.
 const (
 	statusBlackout  = "blackout"  // trays are in the blackout room right now
-	statusLit       = "lit"       // trays are on a lit rack (includes harvest day)
+	statusLit       = "lit"       // trays are on a lit rack; harvest-day cycles also get this status
+	                               // but are shown in "Due for harvest today", not the lit section
 	statusUpcoming  = "upcoming"  // sow date is within the next 7 days
 	statusCompleted = "completed" // harvest date has already passed
 	statusTooFar    = "too_far"   // sow date is more than 7 days away — not yet relevant
@@ -420,6 +422,40 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 			fmt.Printf("  %-14s  %d in use / %d total   → %d available\n",
 				"Bottom trays", bottomInUse, bottomTotal, bottomTotal-bottomInUse)
 		}
+		fmt.Println()
+	}
+
+	// ── Step 8: conflict checker ──────────────────────────────────────────────
+	//
+	// Run the conflict checker against all cycles that haven't finished yet.
+	// We skip completed cycles (harvest date already in the past) because a
+	// conflict that happened three months ago is not useful information today.
+	//
+	// If any problems are found they appear as a clearly labelled warning
+	// section at the bottom of the snapshot, so the grower sees them every
+	// time they run "greenies snapshot" until the schedule is fixed.
+
+	// Filter to current and future cycles only (harvest date >= today).
+	var activeCycles []farm.Cycle
+	for _, c := range cycles {
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+		// !harv.Before(t) means harv >= today
+		if !harv.Before(t) {
+			activeCycles = append(activeCycles, c)
+		}
+	}
+
+	conflicts := checker.Check(envs, activeCycles)
+
+	if len(conflicts) > 0 {
+		fmt.Println(sep)
+		fmt.Println("CONFLICTS DETECTED")
+		fmt.Println()
+		for _, w := range conflicts {
+			fmt.Printf("  %s\n", w)
+		}
+		fmt.Println()
+		fmt.Println("  Run \"greenies plan\" and adjust tray counts or dates to resolve.")
 		fmt.Println()
 	}
 }

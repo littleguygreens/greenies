@@ -96,6 +96,62 @@ type Cycle struct {
 	// time. The snapshot resolves "either" at display time by assigning the
 	// batch to the first lit environment that has available capacity.
 	LitEnvironment string
+
+	// ExpectedGrams is the estimated harvest weight for this batch in grams,
+	// computed at plan time as: yield_grams_per_tray × tray_count.
+	//
+	// Storing it here (rather than re-reading the crop library at harvest time)
+	// means the harvest log always has the number that was promised when the
+	// plan was made — even if the crop library is later edited.
+	//
+	// A value of 0 means no yield data was available when this cycle was
+	// planned (e.g. cycles saved before this field was added). The harvest
+	// log treats 0 as "unknown" and omits the expected/actual comparison.
+	ExpectedGrams int
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Harvest records
+// ─────────────────────────────────────────────────────────────────────────────
+
+// HarvestRecord is a single logged harvest — what the plan promised vs what
+// the grower actually cut on the day.
+//
+// One record is saved per crop batch (per Cycle). A batch of 3 tray of sunnies
+// on the same harvest day is one record, not three — because it was planned as
+// one unit and harvested as one unit.
+type HarvestRecord struct {
+	// CycleID links this record back to the matching Cycle in cycles.json.
+	// Used to prevent the same cycle being logged twice.
+	CycleID string
+
+	// CropName is the variety name, e.g. "sunnies". Copied from the Cycle
+	// so the harvest log can be read without also loading cycles.json.
+	CropName string
+
+	// HarvestDate is the date the crop was actually cut. Format: YYYY-MM-DD.
+	HarvestDate string
+
+	// ExpectedTrays is how many trays were planned (from the Cycle record).
+	// Compared against ActualTrays in the harvest log.
+	ExpectedTrays int
+
+	// ActualTrays is how many trays the grower actually cut on harvest day.
+	// May differ from ExpectedTrays if a tray was lost or discarded.
+	ActualTrays int
+
+	// ExpectedGrams is the estimated yield at plan time (copied from the
+	// Cycle's ExpectedGrams field). Zero means unknown.
+	ExpectedGrams int
+
+	// ActualGrams is the total weight of the harvest in grams, as measured
+	// by the grower on harvest day.
+	ActualGrams int
+
+	// Notes is an optional free-text comment the grower enters at log time.
+	// Useful for recording anything unusual: "hot week — small leaves",
+	// "lost one tray to mould", etc.
+	Notes string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,6 +390,71 @@ func LoadCycles() ([]Cycle, error) {
 	}
 
 	return cycles, nil
+}
+
+// HarvestsFilePath returns the full path to the harvest log JSON file.
+// Example: /home/farm/.greenies/harvests.json
+func HarvestsFilePath() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "harvests.json"), nil
+}
+
+// LoadHarvests reads all saved harvest records from disk and returns them as a
+// list. If the file doesn't exist yet (no harvests have been logged), it
+// returns an empty list rather than an error — the same friendly behaviour as
+// LoadCycles for new installs.
+func LoadHarvests() ([]HarvestRecord, error) {
+	path, err := HarvestsFilePath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []HarvestRecord{}, nil
+		}
+		return nil, fmt.Errorf("could not read harvest log: %w", err)
+	}
+
+	var records []HarvestRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		return nil, fmt.Errorf("harvest log appears to be corrupted: %w", err)
+	}
+
+	return records, nil
+}
+
+// SaveHarvests writes the full list of harvest records to disk, replacing
+// whatever was there before.
+func SaveHarvests(records []HarvestRecord) error {
+	dir, err := dataDir()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("could not create data directory: %w", err)
+	}
+
+	path, err := HarvestsFilePath()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not encode harvest records: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("could not write harvest log: %w", err)
+	}
+
+	return nil
 }
 
 // SaveCycles writes the full list of cycle records to disk, replacing whatever

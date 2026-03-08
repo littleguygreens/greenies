@@ -19,11 +19,13 @@ import (
 	"fmt"
 	"math"    // for math.Ceil, which rounds a decimal up to the next whole number
 	"os"      // for os.Exit and reading command-line arguments
+	"sort"    // for sorting the harvest log by date
 	"strconv" // for converting text like "2" into the number 2
 	"strings" // for string utilities used throughout
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/calendar"
+	"github.com/littleguygreens/greenies/internal/checker"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/scheduler"
@@ -57,6 +59,10 @@ func main() {
 		runPlan()
 	case "snapshot":
 		runSnapshot()
+	case "harvest":
+		runHarvest()
+	case "harvestlog":
+		runHarvestLog()
 	default:
 		fmt.Printf("Unknown command: %q\n\n", subcommand)
 		printUsage()
@@ -214,6 +220,27 @@ func runDelete() {
 		os.Exit(1)
 	}
 
+	// If a whole cycle was deleted, also remove its record from cycles.json
+	// so that "greenies snapshot" no longer shows the deleted batch.
+	// A task-only deletion (not a full cycle) leaves cycles.json untouched
+	// because the rest of the cycle is still active.
+	if target.CycleID != "" && len(deleteByID) > 1 {
+		// len(deleteByID) > 1 means we deleted more than one task, which
+		// only happens when the user chose to delete the whole cycle ("c").
+		cycles, cycleErr := farm.LoadCycles()
+		if cycleErr == nil {
+			var keptCycles []farm.Cycle
+			for _, c := range cycles {
+				if c.CycleID != target.CycleID {
+					keptCycles = append(keptCycles, c)
+				}
+			}
+			if err := farm.SaveCycles(keptCycles); err != nil {
+				fmt.Printf("Warning: tasks deleted but could not update cycle records: %v\n", err)
+			}
+		}
+	}
+
 	removed := len(tasks) - len(updated)
 	if removed == 1 {
 		fmt.Printf("1 task deleted.\n")
@@ -222,11 +249,13 @@ func runDelete() {
 	}
 }
 
-// runClear deletes every task in the store after asking for confirmation.
-// Useful during development and testing. The confirmation step is a safety net
-// so a mistyped command cannot accidentally wipe the whole schedule.
+// runClear deletes every task and cycle record after asking for confirmation.
+// This resets both the calendar (tasks.json) and the snapshot (cycles.json)
+// so the two data files stay in sync. The harvest log (harvests.json) is
+// permanent history and is NOT cleared — use a text editor to edit that file
+// directly if you ever need to remove a harvest record.
 func runClear() {
-	fmt.Print("This will delete ALL tasks. Type \"yes\" to confirm: ")
+	fmt.Print("This will delete ALL tasks and cycle records. Type \"yes\" to confirm: ")
 
 	var response string
 	fmt.Scanln(&response)
@@ -236,13 +265,23 @@ func runClear() {
 		return
 	}
 
-	// Save an empty list, which overwrites the existing file.
+	// Clear the calendar tasks.
 	if err := store.Save([]task.Task{}); err != nil {
 		fmt.Printf("Error clearing tasks: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("All tasks deleted.")
+	// Also clear the cycle records so the snapshot doesn't show stale data.
+	// Tasks and cycles are always created together (by "greenies plan"), so
+	// wiping one without the other leaves the snapshot showing batches that
+	// have no calendar tasks behind them.
+	if err := farm.SaveCycles([]farm.Cycle{}); err != nil {
+		fmt.Printf("Error clearing cycle records: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("All tasks and cycle records deleted.")
+	fmt.Println("(Harvest log preserved — run \"greenies harvestlog\" to see it.)")
 }
 
 // runCrops handles the "greenies crops" command.
@@ -335,10 +374,20 @@ func runPlan() {
 
 	// Helper that prints a prompt and returns whatever the user typed,
 	// with leading/trailing whitespace stripped.
+	//
+	// If the user types "cancel" (in any capitalisation) at any prompt,
+	// the program exits immediately without saving anything. This lets the
+	// grower bail out of a multi-step plan at any point without having to
+	// finish the whole flow first.
 	ask := func(prompt string) string {
 		fmt.Print(prompt)
 		line, _ := reader.ReadString('\n')
-		return strings.TrimSpace(line)
+		v := strings.TrimSpace(line)
+		if strings.EqualFold(v, "cancel") {
+			fmt.Println("\nPlan cancelled — nothing was saved.")
+			os.Exit(0)
+		}
+		return v
 	}
 
 	// --- Question 1: which crop? ---
@@ -600,6 +649,9 @@ func runPlan() {
 		HarvestDate:     harvestDateStr,
 		MoveToLightDate: baseMoveToLight.Format(task.DateFormat),
 		LitEnvironment:  litEnv,
+		// Store the expected yield at plan time so the harvest log can show
+		// expected vs actual without needing to re-read the crop library later.
+		ExpectedGrams: found.YieldGrams * trays,
 	})
 
 	// --- Optional: weekly repetition ---
@@ -653,12 +705,46 @@ func runPlan() {
 				HarvestDate:     weekHarvest.Format(task.DateFormat),
 				MoveToLightDate: weekMoveToLight.Format(task.DateFormat),
 				LitEnvironment:  litEnv,
+				ExpectedGrams:   found.YieldGrams * trays,
 			})
 		}
 
 		fmt.Printf("%d cycles scheduled (%d weeks total).\n",
 			additionalWeeks+1, additionalWeeks+1)
 	}
+
+	// ── Conflict check ───────────────────────────────────────────────────────
+	//
+	// Before saving, combine the newly created cycle records with any cycles
+	// already on file and run the conflict checker. If problems are found we
+	// show them as a warning and give the grower a chance to bail out.
+	//
+	// We load cycles here (before saving) so we can check the combined picture.
+	existingCyclesForCheck, checkErr := farm.LoadCycles()
+	if checkErr == nil {
+		// Combine existing cycles with all the new ones (including repeats).
+		allCyclesForCheck := append(existingCyclesForCheck, newCycleRecords...)
+		conflicts := checker.Check(farmEnvs, allCyclesForCheck)
+
+		if len(conflicts) > 0 {
+			fmt.Println("\nWARNING — this plan creates capacity conflicts:")
+			fmt.Println()
+			for _, w := range conflicts {
+				fmt.Printf("  %s\n", w)
+			}
+			fmt.Println()
+			// Give the grower the choice: save anyway, or cancel entirely.
+			// The ask() function handles "cancel" automatically (exits cleanly).
+			// Any input other than "yes" is treated as a cancel.
+			saveAnyway := ask("Save anyway? Type \"yes\" to save or \"cancel\" to abort: ")
+			if saveAnyway != "yes" {
+				fmt.Println("Cancelled — nothing was saved.")
+				return
+			}
+		}
+	}
+	// (If loading existing cycles failed, we skip the conflict check and save
+	// anyway — a warning from the cycle-save step below will surface the error.)
 
 	// Load existing tasks, append all the new ones, and save.
 	existing, err := store.Load()
@@ -767,6 +853,245 @@ func parseDate(input string) (string, error) {
 	return input, nil
 }
 
+// runHarvest handles the "greenies harvest" command.
+//
+// It shows all crop cycles whose harvest date is within the last 30 days and
+// that have not yet been logged, lets the grower pick one, and records the
+// actual tray count and gram weight alongside the planned expectations.
+//
+// Each logged batch gets its own record — a day where two crops were both
+// harvested would produce two separate records, one per cycle.
+func runHarvest() {
+	// Load cycles and the existing harvest log.
+	cycles, err := farm.LoadCycles()
+	if err != nil {
+		fmt.Printf("Error loading cycle records: %v\n", err)
+		os.Exit(1)
+	}
+
+	harvests, err := farm.LoadHarvests()
+	if err != nil {
+		fmt.Printf("Error loading harvest log: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Build a set of CycleIDs that have already been logged, so we don't
+	// offer the same batch twice.
+	logged := map[string]bool{}
+	for _, h := range harvests {
+		logged[h.CycleID] = true
+	}
+
+	// "Today" in UTC midnight, matching the format used in stored date strings.
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	// The log window: any cycle harvested in the last 30 days.
+	// 30 days gives the grower plenty of time to log without nagging, but
+	// keeps the list short — batches older than a month fall off the list.
+	cutoff := today.AddDate(0, 0, -30)
+
+	// Collect cycles eligible for logging: harvest date is past (or today)
+	// and within the 30-day window, and not yet in the log.
+	var eligible []farm.Cycle
+	for _, c := range cycles {
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+		// harv <= today  →  !today.Before(harv)
+		// harv >= cutoff →  !harv.Before(cutoff)
+		if !today.Before(harv) && !harv.Before(cutoff) && !logged[c.CycleID] {
+			eligible = append(eligible, c)
+		}
+	}
+
+	if len(eligible) == 0 {
+		fmt.Println("No recent harvests to log.")
+		fmt.Println("Cycles are eligible to log for 30 days after their harvest date.")
+		fmt.Println("Use \"greenies harvestlog\" to see previously logged harvests.")
+		return
+	}
+
+	// Show the list sorted by harvest date, most recent first.
+	sort.Slice(eligible, func(i, j int) bool {
+		return eligible[i].HarvestDate > eligible[j].HarvestDate
+	})
+
+	fmt.Println("Recent harvests ready to log:")
+	fmt.Println()
+	for i, c := range eligible {
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+		trayWord := "tray"
+		if c.Trays != 1 {
+			trayWord = "trays"
+		}
+		// Show the expected grams if we have them; skip if unknown (older cycles).
+		expectedLabel := ""
+		if c.ExpectedGrams > 0 {
+			expectedLabel = fmt.Sprintf("   expected: %dg", c.ExpectedGrams)
+		}
+		fmt.Printf("  %d.  %-12s  %d %s   harvest %s%s\n",
+			i+1, capitalize(c.CropName), c.Trays, trayWord,
+			harv.Format("Jan 02"), expectedLabel)
+	}
+	fmt.Println()
+	fmt.Println("  (Type \"cancel\" at any prompt to exit without saving.)")
+	fmt.Println()
+
+	// Set up the ask helper with cancel support — same pattern as runPlan().
+	reader := bufio.NewReader(os.Stdin)
+	ask := func(prompt string) string {
+		fmt.Print(prompt)
+		line, _ := reader.ReadString('\n')
+		v := strings.TrimSpace(line)
+		if strings.EqualFold(v, "cancel") {
+			fmt.Println("Cancelled.")
+			os.Exit(0)
+		}
+		return v
+	}
+
+	// Ask which cycle to log.
+	choiceStr := ask(fmt.Sprintf("Which cycle to log? (1-%d): ", len(eligible)))
+	n, err := strconv.Atoi(choiceStr)
+	if err != nil || n < 1 || n > len(eligible) {
+		fmt.Printf("Please enter a number between 1 and %d.\n", len(eligible))
+		os.Exit(1)
+	}
+	chosen := eligible[n-1]
+
+	harv, _ := time.Parse(task.DateFormat, chosen.HarvestDate)
+	chosenTrayWord := "tray"
+	if chosen.Trays != 1 {
+		chosenTrayWord = "trays"
+	}
+	fmt.Printf("\nLogging harvest: %s — %d %s — harvest %s\n\n",
+		capitalize(chosen.CropName), chosen.Trays, chosenTrayWord,
+		harv.Format("Jan 02"))
+
+	// Ask actual trays. The default is the planned tray count — press Enter
+	// to accept it. The grower only needs to type a different number if they
+	// lost a tray (e.g. mould, accident).
+	actualTraysStr := ask(fmt.Sprintf("Actual trays harvested [%d]: ", chosen.Trays))
+	actualTrays := chosen.Trays // default
+	if actualTraysStr != "" {
+		t, err := strconv.Atoi(actualTraysStr)
+		if err != nil || t < 0 {
+			fmt.Println("Please enter a whole number (e.g. 3). Type 0 if no usable crop was cut.")
+			os.Exit(1)
+		}
+		actualTrays = t
+	}
+
+	// Ask actual grams. The default is the expected yield if we have it,
+	// or blank (must type a number) if the cycle pre-dates the ExpectedGrams field.
+	var gramsPrompt string
+	defaultGrams := chosen.ExpectedGrams
+	if defaultGrams > 0 {
+		gramsPrompt = fmt.Sprintf("Actual grams harvested [%d]: ", defaultGrams)
+	} else {
+		gramsPrompt = "Actual grams harvested: "
+	}
+	actualGramsStr := ask(gramsPrompt)
+
+	// Parse actual grams.
+	actualGrams := defaultGrams // default (may be 0 if unknown)
+	if actualGramsStr != "" {
+		g, err := strconv.Atoi(actualGramsStr)
+		if err != nil || g < 0 {
+			fmt.Println("Please enter a whole number in grams (e.g. 1400).")
+			os.Exit(1)
+		}
+		actualGrams = g
+	} else if defaultGrams == 0 {
+		// No default and user pressed Enter — we need a number.
+		fmt.Println("Please enter the actual grams harvested (e.g. 1400).")
+		os.Exit(1)
+	}
+
+	// Optional notes — pressing Enter skips this field.
+	notes := ask("Notes (optional — press Enter to skip): ")
+
+	// Build the record and save.
+	record := farm.HarvestRecord{
+		CycleID:       chosen.CycleID,
+		CropName:      chosen.CropName,
+		HarvestDate:   chosen.HarvestDate,
+		ExpectedTrays: chosen.Trays,
+		ActualTrays:   actualTrays,
+		ExpectedGrams: chosen.ExpectedGrams,
+		ActualGrams:   actualGrams,
+		Notes:         notes,
+	}
+
+	harvests = append(harvests, record)
+	if err := farm.SaveHarvests(harvests); err != nil {
+		fmt.Printf("Error saving harvest record: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\nHarvest logged — %s, %d trays, %dg.\n",
+		capitalize(chosen.CropName), actualTrays, actualGrams)
+	fmt.Println("Run \"greenies harvestlog\" to see your full history.")
+}
+
+// runHarvestLog handles the "greenies harvestlog" command.
+//
+// It prints all saved harvest records sorted most-recent-first, showing the
+// planned yield alongside what was actually cut — so the grower can spot
+// trends over time (e.g. a crop that consistently under-yields).
+func runHarvestLog() {
+	harvests, err := farm.LoadHarvests()
+	if err != nil {
+		fmt.Printf("Error loading harvest log: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(harvests) == 0 {
+		fmt.Println("No harvests logged yet.")
+		fmt.Println("Run \"greenies harvest\" after each harvest to build your log.")
+		return
+	}
+
+	// Sort most recent first. HarvestDate is YYYY-MM-DD, so string comparison
+	// gives the same result as date comparison — later dates sort higher.
+	sort.Slice(harvests, func(i, j int) bool {
+		return harvests[i].HarvestDate > harvests[j].HarvestDate
+	})
+
+	fmt.Printf("Harvest log — %d records\n", len(harvests))
+	fmt.Println(strings.Repeat("─", 70))
+	fmt.Println()
+
+	for _, h := range harvests {
+		harv, _ := time.Parse(task.DateFormat, h.HarvestDate)
+
+		// Tray column: "3/3 trays" or "2/3 trays" (actual/expected).
+		// This immediately shows whether any trays were lost.
+		trayCol := fmt.Sprintf("%d/%d trays", h.ActualTrays, h.ExpectedTrays)
+
+		// Gram column: show actual alongside expected (if we have expected data).
+		// Old cycles logged before ExpectedGrams was added will show just actual.
+		var gramCol string
+		if h.ExpectedGrams > 0 {
+			gramCol = fmt.Sprintf("%dg / %dg expected", h.ActualGrams, h.ExpectedGrams)
+		} else {
+			gramCol = fmt.Sprintf("%dg", h.ActualGrams)
+		}
+
+		fmt.Printf("  %s   %-12s  %-10s  %s\n",
+			harv.Format("Jan 02"),
+			capitalize(h.CropName),
+			trayCol,
+			gramCol)
+
+		// Notes appear on their own line, indented to align under the crop name.
+		if h.Notes != "" {
+			fmt.Printf("               %s\n", h.Notes)
+		}
+	}
+
+	fmt.Println()
+}
+
 // capitalize uppercases the first letter of a string and leaves the rest alone.
 // Used to display crop names from the CSV (which are lowercase) with a capital
 // at the start of a sentence or title.
@@ -794,10 +1119,14 @@ Usage:
   greenies crops
   greenies plan
   greenies snapshot
+  greenies harvest
+  greenies harvestlog
 
 Examples:
   greenies list
   greenies crops
   greenies plan
-  greenies snapshot`)
+  greenies snapshot
+  greenies harvest
+  greenies harvestlog`)
 }
