@@ -117,7 +117,7 @@ type Cycle struct {
 // HarvestRecord is a single logged harvest — what the plan promised vs what
 // the grower actually cut on the day.
 //
-// One record is saved per crop batch (per Cycle). A batch of 3 tray of sunnies
+// One record is saved per crop batch (per Cycle). A batch of 3 trays of sunnies
 // on the same harvest day is one record, not three — because it was planned as
 // one unit and harvested as one unit.
 type HarvestRecord struct {

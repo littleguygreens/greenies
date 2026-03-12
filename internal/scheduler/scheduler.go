@@ -71,9 +71,12 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 			CropDay: day,
 		})
 
-		// Build the task title: crop name + day number + stage.
-		// Example: "Sunnies — Day 1 (sow)"
-		title := fmt.Sprintf("%s — Day %d (%s)", capitalize(c.Name), day.Day, day.Stage)
+		// Build the task title: crop name + tray count + stage.
+		// Example: "Sunnies 12x dark"
+		// The "12x" shows at a glance how many trays are in this batch.
+		// No day number in the title — the date on the calendar already tells
+		// the grower exactly where they are in the cycle.
+		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
 
 		// Put tray count and task instructions in the notes field.
 		// Even days with no tasks are saved to the calendar — the trays are
@@ -84,7 +87,7 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 		}
 		var notes string
 		if strings.TrimSpace(day.Tasks) == "" {
-			notes = fmt.Sprintf("%d %s · no tasks today", trays, trayWord)
+			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
 		} else {
 			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
 		}
@@ -148,7 +151,8 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 			CropDay: day,
 		})
 
-		title := fmt.Sprintf("%s — Day %d (%s)", capitalize(c.Name), day.Day, day.Stage)
+		// Same title format as Schedule: "Sunnies 12x dark"
+		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
 
 		trayWord := "tray"
 		if trays != 1 {
@@ -156,7 +160,7 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 		}
 		var notes string
 		if strings.TrimSpace(day.Tasks) == "" {
-			notes = fmt.Sprintf("%d %s · no tasks today", trays, trayWord)
+			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
 		} else {
 			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
 		}
@@ -174,20 +178,3 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 	return preview, tasks, nil
 }
 
-// capitalize uppercases the first letter of a string and leaves the rest alone.
-// Used to display crop names from the CSV (which are lowercase) with a capital
-// at the start of task titles.
-//
-// We write this ourselves rather than using a library function because the
-// standard library's strings.Title is deprecated and the replacement requires
-// an external dependency — overkill for capitalising one word.
-//
-// Note: an identical copy of this function exists in main.go.
-// Go does not allow sharing unexported (lowercase) helpers across packages, so both
-// packages keep their own copy. If you change one, change the other too.
-func capitalize(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}

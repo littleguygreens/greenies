@@ -12,14 +12,13 @@ import (
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
-// ConsoleExporter prints tasks to the terminal, one per line.
-// It satisfies the Exporter interface because it has an Export method with
-// the correct signature.
+// ConsoleExporter is kept as a working example of how to add a new output
+// destination to the Exporter interface. To add a new exporter (e.g. CSV,
+// email), copy this file, change the Export method, and append your new
+// exporter to the list before calling RunAll.
 type ConsoleExporter struct{}
 
 // Export prints each task in the list to the terminal in a simple format.
-// This satisfies the Exporter interface and will be wired into the display
-// path in Phase 5 when the Google Calendar exporter is added alongside it.
 func (c ConsoleExporter) Export(tasks []task.Task) error {
 	for _, t := range tasks {
 		// Print a compact single-line summary of the task.

@@ -13,6 +13,7 @@ package task
 import (
 	"crypto/rand"  // Go's built-in secure random number generator
 	"encoding/hex" // converts random bytes into a readable string of letters and numbers
+	"strings"      // for strings.ToUpper, used by Capitalize
 	"time"         // Go's built-in package for working with dates and times
 )
 
@@ -24,6 +25,13 @@ import (
 // Defined here in the task package because Task.Date is the field that owns
 // this format — every other package that deals with dates borrows it from here.
 const DateFormat = "2006-01-02"
+
+// NoTasksNote is the text placed in a task's Notes when a crop cycle day
+// has no physical actions required (e.g. automated-watering days on the
+// lit rack). The task is still saved so the farm visualizer can show the
+// trays are occupying rack space — but calendar sync skips these days
+// because there is nothing for the grower to actually do.
+const NoTasksNote = "no tasks today"
 
 // Task represents a single item on the calendar.
 //
@@ -135,4 +143,19 @@ func GenerateID() (string, error) {
 	// Convert the raw bytes into a readable string of hex characters
 	// (hex uses the characters 0-9 and a-f, like colour codes in web design).
 	return hex.EncodeToString(bytes), nil
+}
+
+// Capitalize uppercases the first letter of a string and leaves the rest
+// unchanged. Used throughout the program to display crop names (which are
+// stored in lowercase in the CSV) with a capital at the start of titles
+// and messages.
+//
+// We define it here rather than using a library function because the
+// standard library's strings.Title is deprecated and its replacement
+// requires an external dependency — overkill for capitalising one word.
+func Capitalize(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

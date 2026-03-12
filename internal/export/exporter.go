@@ -12,7 +12,11 @@
 // useful tools in Go for keeping a codebase flexible and manageable.
 package export
 
-import "github.com/littleguygreens/greenies/internal/task"
+import (
+	"fmt"
+
+	"github.com/littleguygreens/greenies/internal/task"
+)
 
 // Exporter is the standard plug shape that every output destination must match.
 //
@@ -25,4 +29,20 @@ import "github.com/littleguygreens/greenies/internal/task"
 // It returns an error if something goes wrong, or nil if everything succeeded.
 type Exporter interface {
 	Export(tasks []task.Task) error
+}
+
+// RunAll calls Export on every exporter in the list, passing the same tasks
+// to each one. This is the central "plug-in point" — adding a new output
+// destination (e.g. Google Calendar) is as simple as appending it to the
+// list before calling RunAll.
+//
+// If one exporter fails (e.g. Google Calendar is offline), a warning is
+// printed but the remaining exporters still run. A network problem with one
+// output should never prevent the others from working.
+func RunAll(exporters []Exporter, tasks []task.Task) {
+	for _, e := range exporters {
+		if err := e.Export(tasks); err != nil {
+			fmt.Printf("Warning: an exporter failed: %v\n", err)
+		}
+	}
 }

@@ -10,7 +10,9 @@ package visualizer
 
 import (
 	"fmt"
-	"strings" // for strings.Repeat (the separator line)
+	"io"
+	"os"
+	"strings" // for strings.Repeat (the separator line) and strings.Builder
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/checker"
@@ -72,36 +74,24 @@ func cycleStatus(today, sow, moveToLight, harvest time.Time) string {
 // Display helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// trayWord returns "tray" for exactly one tray and "trays" for any other count.
-// Used to make the tray count read naturally in English.
-func trayWord(n int) string {
-	if n == 1 {
-		return "tray"
-	}
-	return "trays"
-}
 
-// capitalize uppercases the first letter of a string and leaves the rest alone.
-// Used to display crop names from cycles.json (which are lowercase) with a
-// capital at the start of a line.
+// printCycleRow writes a single active cycle as a vertical block to w:
 //
-// Note: copies of this helper also exist in main.go and internal/scheduler.
-// Go does not allow sharing unexported (lowercase) helpers across packages, so
-// each package keeps its own copy.
-func capitalize(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-// printCycleRow prints a single active cycle as one formatted line, like:
+//	Sunnies 16x Day 4 (dark)
+//	sown Sun Mar 08
+//	harvest Mon Mar 16
 //
-//	  Sunnies       2 trays   sown Mar 03   harvest Mar 11   Day 4 (dark)
+// followed by a blank line so consecutive cycles are visually separated.
 //
-// The day label (e.g. "Day 4 (dark)") is computed from today's date relative
-// to the cycle's key dates.
-func printCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) {
+// The "16x" is the tray count; the day label (e.g. "Day 4 (dark)") is
+// computed from today's date relative to the cycle's key dates.
+//
+// The vertical layout wraps cleanly on a phone screen, where the Google
+// Calendar description is displayed in a narrow column.
+//
+// It accepts an io.Writer so the same function works both when printing to
+// the terminal and when building a string for Google Calendar.
+func printCycleRow(w io.Writer, c farm.Cycle, today, sow, moveToLight, harvest time.Time) {
 	// Work out what day number today is in this cycle.
 	// Day 1 is the sow date, so the day number = days since sow + 1.
 	// Both today and sow are at midnight, so the subtraction is clean.
@@ -123,30 +113,26 @@ func printCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) {
 		stageLabel = fmt.Sprintf("Day %d (light)", dayNum)
 	}
 
-	trayLabel := fmt.Sprintf("%d %s", c.Trays, trayWord(c.Trays))
-
-	fmt.Printf("  %-12s  %-9s  sown %s   harvest %s   %s\n",
-		capitalize(c.CropName),
-		trayLabel,
-		sow.Format("Jan 02"),
-		harvest.Format("Jan 02"),
-		stageLabel)
+	// Print one line per piece of information so the block wraps cleanly
+	// on narrow phone screens. The "Nx" format (e.g. "16x") shows the tray
+	// count at a glance without needing the word "trays" to take up space.
+	fmt.Fprintf(w, "%s %dx %s\n", task.Capitalize(c.CropName), c.Trays, stageLabel)
+	fmt.Fprintf(w, "sown %s\n", sow.Format("Mon Jan 02"))
+	fmt.Fprintf(w, "harvest %s\n", harvest.Format("Mon Jan 02"))
+	fmt.Fprintln(w) // blank line between consecutive cycle blocks
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main display function
 // ─────────────────────────────────────────────────────────────────────────────
 
-// PrintSnapshot prints the full farm snapshot to the terminal.
+// writeSnapshot renders the full farm snapshot to any output destination (w).
 //
-// It shows each environment (blackout room first, then lit environments in the
-// order they appear in farm.csv), lists every active cycle currently in that
-// environment, and finishes with a "Due for harvest today" reminder and an
-// "Upcoming (next 7 days)" section for cycles about to start.
-//
-// Each cycle is always its own row — two batches of the same crop are two rows.
-// Cycles that finished yesterday or earlier do not appear at all.
-func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time) {
+// This is the shared core used by both PrintSnapshot (which sends output to the
+// terminal) and SnapshotText (which captures it as a string for Google
+// Calendar). Splitting it this way means the display logic only lives once —
+// there is no risk of the two outputs drifting apart.
+func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, today time.Time) {
 	// Strip the time-of-day from today so all comparisons are date-only.
 	// We use time.UTC here because time.Parse (used to read stored date strings)
 	// always produces UTC midnight. Using the local timezone for "today" would
@@ -155,8 +141,9 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	// UTC on the same calendar date and incorrectly mark cycles as completed.
 	t := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
 
-	// The separator is a horizontal line that divides the sections visually.
-	sep := strings.Repeat("─", 53)
+	// The separator is a short horizontal line that divides sections visually.
+	// 21 characters keeps it compact on a phone screen without looking sparse.
+	sep := strings.Repeat("─", 21)
 
 	// ── Step 1: classify each cycle ──────────────────────────────────────────
 	//
@@ -165,11 +152,11 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	// in a struct alongside the cycle so we can pass everything together.
 
 	type classifiedCycle struct {
-		cycle      farm.Cycle
-		status     string
-		sow        time.Time
+		cycle       farm.Cycle
+		status      string
+		sow         time.Time
 		moveToLight time.Time
-		harvest    time.Time
+		harvest     time.Time
 	}
 
 	var classified []classifiedCycle
@@ -250,13 +237,26 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	}
 
 	// ── Step 3: print the date header ────────────────────────────────────────
+	//
+	// Short format (e.g. "Wed 03-11") keeps the header compact on small screens.
 
-	fmt.Printf("Farm snapshot — %s\n", today.Format("Monday 2006-01-02"))
+	fmt.Fprintf(w, "Farm snapshot — %s\n", today.Format("Mon 01-02"))
 
 	// ── Step 4: print each environment section ────────────────────────────────
+	//
+	// We only show physical environments here (blackout and lit). Inventory
+	// rows (grow_trays, bottom_trays) are shown separately in Step 7 — they
+	// are not physical spaces that hold trays, so they must be skipped here
+	// or they would always appear as "empty".
 
 	for _, env := range envs {
-		fmt.Println(sep)
+		// Skip inventory rows — they are not physical environments and would
+		// always show "empty" because no cycles are ever assigned to them.
+		if env.Type == "inventory" {
+			continue
+		}
+
+		fmt.Fprintln(w, sep)
 
 		// Find cycles that currently belong to this environment.
 		var envCycles []classifiedCycle
@@ -289,17 +289,18 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 			slotsUsed += cc.cycle.Trays
 		}
 
-		// Print the environment header.
+		// Print the environment header, then the cycles (if any).
 		if len(envCycles) == 0 {
-			fmt.Printf("%-22s  empty\n", farm.DisplayName(env.Name))
+			fmt.Fprintf(w, "%-22s  empty\n", farm.DisplayName(env.Name))
 		} else {
-			fmt.Printf("%-22s  %d / %d slots\n",
+			fmt.Fprintf(w, "%-22s  %d / %d slots\n",
 				farm.DisplayName(env.Name), slotsUsed, env.Capacity)
-			fmt.Println()
+			fmt.Fprintln(w) // blank line before the first cycle block
 			for _, cc := range envCycles {
-				printCycleRow(cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest)
+				printCycleRow(w, cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest)
 			}
-			fmt.Println()
+			// printCycleRow already adds a trailing blank line after each block,
+			// so no extra blank is needed here before the next separator.
 		}
 	}
 
@@ -317,17 +318,13 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	}
 
 	if len(harvestToday) > 0 {
-		fmt.Println(sep)
-		fmt.Println("Due for harvest today")
-		fmt.Println()
+		fmt.Fprintln(w, sep)
+		fmt.Fprintln(w, "Due for harvest today")
 		for _, cc := range harvestToday {
-			trayLabel := fmt.Sprintf("%d %s", cc.cycle.Trays, trayWord(cc.cycle.Trays))
-			fmt.Printf("  %-12s  %-9s  harvest %s\n",
-				capitalize(cc.cycle.CropName),
-				trayLabel,
-				cc.harvest.Format("Jan 02"))
+			fmt.Fprintf(w, "%s %dx\n", task.Capitalize(cc.cycle.CropName), cc.cycle.Trays)
+			fmt.Fprintf(w, "harvest %s\n", cc.harvest.Format("Mon Jan 02"))
+			fmt.Fprintln(w)
 		}
-		fmt.Println()
 	}
 
 	// ── Step 6: "Upcoming" section ───────────────────────────────────────────
@@ -345,17 +342,13 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	}
 
 	if len(upcoming) > 0 {
-		fmt.Println(sep)
-		fmt.Println("Upcoming (next 7 days)")
-		fmt.Println()
+		fmt.Fprintln(w, sep)
+		fmt.Fprintln(w, "Upcoming (next 7 days)")
 		for _, cc := range upcoming {
-			trayLabel := fmt.Sprintf("%d %s", cc.cycle.Trays, trayWord(cc.cycle.Trays))
-			fmt.Printf("  %-12s  %-9s  sow %s\n",
-				capitalize(cc.cycle.CropName),
-				trayLabel,
-				cc.sow.Format("Jan 02"))
+			fmt.Fprintf(w, "%s %dx\n", task.Capitalize(cc.cycle.CropName), cc.cycle.Trays)
+			fmt.Fprintf(w, "sow %s\n", cc.sow.Format("Mon Jan 02"))
+			fmt.Fprintln(w)
 		}
-		fmt.Println()
 	}
 
 	// ── Step 7: Tray inventory section ───────────────────────────────────────
@@ -411,18 +404,22 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 			}
 		}
 
-		fmt.Println(sep)
-		fmt.Println("Tray inventory")
-		fmt.Println()
+		fmt.Fprintln(w, sep)
+		fmt.Fprintln(w, "Tray inventory")
+		fmt.Fprintln(w)
 		if growTotal > 0 {
-			fmt.Printf("  %-14s  %d in use / %d total   → %d available\n",
-				"Grow trays", growInUse, growTotal, growTotal-growInUse)
+			// Each piece of data on its own line so it wraps cleanly on a phone.
+			fmt.Fprintln(w, "Grow trays")
+			fmt.Fprintf(w, "%d in use / %d total\n", growInUse, growTotal)
+			fmt.Fprintf(w, "→ %d available\n", growTotal-growInUse)
+			fmt.Fprintln(w)
 		}
 		if bottomTotal > 0 {
-			fmt.Printf("  %-14s  %d in use / %d total   → %d available\n",
-				"Bottom trays", bottomInUse, bottomTotal, bottomTotal-bottomInUse)
+			fmt.Fprintln(w, "Bottom trays")
+			fmt.Fprintf(w, "%d in use / %d total\n", bottomInUse, bottomTotal)
+			fmt.Fprintf(w, "→ %d available\n", bottomTotal-bottomInUse)
+			fmt.Fprintln(w)
 		}
-		fmt.Println()
 	}
 
 	// ── Step 8: conflict checker ──────────────────────────────────────────────
@@ -448,14 +445,92 @@ func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	conflicts := checker.Check(envs, activeCycles)
 
 	if len(conflicts) > 0 {
-		fmt.Println(sep)
-		fmt.Println("CONFLICTS DETECTED")
-		fmt.Println()
-		for _, w := range conflicts {
-			fmt.Printf("  %s\n", w)
+		fmt.Fprintln(w, sep)
+		fmt.Fprintln(w, "CONFLICTS DETECTED")
+		fmt.Fprintln(w)
+		for _, conflict := range conflicts {
+			fmt.Fprintf(w, "  %s\n", conflict)
 		}
-		fmt.Println()
-		fmt.Println("  Run \"greenies plan\" and adjust tray counts or dates to resolve.")
-		fmt.Println()
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `  Run "greenies plan" and adjust tray counts or dates to resolve.`)
+		fmt.Fprintln(w)
 	}
+}
+
+// PrintSnapshot prints the full farm snapshot to the terminal.
+//
+// It shows each environment (blackout room first, then lit environments in the
+// order they appear in farm.csv), lists every active cycle currently in that
+// environment, and finishes with a "Due for harvest today" reminder and an
+// "Upcoming (next 7 days)" section for cycles about to start.
+//
+// Each cycle is always its own block — two batches of the same crop are two
+// separate blocks. Cycles that finished yesterday or earlier do not appear.
+func PrintSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time) {
+	writeSnapshot(os.Stdout, envs, cycles, today)
+}
+
+// SnapshotText returns the full farm snapshot as a plain-English string instead
+// of printing it to the terminal.
+//
+// This is used by "greenies sync" to embed a current farm picture in the
+// description of each Google Calendar event — so when the grower taps on any
+// farm day in their phone calendar, they can see the full farm state alongside
+// the day's task list.
+func SnapshotText(envs []farm.Environment, cycles []farm.Cycle, today time.Time) string {
+	var sb strings.Builder
+	writeSnapshot(&sb, envs, cycles, today)
+	return sb.String()
+}
+
+// CalendarTitle returns a compact slot-usage summary for use as a Google
+// Calendar event title. Example: "Farm 48/80 Blackout 16/100"
+//
+// "Farm" combines all lit environments (main tent + test tent) into a single
+// number — it represents the total lit rack capacity on the farm. Each lit
+// environment is separate in the full snapshot, but on a phone calendar title
+// there is only room for one combined figure.
+//
+// The blackout room is shown separately because it operates independently of
+// the lit environments — a grower needs to see both numbers to know at a
+// glance whether they are tight on blackout space, lit space, or both.
+func CalendarTitle(envs []farm.Environment, cycles []farm.Cycle, today time.Time) string {
+	t := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Sum up capacities from the environment config.
+	blackoutCapacity := 0
+	litCapacity := 0
+	for _, e := range envs {
+		switch e.Type {
+		case "blackout":
+			blackoutCapacity += e.Capacity
+		case "lit":
+			litCapacity += e.Capacity
+		}
+	}
+
+	// Count how many slots each active cycle is currently occupying.
+	blackoutInUse := 0
+	litInUse := 0
+	for _, c := range cycles {
+		sow, _ := time.Parse(task.DateFormat, c.SowDate)
+		mlt, _ := time.Parse(task.DateFormat, c.MoveToLightDate)
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+
+		status := cycleStatus(t, sow, mlt, harv)
+
+		switch status {
+		case statusBlackout:
+			blackoutInUse += c.Trays
+		case statusLit:
+			// Harvest-day trays are cut first thing in the morning,
+			// so those slots are considered free for the title.
+			if !t.Equal(harv) {
+				litInUse += c.Trays
+			}
+		}
+	}
+
+	return fmt.Sprintf("Farm %d/%d Blackout %d/%d",
+		litInUse, litCapacity, blackoutInUse, blackoutCapacity)
 }

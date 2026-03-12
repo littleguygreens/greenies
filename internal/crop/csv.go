@@ -197,7 +197,6 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	if err != nil {
 		return Crop{}, err
 	}
-
 	return Crop{
 		Name:          get(row, "name"),
 		// CycleDays is not set here — it is derived from the last day row

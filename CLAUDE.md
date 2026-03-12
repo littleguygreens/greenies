@@ -251,7 +251,6 @@ The layout is defined in a configuration file — never hardcoded.
 ### Phase 5 — Google Calendar Integration
 - OAuth2 authentication (browser-based, no passwords stored)
 - Export crop cycles and tasks as Google Calendar events
-- CSV export for any date range
 - **Architecture note (flagged in Phase 1 review):** The `Exporter` interface in
   `internal/export/exporter.go` is defined but not yet wired into the live display
   flow — `main.go` calls `calendar.PrintDay` directly rather than going through the
@@ -272,6 +271,15 @@ The layout is defined in a configuration file — never hardcoded.
 - Browser-based GUI on top of existing scheduling logic
 - Core views: calendar, farm visualizer, crop library, active trays
 - CLI remains fully functional alongside the GUI
+- **Architecture note (from Phase 5):** Google Calendar and every major open source
+  calendar app shuffles overlapping all-day events into shared rows — there is no
+  way to get a fixed swim-lane view (one row per crop variety) from any standard
+  calendar app. The right solution is a custom calendar view built with
+  **DayPilot Lite** (free, open source, Apache licensed JavaScript component —
+  https://javascript.daypilot.org/open-source/). Its Scheduler component renders
+  a true Gantt-style timeline: time on the X axis, crop varieties as fixed rows
+  on the Y axis, stage blocks as horizontal bars that never shuffle. This should
+  be the calendar view in the Phase 8 GUI.
 
 ### Phase 9 — Future Features (optional)
 - **Individually addressable slot records** — track which specific physical slot

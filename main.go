@@ -16,6 +16,7 @@ package main
 
 import (
 	"bufio"   // for reading a full line of user input from the terminal
+	"context" // for context.Background(), used when calling Google Calendar
 	"fmt"
 	"math"    // for math.Ceil, which rounds a decimal up to the next whole number
 	"os"      // for os.Exit and reading command-line arguments
@@ -28,6 +29,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/checker"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
+	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -59,6 +61,8 @@ func main() {
 		runPlan()
 	case "snapshot":
 		runSnapshot()
+	case "sync":
+		runSync()
 	case "harvest":
 		runHarvest()
 	case "harvestlog":
@@ -316,8 +320,29 @@ func runCrops() {
 
 // runSnapshot handles the "greenies snapshot" command.
 // It reads the farm layout config and the saved cycle records, then prints a
-// live picture of the farm showing what is currently growing in each space.
+// picture of the farm showing what is growing in each space.
+//
+// An optional date argument lets you see a past or future snapshot:
+//
+//	greenies snapshot           → today's snapshot
+//	greenies snapshot 03-15     → snapshot for March 15 of the current year
+//	greenies snapshot 2026-03-15 → snapshot for a specific date
 func runSnapshot() {
+	// Default to today. If the user passed a date after the command, use that instead.
+	snapshotTime := time.Now()
+	if len(os.Args) >= 3 {
+		parsed, err := parseDate(os.Args[2])
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		snapshotTime, err = time.Parse(task.DateFormat, parsed)
+		if err != nil {
+			fmt.Printf("Error parsing date: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	envs, err := farm.LoadConfig()
 	if err != nil {
 		fmt.Printf("Error loading farm config: %v\n", err)
@@ -330,7 +355,7 @@ func runSnapshot() {
 		os.Exit(1)
 	}
 
-	visualizer.PrintSnapshot(envs, cycles, time.Now())
+	visualizer.PrintSnapshot(envs, cycles, snapshotTime)
 }
 
 // runPlan handles the "greenies plan" command.
@@ -465,13 +490,13 @@ func runPlan() {
 	case "y", "yield":
 		// Make sure this crop has yield data before trying to use it.
 		if found.YieldGrams == 0 {
-			fmt.Printf("No yield data found for %s in the crop library.\n", capitalize(found.Name))
+			fmt.Printf("No yield data found for %s in the crop library.\n", task.Capitalize(found.Name))
 			fmt.Println("Add a yield_grams value to crops.csv, or plan by tray count instead.")
 			os.Exit(1)
 		}
 
 		yieldStr := ask(fmt.Sprintf("Desired yield in grams? (%s yields ~%dg per tray): ",
-			capitalize(found.Name), found.YieldGrams))
+			task.Capitalize(found.Name), found.YieldGrams))
 		desiredYield, err := strconv.Atoi(yieldStr)
 		if err != nil || desiredYield < 1 {
 			fmt.Println("Please enter a whole number greater than zero (e.g. 500).")
@@ -562,7 +587,7 @@ func runPlan() {
 		anchorLabel = "sow"
 	}
 	fmt.Printf("\n%s — %d %s — %s %s\n\n",
-		capitalize(found.Name), trays, trayWord, anchorLabel, displayDate)
+		task.Capitalize(found.Name), trays, trayWord, anchorLabel, displayDate)
 
 	for _, d := range preview {
 		tasks := d.CropDay.Tasks
@@ -929,7 +954,7 @@ func runHarvest() {
 			expectedLabel = fmt.Sprintf("   expected: %dg", c.ExpectedGrams)
 		}
 		fmt.Printf("  %d.  %-12s  %d %s   harvest %s%s\n",
-			i+1, capitalize(c.CropName), c.Trays, trayWord,
+			i+1, task.Capitalize(c.CropName), c.Trays, trayWord,
 			harv.Format("Jan 02"), expectedLabel)
 	}
 	fmt.Println()
@@ -964,7 +989,7 @@ func runHarvest() {
 		chosenTrayWord = "trays"
 	}
 	fmt.Printf("\nLogging harvest: %s — %d %s — harvest %s\n\n",
-		capitalize(chosen.CropName), chosen.Trays, chosenTrayWord,
+		task.Capitalize(chosen.CropName), chosen.Trays, chosenTrayWord,
 		harv.Format("Jan 02"))
 
 	// Ask actual trays. The default is the planned tray count — press Enter
@@ -1029,7 +1054,7 @@ func runHarvest() {
 	}
 
 	fmt.Printf("\nHarvest logged — %s, %d trays, %dg.\n",
-		capitalize(chosen.CropName), actualTrays, actualGrams)
+		task.Capitalize(chosen.CropName), actualTrays, actualGrams)
 	fmt.Println("Run \"greenies harvestlog\" to see your full history.")
 }
 
@@ -1079,7 +1104,7 @@ func runHarvestLog() {
 
 		fmt.Printf("  %s   %-12s  %-10s  %s\n",
 			harv.Format("Jan 02"),
-			capitalize(h.CropName),
+			task.Capitalize(h.CropName),
 			trayCol,
 			gramCol)
 
@@ -1092,18 +1117,105 @@ func runHarvestLog() {
 	fmt.Println()
 }
 
-// capitalize uppercases the first letter of a string and leaves the rest alone.
-// Used to display crop names from the CSV (which are lowercase) with a capital
-// at the start of a sentence or title.
+
+// runSync handles the "greenies sync" command.
 //
-// Note: an identical copy of this function exists in internal/scheduler/scheduler.go.
-// Go does not allow sharing unexported (lowercase) helpers across packages, so both
-// packages keep their own copy. If you change one, change the other too.
-func capitalize(s string) string {
-	if s == "" {
-		return ""
+// It pushes the current schedule to Google in two ways:
+//   1. Google Tasks — one checkable to-do entry per day, listing that day's work.
+//   2. Google Calendar — one all-day event per day, with the full farm snapshot
+//      in the description so the grower can see the live farm state when they
+//      tap on any day in their phone calendar.
+//
+// Running it multiple times is safe — you always end up with exactly one copy
+// of each entry, no duplicates.
+//
+// Only tasks from today forward are synced. Past tasks are history and don't
+// need to appear in Google.
+func runSync() {
+	if !gcal.CredentialsExist() {
+		fmt.Println("Google Calendar is not set up.")
+		fmt.Println("Place credentials.json in ~/.greenies/ to enable calendar sync.")
+		fmt.Println("See the Phase 5 setup notes for instructions.")
+		return
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+
+	tasks, err := store.Load()
+	if err != nil {
+		fmt.Printf("Error loading tasks: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Load the farm layout and cycle records. These are passed directly into
+	// Sync so it can compute a fresh snapshot for each specific calendar day —
+	// every event shows what the farm will look like on that date, not what
+	// it looks like right now at the moment the sync runs.
+	// If either file is missing or unreadable we still proceed — the sync will
+	// just embed empty farm snapshots rather than failing entirely.
+	envs, _ := farm.LoadConfig()
+	cycles, _ := farm.LoadCycles()
+
+	// context.Background() means "no deadline, no cancellation" — fine for
+	// a short interactive command that the user is actively waiting on.
+	ctx := context.Background()
+
+	exporter, err := gcal.NewExporter(ctx)
+	if err != nil {
+		fmt.Printf("Error connecting to Google Calendar: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Record when the sync starts so we can show elapsed time at the end.
+	// Syncing makes many individual API calls to Google, so it can take a
+	// minute or two — it's reassuring to see how long it actually took.
+	syncStart := time.Now()
+
+	// Run the sync in the background (a "goroutine" — a lightweight task that
+	// runs alongside the rest of the program). This frees up the main thread
+	// to run the live timer below. The goroutine sends its result (nil for
+	// success, or an error message) into the "done" channel when it finishes.
+	// A channel is like a pipe: one end sends a value, the other end receives it.
+	done := make(chan error, 1)
+	go func() {
+		done <- exporter.Sync(tasks, envs, cycles)
+	}()
+
+	// Tick once per second and show the current elapsed time.
+	// \r (carriage return) moves the cursor to the start of the current line
+	// without adding a new line — so each update overwrites the timer in place.
+	// The sync's own progress messages ("Finding calendar...", "3 removed.", etc.)
+	// will still appear as they happen — the timer just ticks between them.
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+loop:
+	for {
+		select {
+		// The sync goroutine finished — break out of the timer loop.
+		case err := <-done:
+			ticker.Stop()
+			// End the current line. If the timer ticked last (and left the
+			// cursor sitting after "⏱  Xs "), this puts "Done in Xs." on its
+			// own clean line. If sync's last print already ended with \n, this
+			// just adds one harmless blank line.
+			fmt.Println()
+			if err != nil {
+				fmt.Printf("Sync failed: %v\n", err)
+				os.Exit(1)
+			}
+			break loop
+
+		// One second has ticked — rewrite the timer on the current line.
+		// \r goes to position 0, then we print the elapsed time with a trailing
+		// space. The next thing to print (sync result or another tick) will
+		// appear right after the space — giving "⏱  3s 105 removed." format.
+		case <-ticker.C:
+			fmt.Printf("\r⏱  %s ", time.Since(syncStart).Round(time.Second))
+		}
+	}
+
+	elapsed := time.Since(syncStart).Round(time.Second)
+	fmt.Printf("Done in %s.\n", elapsed)
+	fmt.Println("Run \"greenies list\" to see your local schedule.")
 }
 
 // printUsage prints a friendly summary of available commands.
@@ -1119,6 +1231,7 @@ Usage:
   greenies crops
   greenies plan
   greenies snapshot
+  greenies sync
   greenies harvest
   greenies harvestlog
 
@@ -1127,6 +1240,7 @@ Examples:
   greenies crops
   greenies plan
   greenies snapshot
+  greenies sync
   greenies harvest
   greenies harvestlog`)
 }

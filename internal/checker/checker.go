@@ -205,7 +205,7 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 				trayLabel = "trays"
 			}
 			label := fmt.Sprintf("%s (sown %s, %d %s)",
-				capitalize(pc.c.CropName), pc.sow.Format("Jan 02"), pc.c.Trays, trayLabel)
+				task.Capitalize(pc.c.CropName), pc.sow.Format("Jan 02"), pc.c.Trays, trayLabel)
 
 			// Grow trays are in use from the sow date up to (but not including)
 			// the harvest date. On harvest day the grower cuts first thing in
@@ -288,16 +288,3 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 	return warnings
 }
 
-// capitalize uppercases the first letter of a string and leaves the rest alone.
-// Used to display crop names (which are stored in lowercase) with a capital at
-// the start of a message.
-//
-// Note: identical copies of this helper exist in main.go, scheduler, and
-// visualizer. Go does not allow sharing unexported helpers across packages, so
-// each package keeps its own copy.
-func capitalize(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}

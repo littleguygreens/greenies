@@ -51,7 +51,6 @@ func PrintDay(date string, tasks []task.Task) {
 
 	for _, task := range daily {
 		// Print the task title with a checkbox — [ ] means "not yet done".
-		// Phase 3+ will add the ability to mark tasks as complete.
 		fmt.Printf("  [ ] %s\n", task.Title)
 
 		// Only print the Notes line if the task actually has notes,
