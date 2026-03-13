@@ -36,10 +36,6 @@ import (
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
-// DateFormat is the date format used throughout the trial package.
-// YYYY-MM-DD sorts correctly as text, which makes date comparisons easy.
-const DateFormat = "2006-01-02"
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Status constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,7 +234,7 @@ func (tr TrialRecord) DisplayName() string {
 // The time-of-day is stripped from the input so that a "today at 3pm" input
 // compares correctly against the midnight-UTC dates stored in SowDate.
 func (tr TrialRecord) DayNumber(today time.Time) int {
-	sow, err := time.Parse(DateFormat, tr.SowDate)
+	sow, err := time.Parse(task.DateFormat, tr.SowDate)
 	if err != nil {
 		return 0
 	}
@@ -259,11 +255,11 @@ func (tr TrialRecord) TentativeHarvestDate() string {
 	if tr.HarvestDay == 0 {
 		return ""
 	}
-	sow, err := time.Parse(DateFormat, tr.SowDate)
+	sow, err := time.Parse(task.DateFormat, tr.SowDate)
 	if err != nil {
 		return ""
 	}
-	return sow.AddDate(0, 0, tr.HarvestDay-1).Format(DateFormat)
+	return sow.AddDate(0, 0, tr.HarvestDay-1).Format(task.DateFormat)
 }
 
 // TentativeMoveToLightDate returns the estimated move-to-light date as a
@@ -273,11 +269,11 @@ func (tr TrialRecord) TentativeMoveToLightDate() string {
 	if tr.MoveToLightDay == 0 {
 		return ""
 	}
-	sow, err := time.Parse(DateFormat, tr.SowDate)
+	sow, err := time.Parse(task.DateFormat, tr.SowDate)
 	if err != nil {
 		return ""
 	}
-	return sow.AddDate(0, 0, tr.MoveToLightDay-1).Format(DateFormat)
+	return sow.AddDate(0, 0, tr.MoveToLightDay-1).Format(task.DateFormat)
 }
 
 // IsActive returns true if this trial is currently growing (status = "active").
