@@ -2195,24 +2195,70 @@ func runTrial() {
 		fmt.Println()
 	}
 
-	// Route to the right flow. If there are no active trials, go straight to
-	// starting a new one — no need to ask.
+	// Work out which menu options are available based on what data exists.
+	// Some options only make sense when certain trials are present:
+	//   (m)anage — only when there are active trials to manage
+	//   (v)iew   — only when at least one trial exists (any status)
+	//   (c)ompare — only when at least two past trials of the same crop exist
+	hasTwoPlus := false
+	pastByCropCount := map[string]int{}
+	for _, tr := range trials {
+		if tr.Status != "active" {
+			pastByCropCount[strings.ToLower(tr.CropName)]++
+		}
+	}
+	for _, count := range pastByCropCount {
+		if count >= 2 {
+			hasTwoPlus = true
+			break
+		}
+	}
+
+	// Build the menu string from whichever options are currently available.
+	var menuParts []string
+	if len(active) > 0 {
+		menuParts = append(menuParts, "(m)anage")
+	}
+	menuParts = append(menuParts, "(n)ew trial")
+	if len(trials) > 0 {
+		menuParts = append(menuParts, "(v)iew")
+	}
+	if hasTwoPlus {
+		menuParts = append(menuParts, "(c)ompare")
+	}
+
+	// The default action depends on whether there is something to manage.
+	defaultChoice := "n"
+	if len(active) > 0 {
+		defaultChoice = "m"
+	}
+
+	// Route to the right flow. If no trials exist at all, skip the menu.
 	var choice string
-	if len(active) == 0 {
+	if len(trials) == 0 {
 		choice = "n"
 	} else {
-		choice = strings.ToLower(strings.TrimSpace(
-			ask("(m)anage a trial / (n)ew trial [n]: ")))
+		prompt := strings.Join(menuParts, "  ") + fmt.Sprintf("  [%s]: ", defaultChoice)
+		choice = strings.ToLower(strings.TrimSpace(ask(prompt)))
 		if choice == "" {
-			choice = "n"
+			choice = defaultChoice
 		}
 	}
 
 	switch choice {
 	case "n", "new":
 		startNewTrial(ask, trials)
-	default: // "m" or "manage" or any other input routes to the manage flow
-		manageTrial(ask, trials, active)
+	case "v", "view":
+		viewTrial(reader, trials)
+	case "c", "compare":
+		compareTrial(reader, trials)
+	default:
+		// Any unrecognised input: manage if active trials exist, otherwise new.
+		if len(active) > 0 {
+			manageTrial(ask, trials, active)
+		} else {
+			startNewTrial(ask, trials)
+		}
 	}
 }
 
@@ -2979,6 +3025,415 @@ func cancelTentativeTasks(tr *trial.TrialRecord) error {
 		return store.Save(tasks)
 	}
 	return nil
+}
+
+// ── Trial view and comparison ──────────────────────────────────────────────
+
+// viewTrial shows the full detail record of any single trial.
+//
+// The grower picks from a numbered list of all trials (any status) and gets
+// a clean single-column report: setup parameters, confirmed day-by-day data,
+// and any observations logged during the trial.
+func viewTrial(reader *bufio.Reader, trials []trial.TrialRecord) {
+	if len(trials) == 0 {
+		fmt.Println("No trials found.")
+		return
+	}
+
+	// List all trials so the grower can pick one by number.
+	fmt.Println("\nTrials:")
+	for i, tr := range trials {
+		sow, _ := time.Parse(trial.DateFormat, tr.SowDate)
+		fmt.Printf("  %d. %-30s %-12s sown %s\n",
+			i+1, tr.DisplayName(), tr.Status, sow.Format("Mon Jan 02 2006"))
+	}
+	fmt.Println()
+	fmt.Printf("Pick a trial to view (1-%d): ", len(trials))
+
+	input, _ := reader.ReadString('\n')
+	n, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || n < 1 || n > len(trials) {
+		fmt.Println("Invalid choice — nothing shown.")
+		return
+	}
+
+	// Render the single-trial detail view.
+	printTrialDetail(trials[n-1])
+}
+
+// compareTrial walks the grower through picking two past trials of the same
+// crop and renders them side by side so they can spot what was different.
+//
+// Only past (non-active) trials are eligible — you compare completed
+// experiments, not one that is still running.
+func compareTrial(reader *bufio.Reader, trials []trial.TrialRecord) {
+	// Group past trials by crop name.
+	pastByCrop := map[string][]trial.TrialRecord{}
+	for _, tr := range trials {
+		if tr.Status != "active" {
+			key := strings.ToLower(tr.CropName)
+			pastByCrop[key] = append(pastByCrop[key], tr)
+		}
+	}
+
+	// We can only compare crops that have at least two past trials.
+	var eligibleCrops []string
+	for name, list := range pastByCrop {
+		if len(list) >= 2 {
+			eligibleCrops = append(eligibleCrops, name)
+		}
+	}
+	sort.Strings(eligibleCrops) // alphabetical order for a predictable list
+
+	if len(eligibleCrops) == 0 {
+		fmt.Println("No crops have two or more completed trials yet.")
+		return
+	}
+
+	// Pick which crop to compare. Auto-select if there is only one choice.
+	var cropName string
+	if len(eligibleCrops) == 1 {
+		cropName = eligibleCrops[0]
+		fmt.Printf("Comparing trials of %s:\n\n", task.Capitalize(cropName))
+	} else {
+		fmt.Println("Compare trials of which crop?")
+		fmt.Println("  Crops with multiple past trials:")
+		for i, name := range eligibleCrops {
+			fmt.Printf("    %d. %s (%d trials)\n", i+1, name, len(pastByCrop[name]))
+		}
+		fmt.Println()
+		fmt.Printf("Crop number (or type a name): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		// Try parsing as a number first.
+		n, err := strconv.Atoi(input)
+		if err == nil && n >= 1 && n <= len(eligibleCrops) {
+			cropName = eligibleCrops[n-1]
+		} else {
+			// Fall back to name matching (case-insensitive).
+			inputLower := strings.ToLower(input)
+			for _, name := range eligibleCrops {
+				if name == inputLower {
+					cropName = name
+					break
+				}
+			}
+			if cropName == "" {
+				fmt.Println("No matching crop found — nothing shown.")
+				return
+			}
+		}
+	}
+
+	// List the past trials of that crop so the grower can pick two.
+	past := pastByCrop[cropName]
+	fmt.Printf("Past trials of %s:\n", cropName)
+	for i, tr := range past {
+		sow, _ := time.Parse(trial.DateFormat, tr.SowDate)
+		label := tr.TrialVariable
+		if label == "" {
+			// If no trial variable was set, fall back to a generic label.
+			label = fmt.Sprintf("trial %d", i+1)
+		}
+		fmt.Printf("  %d. %-24s %-12s sown %s\n",
+			i+1, "("+label+")", tr.Status, sow.Format("Mon Jan 02 2006"))
+	}
+	fmt.Println()
+
+	// Pick trial A.
+	fmt.Printf("Pick first trial (1-%d): ", len(past))
+	inputA, _ := reader.ReadString('\n')
+	nA, err := strconv.Atoi(strings.TrimSpace(inputA))
+	if err != nil || nA < 1 || nA > len(past) {
+		fmt.Println("Invalid choice — nothing shown.")
+		return
+	}
+
+	// Pick trial B — must be different from A.
+	fmt.Printf("Pick second trial (1-%d): ", len(past))
+	inputB, _ := reader.ReadString('\n')
+	nB, err := strconv.Atoi(strings.TrimSpace(inputB))
+	if err != nil || nB < 1 || nB > len(past) {
+		fmt.Println("Invalid choice — nothing shown.")
+		return
+	}
+	if nA == nB {
+		fmt.Println("You picked the same trial twice — nothing shown.")
+		return
+	}
+
+	// Render the two-column comparison.
+	printTrialDetail(past[nA-1], past[nB-1])
+}
+
+// printTrialDetail renders a full detail view of one or two trials.
+//
+// Called with one trial  → single-column report titled "Trial — Name"
+// Called with two trials → side-by-side comparison titled "Trial comparison — Crop"
+//
+// The same function handles both cases so the layout stays consistent.
+// Sections: summary of setup params, day-by-day confirmed data, observations.
+func printTrialDetail(trials ...trial.TrialRecord) {
+	// The thin separator line used throughout this project (21 dashes).
+	sep := strings.Repeat("─", 21)
+
+	// ── Header ───────────────────────────────────────────────────────────────
+
+	if len(trials) == 1 {
+		fmt.Printf("\nTrial — %s\n", trials[0].DisplayName())
+	} else {
+		fmt.Printf("\nTrial comparison — %s\n", task.Capitalize(trials[0].CropName))
+	}
+	fmt.Println(sep)
+	fmt.Println()
+
+	// ── Formatting helpers ────────────────────────────────────────────────────
+	// These small functions convert raw field values into tidy display strings.
+	// Zero or empty values show "—" so the grower knows the field was not set.
+
+	fmtIntDay := func(n int) string {
+		if n == 0 {
+			return "—"
+		}
+		return fmt.Sprintf("Day %d", n)
+	}
+	fmtYieldGrams := func(n int) string {
+		if n == 0 {
+			return "not recorded"
+		}
+		return fmt.Sprintf("%dg", n)
+	}
+	fmtSeedGrams := func(f float64) string {
+		if f == 0 {
+			return "—"
+		}
+		return fmt.Sprintf("%.0fg", f)
+	}
+	fmtDirt := func(f float64) string {
+		if f == 0 {
+			return "—"
+		}
+		return fmt.Sprintf("%.1fL", f)
+	}
+	// fmtSoak describes the soak setting for a trial: overnight, a number of
+	// hours, or "—" if no soak was recorded.
+	fmtSoak := func(tr trial.TrialRecord) string {
+		if tr.OvernightSoak {
+			return "overnight"
+		}
+		if tr.SoakHours > 0 {
+			return fmt.Sprintf("%.0f hours", tr.SoakHours)
+		}
+		return "—"
+	}
+	fmtDate := func(dateStr string) string {
+		t, err := time.Parse(trial.DateFormat, dateStr)
+		if err != nil {
+			return dateStr
+		}
+		return t.Format("Mon Jan 02 2006")
+	}
+
+	// ── Summary block ─────────────────────────────────────────────────────────
+
+	// labelW is how wide the left column (the field name) is.
+	// colW is how wide each value column is in compare mode.
+	// These keep both modes visually aligned.
+	const labelW = 24
+	const colW = 24
+
+	// printRow prints one labelled row of the summary table.
+	// In single-trial mode it prints: "  Label:    value"
+	// In compare mode it prints:      "  Label:    valueA          valueB"
+	// Empty values are replaced with "—" so the row never looks blank.
+	printRow := func(label string, values ...string) {
+		fmt.Printf("  %-*s", labelW, label+":")
+		if len(trials) == 1 {
+			v := values[0]
+			if v == "" {
+				v = "—"
+			}
+			fmt.Println(v)
+		} else {
+			a, b := values[0], values[1]
+			if a == "" {
+				a = "—"
+			}
+			if b == "" {
+				b = "—"
+			}
+			fmt.Printf("%-*s%s\n", colW, a, b)
+		}
+	}
+
+	// In compare mode, print a column header row so the grower knows which
+	// column belongs to which trial (e.g. "[A] seed lot xyz  [B] humid soil").
+	if len(trials) == 2 {
+		labelA := trials[0].TrialVariable
+		if labelA == "" {
+			labelA = "trial A"
+		}
+		labelB := trials[1].TrialVariable
+		if labelB == "" {
+			labelB = "trial B"
+		}
+		// The header sits in the value columns, not the label column.
+		fmt.Printf("  %-*s%-*s%s\n", labelW, "", colW, "[A] "+labelA, "[B] "+labelB)
+		fmt.Println()
+	}
+
+	// Print every summary field for one or two trials.
+	if len(trials) == 1 {
+		tr := trials[0]
+		printRow("Status", tr.Status)
+		printRow("Sown", fmtDate(tr.SowDate))
+		printRow("Trays", strconv.Itoa(tr.Trays))
+		printRow("Overnight soak", fmtSoak(tr))
+		printRow("Seed g/tray", fmtSeedGrams(tr.SeedGrams))
+		printRow("Dirt l/tray", fmtDirt(tr.DirtLitres))
+		printRow("Move-to-light day", fmtIntDay(tr.MoveToLightDay))
+		printRow("Expected harvest", fmtIntDay(tr.HarvestDay))
+		printRow("Actual yield", fmtYieldGrams(tr.ActualYieldGrams))
+		printRow("Failure note", tr.FailureNote)
+	} else {
+		a, b := trials[0], trials[1]
+		printRow("Status", a.Status, b.Status)
+		printRow("Sown", fmtDate(a.SowDate), fmtDate(b.SowDate))
+		printRow("Trays", strconv.Itoa(a.Trays), strconv.Itoa(b.Trays))
+		printRow("Overnight soak", fmtSoak(a), fmtSoak(b))
+		printRow("Seed g/tray", fmtSeedGrams(a.SeedGrams), fmtSeedGrams(b.SeedGrams))
+		printRow("Dirt l/tray", fmtDirt(a.DirtLitres), fmtDirt(b.DirtLitres))
+		printRow("Move-to-light day", fmtIntDay(a.MoveToLightDay), fmtIntDay(b.MoveToLightDay))
+		printRow("Expected harvest", fmtIntDay(a.HarvestDay), fmtIntDay(b.HarvestDay))
+		printRow("Actual yield", fmtYieldGrams(a.ActualYieldGrams), fmtYieldGrams(b.ActualYieldGrams))
+		printRow("Failure note", a.FailureNote, b.FailureNote)
+	}
+
+	// ── Day-by-day block ──────────────────────────────────────────────────────
+
+	fmt.Println()
+	fmt.Println("  Day-by-day (confirmed parameters)")
+	fmt.Println("  " + sep)
+
+	// Collect every unique day number from all passed trials so we can print
+	// a row for each day that appears in any of them.
+	daySet := map[int]bool{}
+	for _, tr := range trials {
+		for _, d := range tr.ConfirmedDays {
+			daySet[d.Day] = true
+		}
+	}
+
+	if len(daySet) == 0 {
+		fmt.Println("  (no confirmed day data recorded)")
+	} else {
+		// Sort numerically so Day 1 comes before Day 2, etc.
+		var days []int
+		for day := range daySet {
+			days = append(days, day)
+		}
+		sort.Ints(days)
+
+		if len(trials) == 1 {
+			// Single-trial mode: one clean line per day.
+			for _, day := range days {
+				for _, d := range trials[0].ConfirmedDays {
+					if d.Day == day {
+						tasks := d.Tasks
+						if tasks == "" {
+							tasks = "(no tasks)"
+						}
+						fmt.Printf("  Day %-3d %-8s %s\n", day, d.Stage, tasks)
+						break
+					}
+				}
+			}
+		} else {
+			// Compare mode: one block per day with a line for each trial.
+			// The stage label comes from whichever trial has data for that day.
+			for _, day := range days {
+				stage := ""
+				for _, tr := range trials {
+					for _, d := range tr.ConfirmedDays {
+						if d.Day == day {
+							stage = d.Stage
+							break
+						}
+					}
+					if stage != "" {
+						break
+					}
+				}
+
+				// Print "Day N  stage  [A] tasks" on the first line,
+				// then "                  [B] tasks" indented to match.
+				// The indent is: "  Day " (6) + "%-3d" (3) + " " (1) + "%-8s" (8) = 18 chars.
+				labels := []string{"[A]", "[B]"}
+				for i, tr := range trials {
+					tasks := "(no confirmed data)"
+					for _, d := range tr.ConfirmedDays {
+						if d.Day == day {
+							if d.Tasks == "" {
+								tasks = "(no tasks)"
+							} else {
+								tasks = d.Tasks
+							}
+							break
+						}
+					}
+					if i == 0 {
+						fmt.Printf("  Day %-3d %-8s%s %s\n", day, stage, labels[i], tasks)
+					} else {
+						fmt.Printf("  %-18s%s %s\n", "", labels[i], tasks)
+					}
+				}
+			}
+		}
+	}
+
+	// ── Observations block ────────────────────────────────────────────────────
+
+	// Collect all non-empty observations across all trials, tagged by which
+	// trial they came from so the grower knows whose note is whose.
+	type taggedObs struct {
+		day   int
+		trial int // 0 = first trial (A), 1 = second trial (B)
+		notes string
+	}
+	var obs []taggedObs
+	for i, tr := range trials {
+		for _, o := range tr.Observations {
+			if o.Notes != "" {
+				obs = append(obs, taggedObs{day: o.Day, trial: i, notes: o.Notes})
+			}
+		}
+	}
+
+	if len(obs) > 0 {
+		fmt.Println()
+		fmt.Println("  Observations")
+		fmt.Println("  " + sep)
+
+		// Sort by day first, then by trial index (A before B on the same day).
+		sort.Slice(obs, func(i, j int) bool {
+			if obs[i].day != obs[j].day {
+				return obs[i].day < obs[j].day
+			}
+			return obs[i].trial < obs[j].trial
+		})
+
+		labels := []string{"[A] ", "[B] "}
+		for _, o := range obs {
+			label := ""
+			if len(trials) > 1 {
+				label = labels[o.trial]
+			}
+			fmt.Printf("  Day %-3d  %s%s\n", o.day, label, o.notes)
+		}
+	}
+
+	fmt.Println()
 }
 
 // removeTentativeTasks deletes the tentative calendar tasks for a discarded
