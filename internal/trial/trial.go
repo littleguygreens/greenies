@@ -1,0 +1,649 @@
+// Package trial manages experimental crop runs — the Phase 6 trialling system.
+//
+// Think of this package as a lab notebook for the farm. When you want to try
+// a new crop variety, or test whether changing the seed density or soak time
+// makes a difference, you start a trial. The trial lives separately from your
+// confirmed crop library (crops.csv) so your production schedule is never
+// disturbed by experiments.
+//
+// A trial has a simple lifecycle:
+//
+//	active    → you started a trial and it is currently growing
+//	harvested → the crop reached harvest and you recorded the yield
+//	promoted  → you were happy with the results; parameters copied to crops.csv
+//	failed    → the crop failed mid-cycle (mould, bad germination, etc.)
+//	discarded → you deleted all data for this trial run
+//
+// Two data files are maintained:
+//
+//	~/.greenies/trials.json  — all trial records including observations and
+//	                           confirmed day parameters (internal storage)
+//	~/.greenies/trials.csv   — the confirmed parameters in human-readable format,
+//	                           regenerated automatically every time trials.json is
+//	                           saved. Open in Google Sheets to review progress.
+package trial
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/littleguygreens/greenies/internal/task"
+)
+
+// DateFormat is the date format used throughout the trial package.
+// YYYY-MM-DD sorts correctly as text, which makes date comparisons easy.
+const DateFormat = "2006-01-02"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The five states a trial can move through during its life.
+// StatusDiscarded is never actually stored — when a trial is discarded, its
+// record is simply removed from the list entirely.
+const (
+	StatusActive    = "active"    // trial is currently growing
+	StatusHarvested = "harvested" // crop was cut and yield was recorded
+	StatusPromoted  = "promoted"  // parameters were copied to crops.csv
+	StatusFailed    = "failed"    // crop was lost (mould, bad germination, etc.)
+	StatusDiscarded = "discarded" // all data deleted — this value is never saved to disk
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data types
+// ─────────────────────────────────────────────────────────────────────────────
+
+// TrialObservation holds the grower's free-text notes for one specific day
+// of a trial. These are entered through the "manage" flow — either on the day
+// itself, or caught up later by stepping through missed days in sequence.
+//
+// Over the course of a trial, observations build up a day-by-day story that
+// the grower can review before starting a new trial of the same crop.
+type TrialObservation struct {
+	// Day is the cycle day number (Day 1 = sow date, Day 2 = the next day, etc.)
+	Day int
+
+	// Date is the actual calendar date for this observation. Format: YYYY-MM-DD.
+	Date string
+
+	// Notes is the grower's free-text entry for the day.
+	// Examples: "looking leggy — moved grow light closer"
+	//           "strong germination, almost all seed sprouted"
+	//           "no tasks today, automated watering handling everything"
+	Notes string
+}
+
+// TrialDayParams holds the confirmed growing instructions for one day of a
+// trial — what stage the crop was at and what the grower actually did.
+//
+// These are collected day by day through the manage flow when the grower
+// confirms "yes, here is what I did on Day 4". They get written to trials.csv
+// and, if the trial is promoted, become the official rows in crops.csv.
+type TrialDayParams struct {
+	// Day is the cycle day number this row covers.
+	Day int
+
+	// Stage is the growing stage for this day.
+	// One of: "sow", "dark", "light", "harvest".
+	Stage string
+
+	// Tasks is a comma-separated list of what the grower did.
+	// Example: "bottom water, rotate stack"
+	// Leave empty for do-nothing days (automated watering on lit racks, etc.)
+	Tasks string
+}
+
+// TrialRecord holds everything we know about one trial run — from the moment
+// it was created through to its final outcome.
+//
+// One TrialRecord represents one attempt to grow a particular crop variety
+// under a particular set of conditions. Multiple records for the same crop
+// name are treated as related runs: when you start a new mustard trial, the
+// program shows you notes from any previous mustard trials so you can learn
+// from past results.
+type TrialRecord struct {
+	// ID is a unique identifier, generated at creation time.
+	// Same format as CycleID in the main scheduler — a short random hex string.
+	ID string
+
+	// CropName is the variety being trialled. Lower-case, e.g. "mustard".
+	// Trials with the same CropName are treated as related experiments.
+	CropName string
+
+	// TrialVariable describes what is specifically being tested in this run.
+	// Empty string means no particular variable — just a general first trial
+	// of a new crop. When set, it appears in the display name in parentheses.
+	// Example: CropName="sunnies", TrialVariable="seed lot xyz"
+	//          → display name "Sunnies (seed lot xyz)"
+	TrialVariable string
+
+	// SowDate is Day 1 of the trial — the date the seed was sown.
+	// For overnight-soak crops (where Day 0 is the soak day), SowDate is
+	// the day after the soak, when trays are actually prepared and filled.
+	// Format: YYYY-MM-DD.
+	SowDate string
+
+	// Trays is how many grow trays this trial occupies.
+	Trays int
+
+	// Status tracks where this trial is in its lifecycle.
+	// One of the Status* constants above.
+	Status string
+
+	// LastManaged is the date of the most recent manage session.
+	// The next manage session catches up from the day after this date.
+	// Initialised to the day before SowDate when the trial is created, so
+	// the very first manage session always starts at Day 1 (the sow date).
+	// Format: YYYY-MM-DD.
+	LastManaged string
+
+	// ── Upfront parameters ────────────────────────────────────────────────────
+	//
+	// These are filled in when the trial is created, if the grower already
+	// knows them. Zero / false = unknown at trial start.
+
+	// OvernightSoak is true for crops that need an overnight seed soak on
+	// the day before sowing (Day 0). Peas and daikon are examples.
+	OvernightSoak bool
+
+	// SoakHours is the duration of a same-day soak, in hours.
+	// Zero means either no soak or an overnight soak — use OvernightSoak
+	// to tell these two cases apart.
+	SoakHours float64
+
+	// SeedGrams is the seed weight per tray in grams.
+	// Zero means the grower didn't record this at trial start.
+	SeedGrams float64
+
+	// DirtLitres is the volume of grow medium per tray in litres.
+	// Zero means unknown; the default when entered is 1.
+	DirtLitres float64
+
+	// MoveToLightDay is the expected cycle day when trays move from blackout
+	// to a lit rack. Zero = unknown.
+	MoveToLightDay int
+
+	// HarvestDay is the expected cycle day for harvest. Zero = unknown.
+	HarvestDay int
+
+	// ── Outcome fields ────────────────────────────────────────────────────────
+	//
+	// Set when the trial ends.
+
+	// ActualYieldGrams is the total harvest weight in grams, entered when
+	// the grower logs a harvest. Only meaningful for harvested/promoted trials.
+	ActualYieldGrams int
+
+	// FailureNote is the grower's explanation of what went wrong.
+	// Only set for failed trials.
+	FailureNote string
+
+	// ── Per-day data ──────────────────────────────────────────────────────────
+
+	// Observations is the free-text daily log, one entry per day managed.
+	// Never edited after being written — each day's note is permanent.
+	Observations []TrialObservation
+
+	// ConfirmedDays is the list of days for which the grower has recorded
+	// official parameters (stage + tasks). These rows end up in trials.csv
+	// and, on promotion, get appended to crops.csv.
+	ConfirmedDays []TrialDayParams
+
+	// ── Tentative calendar task IDs ───────────────────────────────────────────
+	//
+	// When a trial is created with a known move-to-light day or harvest day,
+	// the program immediately places a "(unconfirmed)" marker on the calendar
+	// (e.g. "Mustard — move to light? (unconfirmed)"). These fields store the
+	// IDs of those tasks so the manage flow can find and update them later —
+	// changing the title to "(overdue)" if the day passes, or removing the
+	// qualifier when the event is confirmed.
+	//
+	// Empty string means no tentative task was created for that milestone.
+
+	// TentativeMTLTaskID is the ID of the move-to-light "(unconfirmed)" task.
+	TentativeMTLTaskID string
+
+	// TentativeHarvestTaskID is the ID of the harvest "(unconfirmed)" task.
+	TentativeHarvestTaskID string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TrialRecord helper methods
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DisplayName returns the human-readable name for this trial.
+// If a TrialVariable is set, it appears in parentheses after the crop name.
+//
+// Examples:
+//
+//	CropName="mustard",  TrialVariable=""            → "Mustard"
+//	CropName="sunnies",  TrialVariable="seed lot xyz" → "Sunnies (seed lot xyz)"
+func (tr TrialRecord) DisplayName() string {
+	name := task.Capitalize(tr.CropName)
+	if tr.TrialVariable != "" {
+		return name + " (" + tr.TrialVariable + ")"
+	}
+	return name
+}
+
+// DayNumber returns what day of the cycle the given date falls on,
+// counting from Day 1 = SowDate. Returns 0 if the date is before the sow date.
+//
+// The time-of-day is stripped from the input so that a "today at 3pm" input
+// compares correctly against the midnight-UTC dates stored in SowDate.
+func (tr TrialRecord) DayNumber(today time.Time) int {
+	sow, err := time.Parse(DateFormat, tr.SowDate)
+	if err != nil {
+		return 0
+	}
+	// Normalise today to midnight UTC so the subtraction is always a whole
+	// number of days — no partial-day rounding surprises.
+	t := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(t.Sub(sow).Hours()/24) + 1
+	if days < 1 {
+		return 0
+	}
+	return days
+}
+
+// TentativeHarvestDate returns the estimated harvest date as a YYYY-MM-DD
+// string, computed as SowDate + (HarvestDay - 1) days.
+// Returns "" if HarvestDay is zero (unknown).
+func (tr TrialRecord) TentativeHarvestDate() string {
+	if tr.HarvestDay == 0 {
+		return ""
+	}
+	sow, err := time.Parse(DateFormat, tr.SowDate)
+	if err != nil {
+		return ""
+	}
+	return sow.AddDate(0, 0, tr.HarvestDay-1).Format(DateFormat)
+}
+
+// TentativeMoveToLightDate returns the estimated move-to-light date as a
+// YYYY-MM-DD string, computed as SowDate + (MoveToLightDay - 1) days.
+// Returns "" if MoveToLightDay is zero (unknown).
+func (tr TrialRecord) TentativeMoveToLightDate() string {
+	if tr.MoveToLightDay == 0 {
+		return ""
+	}
+	sow, err := time.Parse(DateFormat, tr.SowDate)
+	if err != nil {
+		return ""
+	}
+	return sow.AddDate(0, 0, tr.MoveToLightDay-1).Format(DateFormat)
+}
+
+// IsActive returns true if this trial is currently growing (status = "active").
+// Convenience helper so callers don't have to compare status strings directly.
+func (tr TrialRecord) IsActive() bool {
+	return tr.Status == StatusActive
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File paths
+// ─────────────────────────────────────────────────────────────────────────────
+
+// dataDir returns the path to the shared greenies data folder.
+// On Linux this is typically /home/<username>/.greenies.
+func dataDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not find home directory: %w", err)
+	}
+	return filepath.Join(home, ".greenies"), nil
+}
+
+// TrialsJSONPath returns the full path to the trial metadata JSON file.
+// Example: /home/farm/.greenies/trials.json
+func TrialsJSONPath() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "trials.json"), nil
+}
+
+// TrialsCSVPath returns the full path to the trial parameters CSV file.
+// Example: /home/farm/.greenies/trials.csv
+func TrialsCSVPath() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "trials.csv"), nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Load and save
+// ─────────────────────────────────────────────────────────────────────────────
+
+// LoadTrials reads all trial records from ~/.greenies/trials.json.
+// Returns an empty list if the file doesn't exist yet (e.g. on first run,
+// or before any trials have been started) — same friendly behaviour as
+// farm.LoadCycles() for new installs.
+func LoadTrials() ([]TrialRecord, error) {
+	path, err := TrialsJSONPath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []TrialRecord{}, nil
+		}
+		return nil, fmt.Errorf("could not read trials file: %w", err)
+	}
+
+	var records []TrialRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		return nil, fmt.Errorf("trials file appears to be corrupted: %w", err)
+	}
+
+	return records, nil
+}
+
+// SaveTrials writes all trial records to trials.json and regenerates
+// trials.csv from the confirmed parameters embedded in those records.
+//
+// Both files are always rewritten in full — simple and safe for the number
+// of trials a single farm will ever run.
+func SaveTrials(records []TrialRecord) error {
+	dir, err := dataDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("could not create data directory: %w", err)
+	}
+
+	// ── Write trials.json ──────────────────────────────────────────────────────
+	jsonPath, err := TrialsJSONPath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not encode trial records: %w", err)
+	}
+	if err := os.WriteFile(jsonPath, data, 0644); err != nil {
+		return fmt.Errorf("could not write trials file: %w", err)
+	}
+
+	// ── Regenerate trials.csv ──────────────────────────────────────────────────
+	return writeTrialsCSV(records)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV generation
+// ─────────────────────────────────────────────────────────────────────────────
+
+// writeTrialsCSV generates ~/.greenies/trials.csv from the current trial
+// records. Only trials with at least one confirmed day are included — a trial
+// with only observations and no confirmed parameters produces no CSV rows yet.
+//
+// Format: same sparse layout as crops.csv. The first row of each trial block
+// includes all header fields (name, parameters, etc.). Subsequent rows for
+// the same trial only fill in day, stage, and tasks — the rest is left empty
+// so that a human reading the file in Google Sheets can see each trial block
+// cleanly without repeating the header data on every line.
+//
+// The extra trial-specific columns (trial_variable, trial_start) come first,
+// before the standard crop columns, so the file opens sensibly in a spreadsheet.
+func writeTrialsCSV(records []TrialRecord) error {
+	csvPath, err := TrialsCSVPath()
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Create(csvPath)
+	if err != nil {
+		return fmt.Errorf("could not create trials CSV: %w", err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+
+	// Header row. Columns match the agreed Phase 6 design, with the two
+	// trial-specific columns (trial_variable, trial_start) added before
+	// the standard crop columns so they are easy to spot in a spreadsheet.
+	header := []string{
+		"name", "trial_variable", "trial_start",
+		"day", "stage", "tasks",
+		"overnight_soak", "soak_hours", "seed_grams", "dirt_litres",
+		"dark_days", "light_days", "yield_grams",
+	}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, tr := range records {
+		// Skip trials with no confirmed day data — nothing to write yet.
+		if len(tr.ConfirmedDays) == 0 {
+			continue
+		}
+
+		// Count dark and light days from the confirmed parameters so we can
+		// fill in dark_days and light_days on the first row of this block.
+		darkDays := 0
+		lightDays := 0
+		for _, d := range tr.ConfirmedDays {
+			switch d.Stage {
+			case "dark":
+				darkDays++
+			case "light":
+				lightDays++
+			}
+		}
+
+		// Build string representations of the float and bool fields.
+		// Empty string means "not recorded" — avoids misleading zeroes.
+		soakStr := "no"
+		if tr.OvernightSoak {
+			soakStr = "yes"
+		}
+		soakHoursStr := ""
+		if tr.SoakHours > 0 {
+			soakHoursStr = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
+		}
+		seedStr := ""
+		if tr.SeedGrams > 0 {
+			seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
+		}
+		dirtStr := ""
+		if tr.DirtLitres > 0 {
+			dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
+		}
+		yieldStr := ""
+		if tr.ActualYieldGrams > 0 {
+			yieldStr = strconv.Itoa(tr.ActualYieldGrams)
+		}
+
+		// Write one CSV row per confirmed day.
+		for i, d := range tr.ConfirmedDays {
+			var row []string
+			if i == 0 {
+				// First row in this trial block: include all header-level fields.
+				// These describe the crop as a whole — they only need to appear once.
+				row = []string{
+					tr.CropName, tr.TrialVariable, tr.SowDate,
+					strconv.Itoa(d.Day), d.Stage, d.Tasks,
+					soakStr, soakHoursStr, seedStr, dirtStr,
+					strconv.Itoa(darkDays), strconv.Itoa(lightDays), yieldStr,
+				}
+			} else {
+				// Subsequent rows: only day, stage, tasks — sparse format just
+				// like crops.csv. The shared columns are left empty so the block
+				// reads cleanly in Google Sheets without visual repetition.
+				row = []string{
+					tr.CropName, tr.TrialVariable, tr.SowDate,
+					strconv.Itoa(d.Day), d.Stage, d.Tasks,
+					"", "", "", "",
+					"", "", "",
+				}
+			}
+			if err := w.Write(row); err != nil {
+				return err
+			}
+		}
+	}
+
+	w.Flush()
+	return w.Error()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Promotion helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+// AppendToCropsCSV appends the confirmed parameters from a promoted trial to
+// the user's crops.csv file. This is what "promoting" a trial means: the
+// rows confirmed day by day through the manage flow become official crop
+// parameters that any future "greenies plan" can use.
+//
+// The function takes the path to crops.csv so it can be tested without
+// touching the real file. In practice, main.go passes the user's real path.
+//
+// The appended rows use the same sparse format as the rest of crops.csv:
+// crop-level fields (soak, seed weight, etc.) only appear on the first row.
+func AppendToCropsCSV(cropsPath string, tr TrialRecord) error {
+	// Open crops.csv for appending. If the file doesn't exist yet, create it.
+	f, err := os.OpenFile(cropsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("could not open crops.csv for writing: %w", err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+
+	// Count dark and light days from the confirmed parameters.
+	darkDays := 0
+	lightDays := 0
+	for _, d := range tr.ConfirmedDays {
+		switch d.Stage {
+		case "dark":
+			darkDays++
+		case "light":
+			lightDays++
+		}
+	}
+
+	// Build the soak fields.
+	// crops.csv uses "overnight_soak" (yes/no) and "soak_hours" as separate columns.
+	soakStr := "no"
+	if tr.OvernightSoak {
+		soakStr = "yes"
+	}
+	soakHoursStr := ""
+	if tr.SoakHours > 0 {
+		soakHoursStr = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
+	}
+	seedStr := ""
+	if tr.SeedGrams > 0 {
+		seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
+	}
+	dirtStr := ""
+	if tr.DirtLitres > 0 {
+		dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
+	}
+	yieldStr := ""
+	if tr.ActualYieldGrams > 0 {
+		yieldStr = strconv.Itoa(tr.ActualYieldGrams)
+	}
+	darkStr := strconv.Itoa(darkDays)
+	lightStr := strconv.Itoa(lightDays)
+
+	for i, d := range tr.ConfirmedDays {
+		var row []string
+		if i == 0 {
+			// First row: all crop-level fields. The column order matches the
+			// header in crops.csv exactly:
+			// name, day, stage, tasks, overnight_soak, soak_hours,
+			// seed_grams, dirt_litres, dark_days, light_days, yield_grams
+			row = []string{
+				tr.CropName,
+				strconv.Itoa(d.Day), d.Stage, d.Tasks,
+				soakStr, soakHoursStr, seedStr, dirtStr,
+				darkStr, lightStr, yieldStr,
+			}
+		} else {
+			// Subsequent rows: sparse — only the per-day columns are filled.
+			row = []string{
+				tr.CropName,
+				strconv.Itoa(d.Day), d.Stage, d.Tasks,
+				"", "", "", "",
+				"", "", "",
+			}
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+
+	w.Flush()
+	return w.Error()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Query helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ActiveTrials returns only the trials currently in the "active" state.
+// Used by the snapshot and the manage flow to filter the full list.
+func ActiveTrials(records []TrialRecord) []TrialRecord {
+	var active []TrialRecord
+	for _, tr := range records {
+		if tr.Status == StatusActive {
+			active = append(active, tr)
+		}
+	}
+	return active
+}
+
+// PastTrialsByName returns all non-active trials whose CropName matches the
+// given name (case-insensitive). Used to show historical context before
+// starting a new trial of the same crop.
+func PastTrialsByName(records []TrialRecord, cropName string) []TrialRecord {
+	lower := strings.ToLower(cropName)
+	var past []TrialRecord
+	for _, tr := range records {
+		if strings.ToLower(tr.CropName) == lower && tr.Status != StatusActive {
+			past = append(past, tr)
+		}
+	}
+	return past
+}
+
+// ReplaceByID returns a new slice with the trial matching id replaced by
+// updated. If no match is found, updated is appended as a new entry.
+// This is the standard way to save changes to a single trial record without
+// having to rewrite the whole list-management logic everywhere.
+func ReplaceByID(records []TrialRecord, updated TrialRecord) []TrialRecord {
+	for i, tr := range records {
+		if tr.ID == updated.ID {
+			records[i] = updated
+			return records
+		}
+	}
+	// Not found — this is a new trial being added for the first time.
+	return append(records, updated)
+}
+
+// RemoveByID returns a new slice with the trial matching id removed.
+// Used when the grower discards a trial and wants all data deleted.
+func RemoveByID(records []TrialRecord, id string) []TrialRecord {
+	var result []TrialRecord
+	for _, tr := range records {
+		if tr.ID != id {
+			result = append(result, tr)
+		}
+	}
+	return result
+}
