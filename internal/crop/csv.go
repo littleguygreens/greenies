@@ -228,3 +228,263 @@ func parseCropDay(row []string, get func([]string, string) string) (CropDay, err
 		Tasks: get(row, "tasks"),
 	}, nil
 }
+
+// ─── Crop template modification ───────────────────────────────────────────────
+
+// ModifyCropDays adds or removes day rows from a named stage within a crop's
+// block in crops.csv.
+//
+// stage must be "dark" or "light". delta is signed: positive adds rows,
+// negative removes them. The minimum remaining days per stage is always 1 —
+// you cannot reduce a stage to zero days.
+//
+// When adding days, the new row's task list is copied from the last existing
+// row of that stage (e.g. the dark day just before move-to-light, or the
+// light day just before harvest) with "adjusted - be mindful" appended as a
+// reminder to review the file in Google Sheets. This gives the grower a
+// sensible starting point without requiring them to edit the CSV immediately.
+//
+// When removing days, the last day row(s) of the stage are deleted.
+//
+// In both cases, all subsequent day numbers in the crop block are renumbered
+// to stay consecutive, and the dark_days or light_days count in the crop's
+// header row is updated to match.
+func ModifyCropDays(cropsPath, cropName, stage string, delta int) error {
+	if delta == 0 {
+		return nil
+	}
+
+	// ── Read the raw file ─────────────────────────────────────────────────
+	f, err := os.Open(cropsPath)
+	if err != nil {
+		return fmt.Errorf("could not open crops.csv: %w", err)
+	}
+	r := csv.NewReader(f)
+	// Allow rows with fewer fields than the header — spreadsheet apps sometimes
+	// strip trailing empty cells when exporting CSV.
+	r.FieldsPerRecord = -1
+	rawRows, err := r.ReadAll()
+	f.Close()
+	if err != nil {
+		return fmt.Errorf("could not read crops.csv: %w", err)
+	}
+	if len(rawRows) < 2 {
+		return fmt.Errorf("crops.csv appears to be empty")
+	}
+
+	// ── Build a column-index map from the header row ──────────────────────
+	//
+	// Looking up column positions by name (rather than hardcoded numbers)
+	// keeps the code correct even if the grower reorders columns in Sheets.
+	header := rawRows[0]
+	numCols := len(header)
+	colIdx := make(map[string]int, numCols)
+	for i, name := range header {
+		colIdx[strings.TrimSpace(name)] = i
+	}
+
+	// getCol returns the index of a required column, or a clear error.
+	getCol := func(name string) (int, error) {
+		i, ok := colIdx[name]
+		if !ok {
+			return 0, fmt.Errorf("required column %q not found in crops.csv header", name)
+		}
+		return i, nil
+	}
+
+	nameCol, err := getCol("name")
+	if err != nil {
+		return err
+	}
+	dayCol, err := getCol("day")
+	if err != nil {
+		return err
+	}
+	stageCol, err := getCol("stage")
+	if err != nil {
+		return err
+	}
+	tasksCol, err := getCol("tasks")
+	if err != nil {
+		return err
+	}
+	// The count column is dark_days when adjusting the dark stage,
+	// light_days when adjusting the light stage.
+	countColName := "dark_days"
+	if stage == "light" {
+		countColName = "light_days"
+	}
+	countCol, err := getCol(countColName)
+	if err != nil {
+		return err
+	}
+
+	// ── Pad all rows to numCols ───────────────────────────────────────────
+	//
+	// We rebuild rows as a uniform grid so csv.Writer always produces
+	// well-formed output, regardless of how many trailing cells the original
+	// spreadsheet export included.
+	rows := make([][]string, len(rawRows))
+	for i, row := range rawRows {
+		padded := make([]string, numCols)
+		copy(padded, row)
+		rows[i] = padded
+	}
+
+	// ── Find the crop block ───────────────────────────────────────────────
+	//
+	// The block starts at the row whose name cell matches cropName and ends
+	// where the next crop's name row appears (or at the end of the file).
+	cropHeaderIdx := -1
+	cropBlockEnd := len(rows) // exclusive upper bound for this crop's rows
+
+	for i := 1; i < len(rows); i++ {
+		rowName := strings.TrimSpace(rows[i][nameCol])
+		if strings.EqualFold(rowName, cropName) {
+			cropHeaderIdx = i
+		} else if cropHeaderIdx != -1 && rowName != "" {
+			// A new crop's header row begins here — our block ends just before it.
+			cropBlockEnd = i
+			break
+		}
+	}
+
+	if cropHeaderIdx == -1 {
+		return fmt.Errorf("crop %q not found in crops.csv", cropName)
+	}
+
+	// ── Collect indices of all rows in the target stage ───────────────────
+	var stageRowIdxs []int
+	for i := cropHeaderIdx; i < cropBlockEnd; i++ {
+		if strings.EqualFold(strings.TrimSpace(rows[i][stageCol]), stage) {
+			stageRowIdxs = append(stageRowIdxs, i)
+		}
+	}
+
+	if len(stageRowIdxs) == 0 {
+		return fmt.Errorf("no %q stage rows found for crop %q in crops.csv", stage, cropName)
+	}
+
+	// Never reduce a stage below 1 day.
+	if delta < 0 && len(stageRowIdxs)+delta < 1 {
+		return fmt.Errorf("cannot remove %d %s day(s) — crop %q only has %d",
+			-delta, stage, cropName, len(stageRowIdxs))
+	}
+
+	// ── Apply the modification ────────────────────────────────────────────
+
+	if delta > 0 {
+		// Adding days: insert new rows immediately after the last stage row.
+
+		lastStageIdx := stageRowIdxs[len(stageRowIdxs)-1]
+
+		// Default task list for the new row: copy from the last existing stage
+		// day (e.g. the dark day just before move-to-light, or the light day
+		// just before harvest). This is the closest thing to a sensible default
+		// without knowing the crop's real biology. The grower should review and
+		// adjust in Google Sheets.
+		baseTasks := strings.TrimSpace(rows[lastStageIdx][tasksCol])
+		var newTaskStr string
+		if baseTasks != "" {
+			newTaskStr = baseTasks + ", adjusted - be mindful"
+		} else {
+			newTaskStr = "adjusted - be mindful"
+		}
+
+		lastDayNum, err := strconv.Atoi(strings.TrimSpace(rows[lastStageIdx][dayCol]))
+		if err != nil {
+			return fmt.Errorf("bad day number on row %d of crops.csv: %w", lastStageIdx+1, err)
+		}
+
+		// Build the rows to insert — one new row per delta.
+		newRows := make([][]string, delta)
+		for i := range newRows {
+			r := make([]string, numCols)
+			r[dayCol] = strconv.Itoa(lastDayNum + i + 1)
+			r[stageCol] = stage
+			r[tasksCol] = newTaskStr
+			newRows[i] = r
+		}
+
+		// Insert the new rows into the main slice.
+		rows = insertCSVRows(rows, lastStageIdx+1, newRows)
+		cropBlockEnd += delta
+
+		// Renumber every day row that comes after the inserted block.
+		// Adding delta rows means all subsequent day numbers go up by delta.
+		for i := lastStageIdx + 1 + delta; i < cropBlockEnd; i++ {
+			dayStr := strings.TrimSpace(rows[i][dayCol])
+			if dayStr == "" {
+				continue
+			}
+			n, err := strconv.Atoi(dayStr)
+			if err != nil {
+				continue
+			}
+			rows[i][dayCol] = strconv.Itoa(n + delta)
+		}
+
+	} else {
+		// Removing days: delete the last |delta| rows of the target stage.
+
+		removeCount := -delta
+		toRemove := stageRowIdxs[len(stageRowIdxs)-removeCount:]
+
+		// Remove in reverse order (highest index first) so that earlier
+		// indices remain valid as each removal shifts the slice.
+		for j := len(toRemove) - 1; j >= 0; j-- {
+			idx := toRemove[j]
+			rows = append(rows[:idx], rows[idx+1:]...)
+			cropBlockEnd--
+		}
+
+		// Renumber every surviving day row that follows the removed block.
+		// delta is negative here, so adding it decrements the day numbers.
+		renumberFrom := toRemove[0]
+		for i := renumberFrom; i < cropBlockEnd; i++ {
+			dayStr := strings.TrimSpace(rows[i][dayCol])
+			if dayStr == "" {
+				continue
+			}
+			n, err := strconv.Atoi(dayStr)
+			if err != nil {
+				continue
+			}
+			rows[i][dayCol] = strconv.Itoa(n + delta)
+		}
+	}
+
+	// ── Update the day-count column in the crop's header row ─────────────
+	//
+	// cropHeaderIdx has not moved — it is above the insertion/removal point.
+	existingCount, err := strconv.Atoi(strings.TrimSpace(rows[cropHeaderIdx][countCol]))
+	if err != nil {
+		return fmt.Errorf("bad %s value in %q header row: %w", countColName, cropName, err)
+	}
+	rows[cropHeaderIdx][countCol] = strconv.Itoa(existingCount + delta)
+
+	// ── Write the modified rows back to disk ──────────────────────────────
+	out, err := os.Create(cropsPath)
+	if err != nil {
+		return fmt.Errorf("could not overwrite crops.csv: %w", err)
+	}
+	defer out.Close()
+
+	w := csv.NewWriter(out)
+	if err := w.WriteAll(rows); err != nil {
+		return fmt.Errorf("error writing crops.csv: %w", err)
+	}
+	w.Flush()
+	return w.Error()
+}
+
+// insertCSVRows inserts a slice of new rows into rows at position idx,
+// returning the extended slice. All rows from idx onwards are shifted right
+// to make room. Uses a fresh slice to avoid overlapping-copy issues.
+func insertCSVRows(rows [][]string, idx int, newRows [][]string) [][]string {
+	result := make([][]string, 0, len(rows)+len(newRows))
+	result = append(result, rows[:idx]...)
+	result = append(result, newRows...)
+	result = append(result, rows[idx:]...)
+	return result
+}

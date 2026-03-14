@@ -145,6 +145,21 @@ func GenerateID() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// Today returns midnight UTC on the current local date.
+//
+// This is the single correct way to get "today" throughout the program.
+// We use the year/month/day from the local clock (so the date matches what
+// the grower sees on their calendar), then anchor it to midnight UTC so it
+// is directly comparable with date strings like "2026-03-13" that are
+// stored and parsed the same way everywhere.
+//
+// Do NOT use time.Now().Truncate(24*time.Hour) — that rounds to UTC midnight
+// which can land on the wrong calendar day for machines in non-UTC timezones.
+func Today() time.Time {
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+}
+
 // Capitalize uppercases the first letter of a string and leaves the rest
 // unchanged. Used throughout the program to display crop names (which are
 // stored in lowercase in the CSV) with a capital at the start of titles

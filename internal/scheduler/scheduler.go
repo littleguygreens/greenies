@@ -178,3 +178,78 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 	return preview, tasks, nil
 }
 
+
+// ScheduleFromDay generates calendar tasks for a cycle that is already in
+// progress, starting from a specific day number onwards. Past days are skipped.
+//
+// Use this when a batch needs its remaining schedule regenerated — for example
+// when the tray count changes mid-cycle, or when the sow-date anchor shifts
+// because blackout days were added or removed.
+//
+// Parameters:
+//   c          — the crop template loaded from crops.csv
+//   sowDate    — the Day 1 reference date in YYYY-MM-DD format.
+//                For a blackout-days adjustment, pass the *shifted* sow date
+//                so that every day-to-calendar-date mapping moves together.
+//   fromDayNum — the first day number to include. Days before this are skipped
+//                because they are already in the past.
+//                Compute as: int(today.Sub(originalSow).Hours()/24) + 2
+//                (that gives you "tomorrow's day number" in the original cycle)
+//   trays      — how many trays to use in the task titles and notes
+//   cycleID    — the *existing* CycleID to stamp on every generated task.
+//                Reusing the same ID keeps the tasks linked to the existing
+//                Cycle record in cycles.json — the snapshot, conflict checker,
+//                and delete command all continue to work without special cases.
+//
+// Returns only a tasks slice (no preview) because the user has already
+// confirmed the change before this function is called.
+func ScheduleFromDay(c crop.Crop, sowDate string, fromDayNum int, trays int, cycleID string) ([]task.Task, error) {
+	sow, err := time.Parse(task.DateFormat, sowDate)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sow date %q — use YYYY-MM-DD format", sowDate)
+	}
+
+	var tasks []task.Task
+
+	for _, day := range c.Days {
+		// Skip every day that has already happened — we only want to regenerate
+		// the portion of the schedule that lies in the future.
+		if day.Day < fromDayNum {
+			continue
+		}
+
+		// Same offset formula as ScheduleForward:
+		// Day 1 maps to sowDate, Day 0 maps to sowDate-1, Day 2 to sowDate+1, etc.
+		daysFromSow := day.Day - 1
+		date := sow.AddDate(0, 0, daysFromSow)
+		dateStr := date.Format(task.DateFormat)
+
+		// Same title and notes format as the other schedulers.
+		// Example title: "Sunnies 8x dark"
+		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
+
+		trayWord := "tray"
+		if trays != 1 {
+			trayWord = "trays"
+		}
+		var notes string
+		if strings.TrimSpace(day.Tasks) == "" {
+			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
+		} else {
+			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
+		}
+
+		t, err := task.New(title, dateStr, notes)
+		if err != nil {
+			return nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+		}
+
+		// Stamp the *existing* CycleID rather than generating a fresh one.
+		// This keeps the regenerated tasks linked to the same Cycle record.
+		t.CycleID = cycleID
+
+		tasks = append(tasks, t)
+	}
+
+	return tasks, nil
+}

@@ -42,9 +42,8 @@ func runHarvest() {
 		logged[h.CycleID] = true
 	}
 
-	// "Today" in UTC midnight, matching the format used in stored date strings.
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	// task.Today() returns midnight UTC on the current local date. See task/task.go.
+	today := task.Today()
 
 	// The log window: any cycle harvested in the last 30 days.
 	// 30 days gives the grower plenty of time to log without nagging, but

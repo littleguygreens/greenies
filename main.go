@@ -16,6 +16,7 @@
 //	greenies harvest
 //	greenies harvestlog
 //	greenies trial
+//	greenies adjust
 package main
 
 import (
@@ -59,6 +60,8 @@ func main() {
 		runHarvestLog()
 	case "trial":
 		runTrial()
+	case "adjust":
+		runAdjust()
 	default:
 		fmt.Printf("Unknown command: %q\n\n", subcommand)
 		printUsage()
@@ -82,6 +85,8 @@ Usage:
   greenies sync
   greenies harvest
   greenies harvestlog
+  greenies trial
+  greenies adjust
 
 Examples:
   greenies list
@@ -91,7 +96,8 @@ Examples:
   greenies sync
   greenies harvest
   greenies harvestlog
-  greenies trial`)
+  greenies trial
+  greenies adjust`)
 }
 
 // parseDate parses a date entered by the user and always returns a full
