@@ -183,6 +183,10 @@ func StartServer(port int) error {
 	mux.HandleFunc("GET /trial/compare", handleTrialCompare)
 	mux.HandleFunc("GET /trial/compare-pick", handleTrialComparePicker)
 
+	mux.HandleFunc("GET /adjust", handleAdjustPage)
+	mux.HandleFunc("POST /adjust/preview", handleAdjustPreview)
+	mux.HandleFunc("POST /adjust/confirm", handleAdjustConfirm)
+
 	// Step 3: Start listening for requests.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	fmt.Printf("Greenies GUI running at http://%s\n", addr)

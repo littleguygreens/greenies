@@ -771,6 +771,94 @@ input:focus, select:focus, textarea:focus {
     margin-right: 0.5rem;
 }
 
+/* ── Adjust page ──────────────────────────────────────────────────────────
+   Styles for the cycle adjustment page: cycle picker, preview table, etc. */
+
+/* Each cycle in the picker is a card with a radio button and info */
+.adjust-cycle-row {
+    margin-bottom: 0.5rem;
+}
+
+.adjust-cycle-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    color: #f0f0f0;
+    font-size: 0.9rem;
+}
+
+.adjust-cycle-label input[type="radio"] {
+    width: auto;
+    max-width: none;
+    margin-top: 0.3rem;
+    accent-color: #4ecca3;
+}
+
+.adjust-cycle-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.adjust-cycle-name {
+    font-weight: 600;
+}
+
+.adjust-cycle-dates {
+    color: #999999;
+    font-size: 0.85rem;
+}
+
+/* Hint text below the anchor section */
+.adjust-hint {
+    color: #999999;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Operation radio buttons stacked vertically on narrow screens */
+.adjust-op-group {
+    flex-wrap: wrap;
+}
+
+/* Checkbox labels for cascade and crops.csv update */
+.adjust-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #f0f0f0;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.adjust-checkbox-label input[type="checkbox"] {
+    width: auto;
+    max-width: none;
+    accent-color: #4ecca3;
+}
+
+/* Options section (cascade + csv update) */
+.adjust-options {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    background: #242424;
+    border: 1px solid #333333;
+    border-radius: 6px;
+}
+
+/* The "today" row in the before/after preview table */
+.adjust-today-row {
+    background: #2a3a30 !important;
+}
+
+.adjust-today-mark {
+    color: #4ecca3;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.25rem;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */

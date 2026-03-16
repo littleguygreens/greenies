@@ -1,0 +1,139 @@
+{{/*
+    adjust_preview.html — htmx fragment showing the before/after preview.
+
+    This is NOT a full page — it is a chunk of HTML that htmx injects into
+    the #adjust-preview div on the adjust page. It shows:
+
+      1. A summary header (crop name, anchor, operation)
+      2. A side-by-side table: Before vs After schedules
+      3. Any conflict warnings from the capacity checker
+      4. A "Confirm" button that applies the adjustment
+
+    If there is an error (invalid input, impossible adjustment), it shows
+    the error message instead.
+
+    Data passed from the handler (handleAdjustPreview in handlers.go):
+      .Error        — error message string (empty if no error)
+      .Header       — summary line, e.g. "Sunnies 4x — add 1 blackout day (anchor: sow)"
+      .Rows         — list of adjustPreviewRow structs (Date, BeforeLabel, AfterLabel, IsToday)
+      .Conflicts    — list of conflict warning strings
+      .HasConflicts — true if there are capacity warnings
+      .FormData     — map of hidden form fields to re-submit on confirm
+      .IsCancel     — true if this is a cycle cancellation (different confirm message)
+      .IsRetray     — true if this is a tray count change
+*/}}
+
+{{define "adjust_preview.html"}}
+
+{{if .Error}}
+    <div class="plan-error">{{.Error}}</div>
+{{else}}
+    <div class="plan-preview">
+        <h2>{{.Header}}</h2>
+
+        {{if .IsCancel}}
+            <!-- Cancel confirmation — no before/after table needed -->
+            <p>Future tasks will be deleted. Past tasks are kept as calendar history.</p>
+        {{else if .IsRetray}}
+            <!-- Retray confirmation — show the change -->
+            <p>Future tasks will be regenerated with the new tray count. Dates stay the same.</p>
+        {{else}}
+            <!-- Before/after side-by-side table -->
+            <table class="data-table adjust-preview-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Before</th>
+                        <th>After</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rows}}
+                    <tr{{if .IsToday}} class="adjust-today-row"{{end}}>
+                        <td>{{.DateDisplay}}{{if .IsToday}} <span class="adjust-today-mark">today</span>{{end}}</td>
+                        <td>{{if .BeforeLabel}}{{.BeforeLabel}}{{else}}<span class="empty-day">---</span>{{end}}</td>
+                        <td>{{if .AfterLabel}}{{.AfterLabel}}{{else}}<span class="empty-day">---</span>{{end}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        {{end}}
+
+        {{if .HasConflicts}}
+            <div class="plan-conflicts">
+                <strong>Capacity warnings after this change:</strong>
+                <ul>
+                    {{range .Conflicts}}
+                        <li>{{.}}</li>
+                    {{end}}
+                </ul>
+                <p>You can still confirm — the warnings are just a heads-up.</p>
+            </div>
+        {{end}}
+
+        <!-- Confirm button — sends all form data to POST /adjust/confirm -->
+        <form hx-post="/adjust/confirm"
+              hx-target="#adjust-preview"
+              hx-swap="innerHTML">
+            <!-- Hidden fields carry every value needed to replay the adjustment -->
+            <input type="hidden" name="cycle_id" value="{{.FormCycleID}}">
+            <input type="hidden" name="anchor" value="{{.FormAnchor}}">
+            <input type="hidden" name="operation" value="{{.FormOperation}}">
+            <input type="hidden" name="direction" value="{{.FormDirection}}">
+            <input type="hidden" name="days" value="{{.FormDays}}">
+            <input type="hidden" name="new_trays" value="{{.FormNewTrays}}">
+            <input type="hidden" name="cascade" value="{{.FormCascade}}">
+            <input type="hidden" name="update_csv" value="{{.FormUpdateCSV}}">
+
+            <div class="plan-actions">
+                {{if .IsCancel}}
+                    <button type="submit" class="btn btn-danger">
+                        Confirm — cancel this cycle
+                    </button>
+                {{else}}
+                    <button type="submit" class="btn btn-primary">
+                        Confirm — apply adjustment
+                    </button>
+                {{end}}
+            </div>
+        </form>
+    </div>
+{{end}}
+{{end}}
+
+{{/*
+    adjust_success.html — htmx fragment shown after a successful adjustment.
+
+    Data:
+      .Message     — plain-English summary of what changed
+      .Cascaded    — number of other cycles updated by cascade (0 if none)
+      .CSVUpdated  — true if crops.csv was also updated
+      .Conflicts   — any new conflict warnings after the change
+      .HasConflicts — true if there are warnings
+*/}}
+{{define "adjust_success.html"}}
+<div class="plan-success">
+    <p>{{.Message}}</p>
+    {{if gt .Cascaded 0}}
+        <p>{{.Cascaded}} other cycle(s) of the same crop also updated.</p>
+    {{end}}
+    {{if .CSVUpdated}}
+        <p>crops.csv template updated permanently.</p>
+    {{end}}
+    {{if .HasConflicts}}
+        <div class="plan-conflicts" style="margin-top:0.75rem;">
+            <strong>Conflict warnings:</strong>
+            <ul>
+                {{range .Conflicts}}
+                    <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+    {{end}}
+    <p style="margin-top:0.75rem;">
+        <a href="/adjust" class="btn btn-primary">Adjust another</a>
+        <a href="/snapshot" class="btn btn-secondary">View snapshot</a>
+        <a href="/list" class="btn btn-secondary">View calendar</a>
+    </p>
+</div>
+{{end}}
