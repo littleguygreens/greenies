@@ -21,6 +21,10 @@
     <!-- The viewport tag makes the page scale properly on phones -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Greenies</title>
+    <!-- Web app manifest — tells the browser to treat this like a standalone
+         app when opened with the --app flag. No address bar, no tabs, just
+         the page content in its own clean window. -->
+    <link rel="manifest" href="/static/manifest.json">
     <!-- Load the Quicksand font from Google Fonts. If the grower is offline,
          the browser silently falls back to the system font — no error, just
          a different look. The font is purely cosmetic, not functional. -->

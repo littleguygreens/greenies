@@ -185,22 +185,53 @@ func StartServer(port int) error {
 	return http.ListenAndServe(addr, mux)
 }
 
-// openBrowser tries to open the given URL in the user's default browser.
-// On Linux this uses xdg-open. On macOS it would use "open", on Windows
-// "start". We only need Linux for now since that's what the farm runs.
+// openBrowser tries to open the given URL in a borderless "app" window.
+//
+// On Linux, it first tries to find Chromium or Chrome and launch with the
+// --app flag. This opens the page in its own window with no address bar,
+// no tabs, and no bookmarks bar — it looks like a real desktop app rather
+// than a website. The manifest.json file we serve tells the browser the
+// app name and theme colour.
+//
+// If neither Chromium nor Chrome is installed, it falls back to xdg-open,
+// which opens the URL in whatever the default browser is (with full browser
+// chrome — address bar, tabs, etc.).
 func openBrowser(url string) {
-	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		// Try Chromium-based browsers first — they support the --app flag
+		// which gives us a clean, borderless window.
+		// exec.LookPath checks if a program is installed by searching the
+		// system PATH (the list of directories where programs live).
+		for _, browser := range []string{"chromium-browser", "chromium", "google-chrome", "google-chrome-stable"} {
+			path, err := exec.LookPath(browser)
+			if err == nil {
+				// Found a Chromium-based browser — launch in app mode.
+				// --app=URL opens the page in a standalone window with no
+				// browser chrome. It looks like a native desktop application.
+				cmd := exec.Command(path, "--app="+url)
+				_ = cmd.Start()
+				return
+			}
+		}
+		// No Chromium found — fall back to opening in the default browser.
+		// This will have the normal address bar and tabs, but still works.
+		cmd := exec.Command("xdg-open", url)
+		_ = cmd.Start()
 	case "darwin":
-		cmd = exec.Command("open", url)
+		// macOS: try Chrome app mode, fall back to "open" (default browser).
+		path, err := exec.LookPath("google-chrome")
+		if err == nil {
+			cmd := exec.Command(path, "--app="+url)
+			_ = cmd.Start()
+			return
+		}
+		cmd := exec.Command("open", url)
+		_ = cmd.Start()
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return // unsupported OS — user will open manually
+		cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		_ = cmd.Start()
 	}
-	// Run in the background and ignore errors — if the browser doesn't
-	// open, the URL is printed in the terminal for manual copy.
-	_ = cmd.Start()
+	// On unsupported OS or if everything fails, the URL is printed in the
+	// terminal for the user to copy manually.
 }
