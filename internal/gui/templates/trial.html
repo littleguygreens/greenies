@@ -199,8 +199,7 @@
     <div class="plan-success">
         <p>Trial started: {{.DisplayName}} — {{.Trays}} trays, sown {{.SowDateFmt}}</p>
         <a href="/trial" class="btn btn-secondary btn-small">Back to trials</a>
-        <a href="/trial/manage?id=" class="btn btn-secondary btn-small"
-           style="display:none;">Manage</a>
+        <a href="/trial/manage?id={{.TrialID}}" class="btn btn-primary btn-small">Manage now</a>
     </div>
 {{end}}
 {{end}}

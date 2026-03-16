@@ -1449,6 +1449,7 @@ func handleTrialNew(w http.ResponseWriter, r *http.Request) {
 		"DisplayName": tr.DisplayName(),
 		"Trays":       trays,
 		"SowDateFmt":  sowTime.Format("Mon Jan 02"),
+		"TrialID":     tr.ID,
 	})
 }
 
