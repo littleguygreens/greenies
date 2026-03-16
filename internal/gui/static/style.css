@@ -508,6 +508,79 @@ input:focus, select:focus, textarea:focus {
     margin-top: 0.25rem;
 }
 
+/* ── Harvest page ─────────────────────────────────────────────────────────
+   Cycle cards with inline logging forms. The form appears when the grower
+   clicks "Log harvest" — fields for actual trays, grams, and notes. */
+
+.harvest-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.harvest-actions {
+    flex-shrink: 0;
+}
+
+/* Hidden state — the form starts hidden and the button starts visible.
+   Clicking "Log harvest" removes this class from the form and adds it
+   to the button. Clicking "Cancel" reverses it. */
+.harvest-form-hidden {
+    display: none;
+}
+
+/* The inline form that appears below the cycle info when "Log harvest"
+   is clicked. Fields are laid out in a row on wide screens. */
+.harvest-form {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #333333;
+}
+
+.harvest-form-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.harvest-form-row .form-group {
+    flex: 1;
+    min-width: 140px;
+}
+
+.harvest-form-row input {
+    max-width: none;
+}
+
+.harvest-form-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Success message after logging a harvest */
+.harvest-logged {
+    color: #4ecca3;
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+    background: #242424;
+    border: 1px solid #4ecca3;
+    border-radius: 6px;
+}
+
+.harvest-logged a {
+    color: #4ecca3;
+    margin-left: 0.5rem;
+}
+
+/* Error message from harvest form validation */
+.harvest-error {
+    color: #e74c3c;
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */

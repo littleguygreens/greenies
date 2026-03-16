@@ -1,0 +1,127 @@
+{{/*
+    harvest.html — the harvest logging page.
+
+    Shows all crop cycles that are eligible to be logged (harvest date has
+    passed, within the last 30 days, and not yet logged). Each cycle appears
+    as a card with a "Log harvest" button that expands an inline form.
+
+    This is the GUI version of "greenies harvest" — instead of picking a
+    number from a list and answering prompts, the grower clicks a button
+    and fills in fields right on the card.
+
+    How the show/hide works:
+      - The form starts hidden (CSS class "harvest-form-hidden").
+      - Clicking "Log harvest" removes the hidden class and hides the button.
+      - Clicking "Cancel" reverses it — form hidden, button back.
+      - No complex JavaScript, just toggling CSS classes.
+
+    Data passed from the handler (handleHarvestPage in handlers.go):
+      .Eligible    — list of eligibleCycle structs
+      .HasEligible — true if there is at least one cycle to log
+*/}}
+
+{{define "harvest.html"}}
+<h1>Log Harvest</h1>
+
+{{if .HasEligible}}
+    <p>These cycles are ready to log. Click "Log harvest" to record actual trays and yield.</p>
+
+    {{range .Eligible}}
+        <!-- Each cycle card has an ID so htmx can target it after logging.
+             When the grower submits the form, the success message replaces
+             this card — the logged cycle disappears from the list. -->
+        <div class="task-card harvest-card" id="harvest-{{.CycleID}}">
+            <div class="harvest-info">
+                <div>
+                    <div class="task-title">{{.CropName}} — {{.Trays}} {{.TrayWord}}</div>
+                    <div class="task-notes">
+                        Harvest date: {{.HarvestDate}}
+                        {{if .HasExpected}}
+                            — expected: {{.ExpectedGrams}}g
+                        {{end}}
+                    </div>
+                </div>
+                <!-- "Log harvest" button — visible by default. Clicking it
+                     shows the form and hides this button. -->
+                <div class="harvest-toggle-btn">
+                    <button class="btn btn-primary btn-small"
+                            onclick="var card=this.closest('.harvest-card'); card.querySelector('.harvest-form').classList.remove('harvest-form-hidden'); this.closest('.harvest-toggle-btn').classList.add('harvest-form-hidden');">
+                        Log harvest
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inline logging form — hidden until the grower clicks
+                 "Log harvest". The form posts to /harvest via htmx. On
+                 success, the entire card is replaced with a confirmation. -->
+            <form class="harvest-form harvest-form-hidden"
+                  hx-post="/harvest"
+                  hx-target="#harvest-{{.CycleID}}"
+                  hx-swap="outerHTML">
+                <input type="hidden" name="cycle_id" value="{{.CycleID}}">
+
+                <div class="harvest-form-row">
+                    <div class="form-group">
+                        <label>Actual trays</label>
+                        <input type="number" name="actual_trays"
+                               value="{{.Trays}}" min="0" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Actual grams</label>
+                        <input type="number" name="actual_grams"
+                               {{if .HasExpected}}value="{{.ExpectedGrams}}"{{end}}
+                               min="0" step="1"
+                               {{if not .HasExpected}}placeholder="e.g. 1400" required{{end}}>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes (optional)</label>
+                        <input type="text" name="notes" placeholder="e.g. mould on 1 tray">
+                    </div>
+                </div>
+
+                <div class="harvest-form-actions">
+                    <button type="submit" class="btn btn-primary btn-small">Save</button>
+                    <button type="button" class="btn btn-secondary btn-small"
+                            onclick="var card=this.closest('.harvest-card'); card.querySelector('.harvest-form').classList.add('harvest-form-hidden'); card.querySelector('.harvest-toggle-btn').classList.remove('harvest-form-hidden');">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    {{end}}
+{{else}}
+    <p class="empty">No recent harvests to log.</p>
+    <p class="empty">Cycles are eligible for 30 days after their harvest date.
+        <a href="/harvestlog">View harvest log</a></p>
+{{end}}
+{{end}}
+
+{{/*
+    harvest_success.html — htmx fragment shown after a harvest is logged.
+
+    Replaces the cycle card with a brief confirmation message. The grower
+    sees that the harvest was saved without the page reloading.
+
+    Data:
+      .CropName    — capitalised crop name
+      .ActualTrays — number of trays logged
+      .ActualGrams — grams logged
+*/}}
+{{define "harvest_success.html"}}
+<div class="harvest-logged">
+    Logged: {{.CropName}} — {{.ActualTrays}} trays, {{.ActualGrams}}g.
+    <a href="/harvestlog">View harvest log</a>
+</div>
+{{end}}
+
+{{/*
+    harvest_error.html — htmx fragment shown when harvest form validation fails.
+
+    Data:
+      .Error   — the validation error message
+      .CycleID — the cycle this error relates to (not currently used, but
+                 available if we want to re-render the form)
+*/}}
+{{define "harvest_error.html"}}
+<div class="harvest-error">{{.Error}}</div>
+{{end}}
