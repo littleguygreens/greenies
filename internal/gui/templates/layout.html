@@ -1,0 +1,58 @@
+{{/*
+    layout.html — the base template that wraps every page.
+
+    Think of this as the "frame" of the GUI. It provides:
+      1. The HTML boilerplate (head, charset, viewport, stylesheet link)
+      2. The navigation sidebar (links to every page)
+      3. A slot where each page's content gets inserted
+
+    Every page handler calls renderPage(), which renders this layout and
+    plugs the page-specific template into the content slot.
+
+    Template syntax quick reference:
+      {{.FieldName}}     — insert a value from the data passed to the template
+      {{template "x" .}} — insert another template named "x", passing it data
+      {{block "x" .}}    — define a named block (used for the content slot)
+*/}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- The viewport tag makes the page scale properly on phones -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenies</title>
+    <!-- Load our stylesheet from the embedded static files -->
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Load htmx — the library that makes forms update parts of the page
+         without a full reload. The "defer" attribute means it loads after
+         the HTML is parsed, so the page appears faster. -->
+    <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+    <div class="app">
+        <!-- ── Navigation sidebar ──────────────────────────────────────── -->
+        <nav class="nav">
+            <div class="nav-title">Greenies</div>
+            <a href="/">Dashboard</a>
+            <a href="/snapshot">Snapshot</a>
+            <a href="/list">Calendar</a>
+            <a href="/crops">Crops</a>
+            <a href="/plan">Plan</a>
+            <a href="/harvest">Harvest</a>
+            <a href="/harvestlog">Harvest Log</a>
+            <a href="/trial">Trials</a>
+            <a href="/adjust">Adjust</a>
+            <a href="/delete">Delete</a>
+            <a href="/sync">Sync</a>
+        </nav>
+
+        <!-- ── Page content ────────────────────────────────────────────── -->
+        <main class="content">
+            <!-- This is where each page's specific content gets inserted.
+                 renderPage() renders the page template first, then injects
+                 the resulting HTML here. -->
+            {{.Content}}
+        </main>
+    </div>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{{/*
+    dashboard.html — the home page of the GUI.
+
+    Shows two sections:
+      1. Today's farm snapshot (what's growing, slot usage, conflicts)
+      2. Today's scheduled tasks (what the grower needs to do)
+
+    This gives the grower a quick "state of the farm" view the moment
+    they open the GUI — the same info as running "greenies snapshot"
+    and "greenies list" in the terminal.
+
+    Data passed from the handler (handleDashboard in handlers.go):
+      .Today       — formatted date string like "Sunday, 15 March 2026"
+      .Snapshot    — the farm snapshot as plain text (same as terminal output)
+      .Tasks       — list of task objects for today
+      .HasTasks    — true if there are tasks today
+      .HasSnapshot — true if the snapshot loaded successfully
+*/}}
+
+{{define "dashboard.html"}}
+<h1>{{.Today}}</h1>
+
+<!-- ── Farm snapshot ──────────────────────────────────────────────────── -->
+<h2>Farm Snapshot</h2>
+{{if .HasSnapshot}}
+    <!-- The snapshot is pre-formatted text — spaces and dashes are
+         meaningful for alignment, so we wrap it in <pre> to preserve
+         the exact layout, just like the terminal. -->
+    <pre>{{.Snapshot}}</pre>
+{{else}}
+    <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
+{{end}}
+
+<!-- ── Today's tasks ──────────────────────────────────────────────────── -->
+<h2>Today's Tasks</h2>
+{{if .HasTasks}}
+    <!-- range is Go's template version of a "for each" loop.
+         It walks through the list of tasks one at a time. -->
+    {{range .Tasks}}
+        <div class="task-card">
+            <div class="task-title">{{.Title}}</div>
+            {{if .Notes}}
+                <div class="task-notes">{{.Notes}}</div>
+            {{end}}
+            <div class="task-id">ID: {{.ID}}</div>
+        </div>
+    {{end}}
+{{else}}
+    <p class="empty">No tasks scheduled for today.</p>
+{{end}}
+{{end}}

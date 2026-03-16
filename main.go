@@ -62,6 +62,8 @@ func main() {
 		runTrial()
 	case "adjust":
 		runAdjust()
+	case "gui":
+		runGui()
 	default:
 		fmt.Printf("Unknown command: %q\n\n", subcommand)
 		printUsage()
@@ -87,6 +89,7 @@ Usage:
   greenies harvestlog
   greenies trial
   greenies adjust
+  greenies gui
 
 Examples:
   greenies list
@@ -97,7 +100,8 @@ Examples:
   greenies harvest
   greenies harvestlog
   greenies trial
-  greenies adjust`)
+  greenies adjust
+  greenies gui`)
 }
 
 // parseDate parses a date entered by the user and always returns a full

@@ -28,7 +28,7 @@ import (
 // the user knows the day was checked, not skipped.
 func PrintDay(date string, tasks []task.Task) {
 	// Filter the full task list down to only tasks on this specific date.
-	daily := tasksForDate(tasks, date)
+	daily := TasksForDate(tasks, date)
 
 	// Parse the date string into a time.Time value so we can extract the
 	// day name (e.g. "Thursday") and format it nicely.
@@ -91,10 +91,11 @@ func PrintRange(startDate, endDate string, tasks []task.Task) error {
 	return nil
 }
 
-// tasksForDate returns only the tasks from the list that fall on the given date.
+// TasksForDate returns only the tasks from the list that fall on the given date.
 // The result is sorted by the time the task was created, so tasks appear in
 // the order they were added.
-func tasksForDate(tasks []task.Task, date string) []task.Task {
+// Exported so the GUI can also use it to get tasks for a specific day.
+func TasksForDate(tasks []task.Task, date string) []task.Task {
 	var result []task.Task
 	for _, t := range tasks {
 		if t.Date == date {
