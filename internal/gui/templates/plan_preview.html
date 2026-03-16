@@ -1,0 +1,112 @@
+{{/*
+    plan_preview.html — htmx fragment showing the schedule preview.
+
+    This is NOT a full page — it is a small chunk of HTML that htmx injects
+    into the #preview div on the plan page. It shows:
+
+      1. A summary header (crop name, tray count, anchor date)
+      2. A table of every day in the cycle with its date, stage, and tasks
+      3. Any conflict warnings from the capacity checker
+      4. A "Confirm" button that saves everything
+
+    If there is an error (bad date, unknown crop), it shows the error message
+    instead.
+
+    Data passed from the handler (handlePlanPreview in handlers.go):
+      .Error       — error message string (empty if no error)
+      .Header      — summary line, e.g. "Sunnies — 4 trays — sow 2026-03-15"
+      .Days        — list of previewDay structs (Date, DayNum, Stage, Tasks)
+      .Conflicts   — list of conflict warning strings from the checker
+      .HasConflicts — true if there are capacity warnings
+      .FormData    — hidden form fields to re-submit on confirm
+*/}}
+
+{{define "plan_preview.html"}}
+
+{{if .Error}}
+    <div class="plan-error">{{.Error}}</div>
+{{else}}
+    <div class="plan-preview">
+        <h2>{{.Header}}</h2>
+
+        <!-- Schedule table — one row per day in the cycle -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Stage</th>
+                    <th>Tasks</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Days}}
+                <tr>
+                    <td>{{.DateDisplay}}</td>
+                    <td>{{.DayNum}}</td>
+                    <td>{{.Stage}}</td>
+                    <td>{{if .Tasks}}{{.Tasks}}{{else}}<span class="empty-day">(no tasks)</span>{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        {{if .HasConflicts}}
+            <!-- Conflict warnings — same data the CLI shows before asking
+                 "save anyway?" We show them as a yellow warning box. -->
+            <div class="plan-conflicts">
+                <strong>Capacity warnings:</strong>
+                <ul>
+                    {{range .Conflicts}}
+                        <li>{{.}}</li>
+                    {{end}}
+                </ul>
+                <p>You can still save — the warnings are just a heads-up.</p>
+            </div>
+        {{end}}
+
+        {{if .TotalCycles}}
+            <p class="plan-repeat-note">{{.TotalCycles}} cycles total ({{.TotalCycles}} weeks).</p>
+        {{end}}
+
+        <!-- Confirm button — sends the same form data to POST /plan/confirm.
+             The hidden fields carry all the values needed to recreate the
+             schedule and save it, so the server doesn't need to remember
+             anything between the preview and the confirm. -->
+        <form hx-post="/plan/confirm"
+              hx-target="#preview"
+              hx-swap="innerHTML">
+            <input type="hidden" name="crop" value="{{.FormCrop}}">
+            <input type="hidden" name="trays" value="{{.FormTrays}}">
+            <input type="hidden" name="direction" value="{{.FormDirection}}">
+            <input type="hidden" name="date" value="{{.FormDate}}">
+            <input type="hidden" name="lit_env" value="{{.FormLitEnv}}">
+            <input type="hidden" name="repeats" value="{{.FormRepeats}}">
+
+            <div class="plan-actions">
+                <button type="submit" class="btn btn-primary">
+                    Confirm — add to calendar
+                </button>
+            </div>
+        </form>
+    </div>
+{{end}}
+{{end}}
+
+{{/*
+    plan_success.html — htmx fragment shown after a successful plan confirm.
+
+    Data:
+      .TaskCount  — how many tasks were saved
+      .CycleCount — how many cycle records were created
+*/}}
+{{define "plan_success.html"}}
+<div class="plan-success">
+    <p>{{.TaskCount}} tasks added to the calendar ({{.CycleCount}} cycle{{if ne .CycleCount 1}}s{{end}}).</p>
+    <p>
+        <a href="/list" class="btn btn-secondary">View calendar</a>
+        <a href="/snapshot" class="btn btn-secondary">View snapshot</a>
+        <a href="/plan" class="btn btn-primary">Plan another</a>
+    </p>
+</div>
+{{end}}

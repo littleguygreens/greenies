@@ -396,6 +396,118 @@ input:focus, select:focus, textarea:focus {
     margin-bottom: 0.5rem;
 }
 
+/* ── Plan page ─────────────────────────────────────────────────────────────
+   Styles for the crop planning form, preview table, and conflict warnings. */
+
+/* Radio button groups — inline labels with the radio circle next to text */
+.radio-group {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 0.25rem;
+}
+
+.radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #f0f0f0;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.radio-label input[type="radio"] {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    accent-color: #4ecca3;
+}
+
+/* Hint text below a form field (e.g. "0 = no repeats") */
+.field-hint {
+    color: #666666;
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* The preview section that appears below the form after clicking Preview */
+.plan-preview {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #333333;
+}
+
+/* Conflict warnings — yellow-tinted warning box */
+.plan-conflicts {
+    background: #242424;
+    border: 1px solid #f39c12;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    color: #f39c12;
+}
+
+.plan-conflicts strong {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.plan-conflicts ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0.25rem 0;
+}
+
+.plan-conflicts li {
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+}
+
+.plan-conflicts p {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #999999;
+}
+
+/* Note about total cycles from weekly repeats */
+.plan-repeat-note {
+    color: #999999;
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+}
+
+/* Confirm button area below the preview */
+.plan-actions {
+    margin-top: 1rem;
+}
+
+/* Error message in the preview area */
+.plan-error {
+    margin-top: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: #242424;
+    border: 1px solid #e74c3c;
+    border-radius: 6px;
+    color: #e74c3c;
+}
+
+/* Success message after confirming a plan */
+.plan-success {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #242424;
+    border: 1px solid #4ecca3;
+    border-radius: 6px;
+}
+
+.plan-success p {
+    margin-bottom: 0.75rem;
+}
+
+.plan-success .btn {
+    margin-right: 0.5rem;
+    margin-top: 0.25rem;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */

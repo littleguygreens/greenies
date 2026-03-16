@@ -167,6 +167,9 @@ func StartServer(port int) error {
 	mux.HandleFunc("POST /delete", handleDeleteAction)
 	mux.HandleFunc("GET /clear", handleClearPage)
 	mux.HandleFunc("POST /clear", handleClearAction)
+	mux.HandleFunc("GET /plan", handlePlanPage)
+	mux.HandleFunc("POST /plan/preview", handlePlanPreview)
+	mux.HandleFunc("POST /plan/confirm", handlePlanConfirm)
 
 	// Step 3: Start listening for requests.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

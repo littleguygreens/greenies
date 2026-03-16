@@ -1,0 +1,126 @@
+{{/*
+    plan.html — the crop planning page.
+
+    This is the GUI equivalent of "greenies plan" in the terminal. Instead of
+    answering six questions one at a time, the grower sees all the fields at
+    once, fills them in any order, then clicks "Preview" to see the full
+    schedule before confirming.
+
+    The flow:
+      1. Fill in the form (crop, trays, date, etc.)
+      2. Click "Preview" → htmx sends the form to POST /plan/preview
+      3. The server runs the scheduler and returns a preview table + any
+         conflict warnings as an HTML fragment
+      4. The preview appears below the form (no page reload)
+      5. Click "Confirm" in the preview → htmx sends to POST /plan/confirm
+      6. The server saves the tasks and cycle records, returns a success message
+
+    Data passed from the handler (handlePlanPage in handlers.go):
+      .Crops     — list of crop.Crop structs (name, cycle days, yield, etc.)
+      .HasCrops  — true if there is at least one crop in the library
+      .LitEnvs   — list of lit farm.Environment structs
+      .HasEnvs   — true if there are lit environments configured
+      .Today     — today's date in YYYY-MM-DD format (for the date picker default)
+*/}}
+
+{{define "plan.html"}}
+<h1>Plan a Crop Cycle</h1>
+
+{{if not .HasCrops}}
+    <p class="empty">No crops found in the crop library. Add varieties to crops.csv first.</p>
+{{else}}
+    <!-- The form sends its data to POST /plan/preview via htmx.
+         The response (a schedule preview) is swapped into the #preview div
+         below the form. The grower sees the preview without the page reloading. -->
+    <form hx-post="/plan/preview"
+          hx-target="#preview"
+          hx-swap="innerHTML">
+
+        <!-- ── Crop selection ──────────────────────────────────────────── -->
+        <div class="form-group">
+            <label for="crop">Crop variety</label>
+            <select name="crop" id="crop">
+                {{range .Crops}}
+                    <option value="{{.Name}}">{{.Name}} ({{.CycleDays}}-day cycle)</option>
+                {{end}}
+            </select>
+        </div>
+
+        <!-- ── Plan mode: tray count or yield target ───────────────────── -->
+        <div class="form-group">
+            <label>Plan by</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="plan_mode" value="tray" checked
+                           onclick="document.getElementById('tray-field').style.display='block'; document.getElementById('yield-field').style.display='none';">
+                    Tray count
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="plan_mode" value="yield"
+                           onclick="document.getElementById('tray-field').style.display='none'; document.getElementById('yield-field').style.display='block';">
+                    Yield target (grams)
+                </label>
+            </div>
+        </div>
+
+        <!-- Tray count field (shown by default) -->
+        <div class="form-group" id="tray-field">
+            <label for="trays">How many trays?</label>
+            <input type="number" name="trays" id="trays" min="1" value="4" style="max-width:120px;">
+        </div>
+
+        <!-- Yield target field (hidden by default) -->
+        <div class="form-group" id="yield-field" style="display:none;">
+            <label for="yield_grams">Desired yield (grams)</label>
+            <input type="number" name="yield_grams" id="yield_grams" min="1" placeholder="e.g. 500" style="max-width:160px;">
+        </div>
+
+        <!-- ── Direction: sow date or harvest date ─────────────────────── -->
+        <div class="form-group">
+            <label>Plan from</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="direction" value="sow" checked>
+                    Sow date (plan forward)
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="direction" value="harvest">
+                    Harvest date (plan backward)
+                </label>
+            </div>
+        </div>
+
+        <!-- ── Date picker ─────────────────────────────────────────────── -->
+        <div class="form-group">
+            <label for="date">Date</label>
+            <input type="date" name="date" id="date" value="{{.Today}}" style="max-width:200px;">
+        </div>
+
+        <!-- ── Lit environment ─────────────────────────────────────────── -->
+        <div class="form-group">
+            <label for="lit_env">Lit environment</label>
+            <select name="lit_env" id="lit_env">
+                <option value="either">Either (auto-assign)</option>
+                {{range .LitEnvs}}
+                    <option value="{{.Name}}">{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        <!-- ── Weekly repeats ──────────────────────────────────────────── -->
+        <div class="form-group">
+            <label for="repeats">Additional weekly repeats</label>
+            <input type="number" name="repeats" id="repeats" min="0" value="0"
+                   style="max-width:120px;">
+            <span class="field-hint">0 = no repeats, 1 = two weeks total, etc.</span>
+        </div>
+
+        <!-- ── Preview button ──────────────────────────────────────────── -->
+        <button type="submit" class="btn btn-primary">Preview Schedule</button>
+    </form>
+
+    <!-- The preview appears here when the grower clicks "Preview Schedule".
+         htmx replaces the contents of this div with the server's response. -->
+    <div id="preview"></div>
+{{end}}
+{{end}}
