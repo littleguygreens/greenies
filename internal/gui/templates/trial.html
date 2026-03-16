@@ -1,0 +1,206 @@
+{{/*
+    trial.html — the trial management dashboard.
+
+    This is the main landing page for trials. It shows:
+      1. Active trials as cards with "Manage" buttons
+      2. A "Start New Trial" form
+      3. A table of all trials (any status) with "View" links
+      4. A "Compare" button if two or more past trials of the same crop exist
+
+    Data passed from the handler (handleTrialPage in handlers.go):
+      .ActiveTrials  — list of trialCard structs (active only)
+      .HasActive     — true if there are active trials
+      .AllTrials     — list of trialListRow structs (all statuses)
+      .HasTrials     — true if any trials exist at all
+      .CanCompare    — true if comparison is possible
+      .Today         — today's date in YYYY-MM-DD format
+*/}}
+
+{{define "trial.html"}}
+<h1>Trials</h1>
+
+<!-- ── Active trials ──────────────────────────────────────────────────── -->
+
+{{if .HasActive}}
+    <h2>Active Trials</h2>
+    <p>These trials are currently growing. Click "Manage" to log observations and confirm tasks.</p>
+
+    {{range .ActiveTrials}}
+        <div class="task-card trial-active-card">
+            <div class="trial-active-row">
+                <div>
+                    <div class="task-title">{{.DisplayName}} — {{.Trays}} {{.TrayWord}}</div>
+                    <div class="task-notes">
+                        Day {{.DayNum}} — sown {{.SowDateFmt}}
+                        {{if .HarvestDateFmt}} — harvest {{.HarvestDateFmt}} (tentative){{end}}
+                    </div>
+                </div>
+                <a href="/trial/manage?id={{.ID}}" class="btn btn-primary btn-small">Manage</a>
+            </div>
+        </div>
+    {{end}}
+{{end}}
+
+<!-- ── New trial form ─────────────────────────────────────────────────── -->
+
+<h2>Start New Trial</h2>
+<p>Fill in the details below. Only crop name, sow date, and trays are required — everything else is optional.</p>
+
+<form hx-post="/trial/new"
+      hx-target="#trial-result"
+      hx-swap="innerHTML">
+
+    <!-- Required fields -->
+    <div class="form-group">
+        <label for="crop_name">Crop name</label>
+        <input type="text" name="crop_name" id="crop_name"
+               placeholder="e.g. mustard" required>
+    </div>
+
+    <div class="form-group">
+        <label for="trial_variable">What are you testing? (optional)</label>
+        <input type="text" name="trial_variable" id="trial_variable"
+               placeholder="e.g. seed lot xyz">
+    </div>
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="sow_date">Sow date</label>
+            <input type="date" name="sow_date" id="sow_date"
+                   value="{{.Today}}" required>
+        </div>
+        <div class="form-group">
+            <label for="trays">Trays</label>
+            <input type="number" name="trays" id="trays"
+                   min="1" value="2" style="max-width:100px;" required>
+        </div>
+    </div>
+
+    <!-- Optional parameters -->
+    <div class="trial-optional-section">
+        <div class="trial-optional-header"
+             onclick="this.parentElement.classList.toggle('trial-optional-open')">
+            Optional parameters (click to expand)
+        </div>
+        <div class="trial-optional-body">
+            <!-- Soak type -->
+            <div class="form-group">
+                <label>Soak</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="soak_type" value="none" checked
+                               onclick="document.getElementById('soak-hours-field').style.display='none';">
+                        None
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="soak_type" value="hours"
+                               onclick="document.getElementById('soak-hours-field').style.display='block';">
+                        Same-day (hours)
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="soak_type" value="overnight"
+                               onclick="document.getElementById('soak-hours-field').style.display='none';">
+                        Overnight
+                    </label>
+                </div>
+            </div>
+            <div class="form-group" id="soak-hours-field" style="display:none;">
+                <label for="soak_hours">Soak hours</label>
+                <input type="number" name="soak_hours" id="soak_hours"
+                       min="0" step="0.5" placeholder="e.g. 4" style="max-width:100px;">
+            </div>
+
+            <div class="trial-form-row">
+                <div class="form-group">
+                    <label for="seed_grams">Seed g/tray</label>
+                    <input type="number" name="seed_grams" id="seed_grams"
+                           min="0" step="0.1" placeholder="e.g. 50" style="max-width:120px;">
+                </div>
+                <div class="form-group">
+                    <label for="dirt_litres">Dirt L/tray</label>
+                    <input type="number" name="dirt_litres" id="dirt_litres"
+                           min="0" step="0.1" value="1" style="max-width:120px;">
+                </div>
+            </div>
+
+            <div class="trial-form-row">
+                <div class="form-group">
+                    <label for="mtl_day">Move to light on day</label>
+                    <input type="number" name="mtl_day" id="mtl_day"
+                           min="1" placeholder="e.g. 5" style="max-width:100px;">
+                </div>
+                <div class="form-group">
+                    <label for="harvest_day">Expected harvest day</label>
+                    <input type="number" name="harvest_day" id="harvest_day"
+                           min="1" placeholder="e.g. 9" style="max-width:100px;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Start Trial</button>
+</form>
+
+<!-- htmx swaps the result of "Start Trial" into this div -->
+<div id="trial-result"></div>
+
+<!-- ── All trials table ───────────────────────────────────────────────── -->
+
+{{if .HasTrials}}
+    <h2>All Trials</h2>
+
+    {{if .CanCompare}}
+        <p><a href="/trial/compare-pick" class="btn btn-secondary btn-small">Compare two trials</a></p>
+    {{end}}
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Trial</th>
+                <th>Status</th>
+                <th>Sown</th>
+                <th>Yield</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .AllTrials}}
+            <tr>
+                <td>{{.DisplayName}}</td>
+                <td>
+                    <span class="trial-status trial-status-{{.Status}}">{{.Status}}</span>
+                </td>
+                <td>{{.SowDateFmt}}</td>
+                <td>
+                    {{if .HasYield}}{{.YieldGrams}}g{{else}}<span class="expected-note">—</span>{{end}}
+                </td>
+                <td><a href="/trial/view?id={{.ID}}" class="btn btn-secondary btn-small">View</a></td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{end}}
+{{end}}
+
+{{/*
+    trial_result.html — htmx fragment shown after creating a new trial.
+
+    Data:
+      .Success     — true if the trial was created
+      .Error       — error message if something went wrong
+      .DisplayName — the trial's display name (on success)
+      .Trays       — tray count (on success)
+      .SowDateFmt  — formatted sow date (on success)
+*/}}
+{{define "trial_result.html"}}
+{{if .Error}}
+    <div class="plan-error">{{.Error}}</div>
+{{else if .Success}}
+    <div class="plan-success">
+        <p>Trial started: {{.DisplayName}} — {{.Trays}} trays, sown {{.SowDateFmt}}</p>
+        <a href="/trial" class="btn btn-secondary btn-small">Back to trials</a>
+        <a href="/trial/manage?id=" class="btn btn-secondary btn-small"
+           style="display:none;">Manage</a>
+    </div>
+{{end}}
+{{end}}

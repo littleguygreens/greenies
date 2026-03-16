@@ -1,0 +1,222 @@
+{{/*
+    trial_manage.html — the manage page for a single active trial.
+
+    This is the GUI version of the "manage" flow from cmd_trial.go. Instead
+    of stepping through missed days one at a time in the terminal, the grower
+    sees all missed days at once and fills in whichever ones they want.
+
+    Each missed day has:
+      - An observation notes field (free text, optional)
+      - A "confirm tasks" checkbox that reveals stage + tasks fields
+
+    At the bottom: outcome buttons (continue, harvest, failure).
+
+    Data from handleTrialManage:
+      .TrialID      — the trial's unique ID
+      .DisplayName  — e.g. "Mustard (seed lot xyz)"
+      .Trays        — tray count
+      .SowDateFmt   — formatted sow date
+      .DayNum       — current cycle day number
+      .MissedDays   — list of manageDayRow (days needing catch-up)
+      .HasMissed    — true if there are missed days
+      .IsActive     — true if the trial is still active
+*/}}
+
+{{define "trial_manage.html"}}
+<h1>Manage Trial</h1>
+
+<div class="task-card">
+    <div class="task-title">{{.DisplayName}} — {{.Trays}} trays</div>
+    <div class="task-notes">Sown {{.SowDateFmt}} — Day {{.DayNum}} today</div>
+</div>
+
+<!-- ── Missed days form ───────────────────────────────────────────────── -->
+
+<div id="manage-area">
+{{if .HasMissed}}
+    <h2>Catch up on missed days</h2>
+    <p>Fill in observation notes and optionally confirm tasks for each day.</p>
+
+    <form hx-post="/trial/manage"
+          hx-target="#manage-area"
+          hx-swap="innerHTML">
+        <input type="hidden" name="trial_id" value="{{.TrialID}}">
+
+        {{range .MissedDays}}
+        <div class="trial-day-block">
+            <div class="trial-day-header">Day {{.DayNum}} — {{.DateFmt}}</div>
+            <!-- Hidden field so the handler knows which dates were submitted -->
+            <input type="hidden" name="day_dates" value="{{.DateStr}}">
+
+            <div class="form-group">
+                <label for="obs_{{.DateStr}}">Observation notes</label>
+                <textarea name="obs_{{.DateStr}}" id="obs_{{.DateStr}}"
+                          rows="2" placeholder="e.g. strong germination, almost all seed sprouted"
+                          style="max-width:100%;"></textarea>
+            </div>
+
+            <div class="trial-confirm-row">
+                <label class="radio-label">
+                    <input type="checkbox" name="confirm_{{.DateStr}}"
+                           onchange="var el=document.getElementById('confirm-fields-{{.DateStr}}'); el.style.display=this.checked?'flex':'none';">
+                    Record confirmed tasks for this day
+                </label>
+            </div>
+
+            <!-- Stage + tasks fields — hidden until the checkbox is ticked -->
+            <div class="trial-confirm-fields" id="confirm-fields-{{.DateStr}}" style="display:none;">
+                <div class="form-group">
+                    <label for="stage_{{.DateStr}}">Stage</label>
+                    <select name="stage_{{.DateStr}}" id="stage_{{.DateStr}}"
+                            style="max-width:160px;">
+                        <option value="">-- pick --</option>
+                        <option value="sow">sow</option>
+                        <option value="dark">dark</option>
+                        <option value="light">light</option>
+                        <option value="harvest">harvest</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label for="tasks_{{.DateStr}}">Tasks (comma-separated)</label>
+                    <input type="text" name="tasks_{{.DateStr}}" id="tasks_{{.DateStr}}"
+                           placeholder="e.g. bottom water, rotate stack"
+                           style="max-width:100%;">
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        <button type="submit" class="btn btn-primary">Save observations</button>
+    </form>
+
+{{else}}
+    <h2>All caught up</h2>
+    <p>No missed days to manage — this trial is up to date.</p>
+{{end}}
+
+<!-- ── Outcome section ────────────────────────────────────────────────── -->
+
+{{if .IsActive}}
+    <div class="trial-outcome-section">
+        <h2>End trial?</h2>
+        <p>If this trial is done, record the outcome below. Otherwise, leave it active and come back later.</p>
+
+        <div id="outcome-area">
+            <div class="trial-outcome-buttons">
+                <!-- Harvest button — shows yield input -->
+                <button class="btn btn-primary btn-small"
+                        onclick="document.getElementById('harvest-form').style.display='block'; document.getElementById('failure-form').style.display='none';">
+                    Harvest
+                </button>
+                <!-- Failure button — shows failure note input -->
+                <button class="btn btn-danger btn-small"
+                        onclick="document.getElementById('failure-form').style.display='block'; document.getElementById('harvest-form').style.display='none';">
+                    Failure
+                </button>
+            </div>
+
+            <!-- Harvest form (hidden by default) -->
+            <form id="harvest-form" style="display:none;"
+                  hx-post="/trial/outcome"
+                  hx-target="#outcome-area"
+                  hx-swap="innerHTML"
+                  class="trial-outcome-form">
+                <input type="hidden" name="trial_id" value="{{.TrialID}}">
+                <input type="hidden" name="outcome" value="harvest">
+                <div class="form-group">
+                    <label for="yield_grams">Actual yield in grams (optional)</label>
+                    <input type="number" name="yield_grams" id="yield_grams"
+                           min="0" step="1" placeholder="e.g. 1400" style="max-width:160px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-small">Confirm harvest</button>
+                <button type="button" class="btn btn-secondary btn-small"
+                        onclick="this.closest('form').style.display='none';">Cancel</button>
+            </form>
+
+            <!-- Failure form (hidden by default) -->
+            <form id="failure-form" style="display:none;"
+                  hx-post="/trial/outcome"
+                  hx-target="#outcome-area"
+                  hx-swap="innerHTML"
+                  class="trial-outcome-form">
+                <input type="hidden" name="trial_id" value="{{.TrialID}}">
+                <input type="hidden" name="outcome" value="failure">
+                <div class="form-group">
+                    <label for="failure_note">What went wrong? (optional)</label>
+                    <input type="text" name="failure_note" id="failure_note"
+                           placeholder="e.g. mould on day 4" style="max-width:100%;">
+                </div>
+                <button type="submit" class="btn btn-danger btn-small">Confirm failure</button>
+                <button type="button" class="btn btn-secondary btn-small"
+                        onclick="this.closest('form').style.display='none';">Cancel</button>
+            </form>
+        </div>
+    </div>
+{{end}}
+</div>
+
+<p style="margin-top:1.5rem;"><a href="/trial" class="btn btn-secondary btn-small">Back to trials</a></p>
+{{end}}
+
+{{/*
+    trial_manage_result.html — htmx fragment after saving manage data.
+
+    Data:
+      .Success / .Error
+      .ObservationsAdded — count of observations saved
+      .DaysConfirmed     — count of days with confirmed params
+      .TrialID           — for the "manage again" link
+      .IsActive          — true if the trial is still active
+*/}}
+{{define "trial_manage_result.html"}}
+{{if .Error}}
+    <div class="plan-error">{{.Error}}</div>
+{{else if .Success}}
+    <div class="plan-success">
+        <p>Saved: {{.ObservationsAdded}} observation(s), {{.DaysConfirmed}} day(s) confirmed.</p>
+        <p>All caught up — no missed days remaining.</p>
+    </div>
+{{end}}
+{{end}}
+
+{{/*
+    trial_outcome_result.html — htmx fragment after recording an outcome.
+
+    Data:
+      .Success / .Error / .Message
+      .CanPromote — true if the trial can be promoted to crops.csv
+      .CanDiscard — true if the trial can be discarded
+      .TrialID    — for promote/discard actions
+*/}}
+{{define "trial_outcome_result.html"}}
+{{if .Error}}
+    <div class="plan-error">{{.Error}}</div>
+{{else if .Success}}
+    <div class="plan-success">
+        <p>{{.Message}}</p>
+
+        {{if .CanPromote}}
+            <form hx-post="/trial/promote"
+                  hx-target="closest .plan-success"
+                  hx-swap="outerHTML"
+                  style="display:inline;">
+                <input type="hidden" name="trial_id" value="{{.TrialID}}">
+                <button type="submit" class="btn btn-primary btn-small">Promote to crops.csv</button>
+            </form>
+        {{end}}
+
+        {{if .CanDiscard}}
+            <form hx-post="/trial/discard"
+                  hx-target="closest .plan-success"
+                  hx-swap="outerHTML"
+                  hx-confirm="Permanently delete all data for this trial?"
+                  style="display:inline;">
+                <input type="hidden" name="trial_id" value="{{.TrialID}}">
+                <button type="submit" class="btn btn-danger btn-small">Discard trial data</button>
+            </form>
+        {{end}}
+
+        <a href="/trial" class="btn btn-secondary btn-small">Back to trials</a>
+    </div>
+{{end}}
+{{end}}

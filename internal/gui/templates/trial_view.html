@@ -1,0 +1,101 @@
+{{/*
+    trial_view.html — full detail view of a single trial.
+
+    This is the GUI version of the "view" flow from cmd_trial.go. It shows
+    everything about one trial: setup parameters, confirmed day-by-day data,
+    and observation notes.
+
+    Data from handleTrialView (a trialViewData struct):
+      .DisplayName   — e.g. "Mustard (seed lot xyz)"
+      .Status        — e.g. "active", "harvested", "promoted", "failed"
+      .SowDateFmt    — e.g. "Mon Mar 09 2026"
+      .Trays         — tray count
+      .Soak          — "overnight", "4 hours", or "—"
+      .SeedGrams     — "50g" or "—"
+      .DirtLitres    — "1.0L" or "—"
+      .MTLDay        — "Day 5" or "—"
+      .HarvestDay    — "Day 9" or "—"
+      .ActualYield   — "1400g" or "not recorded"
+      .FailureNote   — free text, or ""
+      .ConfirmedDays — list of trialDayView
+      .HasConfirmed  — true if any days are confirmed
+      .Observations  — list of trialObsView
+      .HasObs        — true if any observations exist
+      .TrialVariable — what was being tested, or ""
+*/}}
+
+{{define "trial_view.html"}}
+<h1>Trial — {{.DisplayName}}</h1>
+
+<!-- ── Setup parameters ───────────────────────────────────────────────── -->
+
+<table class="data-table trial-detail-table">
+    <tbody>
+        <tr><td class="trial-label">Status</td><td><span class="trial-status trial-status-{{.Status}}">{{.Status}}</span></td></tr>
+        <tr><td class="trial-label">Sown</td><td>{{.SowDateFmt}}</td></tr>
+        <tr><td class="trial-label">Trays</td><td>{{.Trays}}</td></tr>
+        <tr><td class="trial-label">Soak</td><td>{{.Soak}}</td></tr>
+        <tr><td class="trial-label">Seed g/tray</td><td>{{.SeedGrams}}</td></tr>
+        <tr><td class="trial-label">Dirt L/tray</td><td>{{.DirtLitres}}</td></tr>
+        <tr><td class="trial-label">Move-to-light</td><td>{{.MTLDay}}</td></tr>
+        <tr><td class="trial-label">Expected harvest</td><td>{{.HarvestDay}}</td></tr>
+        <tr><td class="trial-label">Actual yield</td><td>{{.ActualYield}}</td></tr>
+        {{if .FailureNote}}
+        <tr><td class="trial-label">Failure note</td><td>{{.FailureNote}}</td></tr>
+        {{end}}
+    </tbody>
+</table>
+
+<!-- ── Confirmed days ─────────────────────────────────────────────────── -->
+
+<h2>Day-by-day (confirmed parameters)</h2>
+
+{{if .HasConfirmed}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Day</th>
+                <th>Stage</th>
+                <th>Tasks</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .ConfirmedDays}}
+            <tr>
+                <td>{{.DayNum}}</td>
+                <td>{{.Stage}}</td>
+                <td>{{.Tasks}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{else}}
+    <p class="empty">No confirmed day data recorded yet.</p>
+{{end}}
+
+<!-- ── Observations ───────────────────────────────────────────────────── -->
+
+{{if .HasObs}}
+    <h2>Observations</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Day</th>
+                <th>Date</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Observations}}
+            <tr>
+                <td>{{.DayNum}}</td>
+                <td>{{.DateFmt}}</td>
+                <td>{{.Notes}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{end}}
+
+<p style="margin-top:1.5rem;"><a href="/trial" class="btn btn-secondary btn-small">Back to trials</a></p>
+{{end}}

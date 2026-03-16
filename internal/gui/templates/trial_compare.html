@@ -1,0 +1,105 @@
+{{/*
+    trial_compare.html — side-by-side comparison of two trials.
+
+    This is the GUI version of the "compare" flow from cmd_trial.go.
+    Two trials of the same crop are shown in columns so the grower can
+    spot what was different between the two runs.
+
+    Data from handleTrialCompare:
+      .CropName — capitalised crop name shared by both trials
+      .A        — trialViewData for the first trial
+      .B        — trialViewData for the second trial
+*/}}
+
+{{define "trial_compare.html"}}
+<h1>Trial Comparison — {{.CropName}}</h1>
+
+<!-- ── Setup parameters side by side ──────────────────────────────────── -->
+
+<table class="data-table trial-compare-table">
+    <thead>
+        <tr>
+            <th></th>
+            <th>[A] {{.A.DisplayName}}</th>
+            <th>[B] {{.B.DisplayName}}</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td class="trial-label">Status</td>
+            <td><span class="trial-status trial-status-{{.A.Status}}">{{.A.Status}}</span></td>
+            <td><span class="trial-status trial-status-{{.B.Status}}">{{.B.Status}}</span></td></tr>
+        <tr><td class="trial-label">Sown</td><td>{{.A.SowDateFmt}}</td><td>{{.B.SowDateFmt}}</td></tr>
+        <tr><td class="trial-label">Trays</td><td>{{.A.Trays}}</td><td>{{.B.Trays}}</td></tr>
+        <tr><td class="trial-label">Soak</td><td>{{.A.Soak}}</td><td>{{.B.Soak}}</td></tr>
+        <tr><td class="trial-label">Seed g/tray</td><td>{{.A.SeedGrams}}</td><td>{{.B.SeedGrams}}</td></tr>
+        <tr><td class="trial-label">Dirt L/tray</td><td>{{.A.DirtLitres}}</td><td>{{.B.DirtLitres}}</td></tr>
+        <tr><td class="trial-label">Move-to-light</td><td>{{.A.MTLDay}}</td><td>{{.B.MTLDay}}</td></tr>
+        <tr><td class="trial-label">Expected harvest</td><td>{{.A.HarvestDay}}</td><td>{{.B.HarvestDay}}</td></tr>
+        <tr><td class="trial-label">Actual yield</td><td>{{.A.ActualYield}}</td><td>{{.B.ActualYield}}</td></tr>
+    </tbody>
+</table>
+
+<!-- ── Confirmed days ─────────────────────────────────────────────────── -->
+
+<h2>Day-by-day (confirmed parameters)</h2>
+
+{{if or .A.HasConfirmed .B.HasConfirmed}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Day</th>
+                <th>[A] Stage</th>
+                <th>[A] Tasks</th>
+                <th>[B] Stage</th>
+                <th>[B] Tasks</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- We show all days from A, then any extra days from B that A
+                 doesn't have. This keeps the layout simple and readable. -->
+            {{range .A.ConfirmedDays}}
+            <tr>
+                <td>{{.DayNum}}</td>
+                <td>{{.Stage}}</td>
+                <td>{{.Tasks}}</td>
+                <td>—</td>
+                <td>—</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    <p class="field-hint" style="margin-top:0.5rem;">Note: for a full day-by-day comparison, view each trial individually.</p>
+{{else}}
+    <p class="empty">No confirmed day data recorded for either trial.</p>
+{{end}}
+
+<!-- ── Observations ───────────────────────────────────────────────────── -->
+
+{{if or .A.HasObs .B.HasObs}}
+    <h2>Observations</h2>
+
+    {{if .A.HasObs}}
+        <h3 style="color:#999;font-size:0.95rem;margin-top:1rem;">[A] {{.A.DisplayName}}</h3>
+        {{range .A.Observations}}
+            <div class="trial-obs-row">
+                <span class="trial-obs-day">Day {{.DayNum}}</span>
+                <span class="trial-obs-date">{{.DateFmt}}</span>
+                <span>{{.Notes}}</span>
+            </div>
+        {{end}}
+    {{end}}
+
+    {{if .B.HasObs}}
+        <h3 style="color:#999;font-size:0.95rem;margin-top:1rem;">[B] {{.B.DisplayName}}</h3>
+        {{range .B.Observations}}
+            <div class="trial-obs-row">
+                <span class="trial-obs-day">Day {{.DayNum}}</span>
+                <span class="trial-obs-date">{{.DateFmt}}</span>
+                <span>{{.Notes}}</span>
+            </div>
+        {{end}}
+    {{end}}
+{{end}}
+
+<p style="margin-top:1.5rem;"><a href="/trial" class="btn btn-secondary btn-small">Back to trials</a></p>
+{{end}}

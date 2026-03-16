@@ -581,6 +581,196 @@ input:focus, select:focus, textarea:focus {
     padding: 0.5rem 0;
 }
 
+/* ── Trial page ───────────────────────────────────────────────────────────
+   Styles for the trial management dashboard, manage form, view, and compare. */
+
+/* Active trial card — info on the left, "Manage" button on the right */
+.trial-active-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+/* Form rows that put two small fields side by side (e.g. sow date + trays) */
+.trial-form-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.trial-form-row .form-group {
+    flex: 1;
+    min-width: 120px;
+}
+
+/* The collapsible "Optional parameters" section on the new trial form */
+.trial-optional-section {
+    margin: 1rem 0;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.trial-optional-header {
+    background: #242424;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    color: #999999;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.trial-optional-header:hover {
+    color: #4ecca3;
+}
+
+/* Hidden by default; shown when .trial-optional-open is on the parent */
+.trial-optional-body {
+    display: none;
+    padding: 0.75rem 1rem;
+}
+
+.trial-optional-open .trial-optional-body {
+    display: block;
+}
+
+/* Status badges — coloured labels for trial status */
+.trial-status {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.trial-status-active {
+    background: #2a7a5a;
+    color: #4ecca3;
+}
+
+.trial-status-harvested {
+    background: #2d4a3a;
+    color: #7ec8a8;
+}
+
+.trial-status-promoted {
+    background: #3a4a2d;
+    color: #a8c87e;
+}
+
+.trial-status-failed {
+    background: #4a2d2d;
+    color: #e74c3c;
+}
+
+/* ── Trial manage page ────────────────────────────────────────────────── */
+
+/* Each missed day gets its own block with a header and fields */
+.trial-day-block {
+    background: #242424;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.trial-day-header {
+    color: #4ecca3;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+/* The "confirm tasks" checkbox row */
+.trial-confirm-row {
+    margin: 0.5rem 0;
+}
+
+.trial-confirm-row input[type="checkbox"] {
+    width: auto;
+    max-width: none;
+    accent-color: #4ecca3;
+}
+
+/* Stage + tasks fields that appear when confirm is checked */
+.trial-confirm-fields {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+/* Outcome section at the bottom of the manage page */
+.trial-outcome-section {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #333333;
+}
+
+.trial-outcome-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.trial-outcome-form {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #242424;
+    border: 1px solid #333333;
+    border-radius: 6px;
+}
+
+/* ── Trial view page ──────────────────────────────────────────────────── */
+
+/* The label column in the detail table */
+.trial-label {
+    color: #999999;
+    font-weight: 500;
+    width: 160px;
+}
+
+.trial-detail-table {
+    max-width: 500px;
+}
+
+/* ── Trial compare page ───────────────────────────────────────────────── */
+
+.trial-compare-table th:first-child,
+.trial-compare-table td:first-child {
+    width: 160px;
+    color: #999999;
+}
+
+.trial-compare-group {
+    margin-bottom: 2rem;
+}
+
+/* Radio buttons in the compare picker table */
+.trial-compare-group input[type="radio"] {
+    width: auto;
+    max-width: none;
+    accent-color: #4ecca3;
+}
+
+/* Observation rows in compare view */
+.trial-obs-row {
+    padding: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.trial-obs-day {
+    color: #4ecca3;
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+.trial-obs-date {
+    color: #666666;
+    margin-right: 0.5rem;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */

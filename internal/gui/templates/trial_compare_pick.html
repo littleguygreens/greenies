@@ -1,0 +1,68 @@
+{{/*
+    trial_compare_pick.html — picker page for choosing two trials to compare.
+
+    The grower picks a crop (if multiple are eligible), then picks two trials
+    from that crop's history. The page uses simple JavaScript to build the
+    comparison URL and navigate to it.
+
+    Data from handleTrialComparePicker:
+      .Groups    — list of {CropName string, Trials []trialListRow}
+      .HasGroups — true if any crop has 2+ past trials
+*/}}
+
+{{define "trial_compare_pick.html"}}
+<h1>Compare Trials</h1>
+
+{{if not .HasGroups}}
+    <p class="empty">No crops have two or more completed trials yet.</p>
+    <p><a href="/trial" class="btn btn-secondary btn-small">Back to trials</a></p>
+{{else}}
+    <p>Pick two past trials of the same crop to compare them side by side.</p>
+
+    {{range .Groups}}
+    <div class="trial-compare-group">
+        <h2>{{.CropName}}</h2>
+        <form onsubmit="return compareTrials(this);">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>A</th>
+                        <th>B</th>
+                        <th>Trial</th>
+                        <th>Status</th>
+                        <th>Sown</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Trials}}
+                    <tr>
+                        <td><input type="radio" name="trial_a" value="{{.ID}}"></td>
+                        <td><input type="radio" name="trial_b" value="{{.ID}}"></td>
+                        <td>{{.DisplayName}}</td>
+                        <td><span class="trial-status trial-status-{{.Status}}">{{.Status}}</span></td>
+                        <td>{{.SowDateFmt}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.75rem;">Compare</button>
+        </form>
+    </div>
+    {{end}}
+
+    <p style="margin-top:1.5rem;"><a href="/trial" class="btn btn-secondary btn-small">Back to trials</a></p>
+
+    <!-- Small script to build the comparison URL from the selected radio buttons.
+         This runs entirely in the browser — no server request needed. -->
+    <script>
+    function compareTrials(form) {
+        var a = form.querySelector('input[name="trial_a"]:checked');
+        var b = form.querySelector('input[name="trial_b"]:checked');
+        if (!a || !b) { alert('Please select both trial A and trial B.'); return false; }
+        if (a.value === b.value) { alert('Please select two different trials.'); return false; }
+        window.location.href = '/trial/compare?a=' + a.value + '&b=' + b.value;
+        return false;
+    }
+    </script>
+{{end}}
+{{end}}

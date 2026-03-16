@@ -172,6 +172,16 @@ func StartServer(port int) error {
 	mux.HandleFunc("POST /plan/confirm", handlePlanConfirm)
 	mux.HandleFunc("GET /harvest", handleHarvestPage)
 	mux.HandleFunc("POST /harvest", handleHarvestAction)
+	mux.HandleFunc("GET /trial", handleTrialPage)
+	mux.HandleFunc("POST /trial/new", handleTrialNew)
+	mux.HandleFunc("GET /trial/manage", handleTrialManage)
+	mux.HandleFunc("POST /trial/manage", handleTrialManageAction)
+	mux.HandleFunc("POST /trial/outcome", handleTrialOutcome)
+	mux.HandleFunc("POST /trial/promote", handleTrialPromote)
+	mux.HandleFunc("POST /trial/discard", handleTrialDiscard)
+	mux.HandleFunc("GET /trial/view", handleTrialView)
+	mux.HandleFunc("GET /trial/compare", handleTrialCompare)
+	mux.HandleFunc("GET /trial/compare-pick", handleTrialComparePicker)
 
 	// Step 3: Start listening for requests.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
