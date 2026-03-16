@@ -1,0 +1,236 @@
+{{/*
+    sync.html — the Google Calendar sync page.
+
+    This is the GUI equivalent of "greenies sync" in the terminal. One button
+    pushes the entire schedule to Google Tasks and Google Calendar.
+
+    The sync can take a minute or two because it makes many individual API
+    calls to Google (deleting old entries, creating new ones). While it's
+    working, a live stopwatch ticks on screen — just like the CLI version —
+    so the grower knows it hasn't frozen.
+
+    How the timer works:
+      - When the grower clicks "Sync Now", a small JavaScript function starts
+        a 1-second interval that updates the timer display.
+      - htmx sends the POST request to /sync in the background.
+      - When the server responds (success or error), htmx swaps in the result
+        HTML, which replaces the timer — so it stops automatically.
+
+    Data passed from the handler (handleSyncPage in handlers.go):
+      .CredentialsExist — whether credentials.json is set up in ~/.greenies/
+*/}}
+
+{{define "sync.html"}}
+<h1>Sync to Google</h1>
+
+<div id="sync-area">
+    {{if .CredentialsExist}}
+        <p>Push your current schedule to Google Calendar and Google Tasks.</p>
+        <p class="task-notes">
+            This creates one task-list entry per day (checkable to-dos) and one
+            calendar event per day (with the full farm snapshot in the description).
+            Running it multiple times is safe — duplicates are automatically removed.
+        </p>
+
+        <!-- hx-post sends a POST request to /sync when clicked.
+             hx-target tells htmx to replace the content of #sync-area with
+             the response (the success/error fragment).
+             hx-disabled-elt disables the button while the request is running
+             so the grower can't accidentally click it twice. -->
+        <button id="sync-btn"
+                class="btn btn-primary"
+                hx-post="/sync"
+                hx-target="#sync-area"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this">
+            Sync Now
+        </button>
+
+        <!-- The timer area is hidden by default (display:none). The JavaScript
+             below makes it visible when the sync starts, then htmx replaces
+             the whole #sync-area with the result when the response arrives —
+             so the timer disappears on its own. -->
+        <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
+            <p>Syncing with Google...</p>
+            <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
+                ⏱ <span id="sync-elapsed">0s</span>
+            </p>
+        </div>
+
+        <!-- This script runs the live stopwatch. It's a small piece of
+             JavaScript (a programming language that runs inside the browser)
+             that listens for htmx events and updates the timer display.
+
+             htmx fires two events we care about:
+               htmx:beforeRequest — the request is about to be sent
+               htmx:afterRequest  — the response has arrived
+
+             We use the first one to start the clock and the second to stop it.
+             In practice, the "stop" event doesn't matter much because htmx
+             replaces the entire #sync-area (including this script) with the
+             result HTML — so the timer element just disappears. But we clean
+             up the interval anyway, just to be tidy. -->
+        <script>
+            (function() {
+                // Get references to the HTML elements we need to interact with.
+                var btn = document.getElementById("sync-btn");
+                var timerBox = document.getElementById("sync-timer");
+                var elapsedSpan = document.getElementById("sync-elapsed");
+                // "intervalId" will hold a reference to the ticking clock so
+                // we can stop it later. null means the clock isn't running.
+                var intervalId = null;
+
+                // Listen for the "request is about to be sent" event on the
+                // sync button. This fires the moment the grower clicks "Sync Now".
+                btn.addEventListener("htmx:beforeRequest", function() {
+                    // Show the timer area.
+                    timerBox.style.display = "block";
+
+                    // Record the current time so we can calculate elapsed seconds.
+                    var startTime = Date.now();
+
+                    // Start a repeating clock that fires once per second.
+                    // setInterval(function, milliseconds) calls the function
+                    // repeatedly at the given interval. 1000ms = 1 second.
+                    intervalId = setInterval(function() {
+                        // Calculate how many whole seconds have passed.
+                        // Math.floor rounds down (e.g. 3.7 → 3).
+                        var seconds = Math.floor((Date.now() - startTime) / 1000);
+
+                        // If it's been more than 60 seconds, show minutes too.
+                        // For example: "1m 23s" instead of "83s".
+                        if (seconds >= 60) {
+                            var minutes = Math.floor(seconds / 60);
+                            var remainSeconds = seconds % 60;
+                            elapsedSpan.textContent = minutes + "m " + remainSeconds + "s";
+                        } else {
+                            elapsedSpan.textContent = seconds + "s";
+                        }
+                    }, 1000);
+                });
+
+                // Listen for the "response has arrived" event. Clean up the
+                // interval so it stops ticking. (htmx is about to replace
+                // the whole #sync-area anyway, but this is good housekeeping.)
+                btn.addEventListener("htmx:afterRequest", function() {
+                    if (intervalId !== null) {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
+                });
+            })();
+        </script>
+    {{else}}
+        <div class="clear-warning">
+            <p>Google Calendar is not set up.</p>
+            <p>Place <code>credentials.json</code> in <code>~/.greenies/</code> to enable calendar sync.</p>
+            <p>See the Phase 5 setup notes for instructions.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{/*
+    sync_result.html — htmx fragment shown after a sync completes.
+    Replaces the button + timer area with a success or error message.
+
+    Because this fragment replaces everything inside #sync-area, the timer
+    script from the main page is gone — no cleanup needed.
+*/}}
+{{define "sync_result.html"}}
+{{if .Error}}
+    <div class="clear-warning">
+        <p><strong>Sync failed:</strong> {{.Error}}</p>
+        <p>Check your internet connection and try again.</p>
+    </div>
+
+    <!-- Let the grower retry without reloading the page. Same htmx pattern
+         as the original button — posts to /sync, replaces #sync-area. -->
+    <button id="sync-btn"
+            class="btn btn-primary"
+            hx-post="/sync"
+            hx-target="#sync-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            style="margin-top: 1rem;">
+        Retry
+    </button>
+
+    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
+        <p>Syncing with Google...</p>
+        <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
+            ⏱ <span id="sync-elapsed">0s</span>
+        </p>
+    </div>
+
+    <script>
+        (function() {
+            var btn = document.getElementById("sync-btn");
+            var timerBox = document.getElementById("sync-timer");
+            var elapsedSpan = document.getElementById("sync-elapsed");
+            var intervalId = null;
+            btn.addEventListener("htmx:beforeRequest", function() {
+                timerBox.style.display = "block";
+                var startTime = Date.now();
+                intervalId = setInterval(function() {
+                    var seconds = Math.floor((Date.now() - startTime) / 1000);
+                    if (seconds >= 60) {
+                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
+                    } else {
+                        elapsedSpan.textContent = seconds + "s";
+                    }
+                }, 1000);
+            });
+            btn.addEventListener("htmx:afterRequest", function() {
+                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+            });
+        })();
+    </script>
+{{else}}
+    <div class="clear-success">
+        <p>Sync complete! Finished in {{.Elapsed}}.</p>
+        <p class="task-notes">Your Google Calendar and Google Tasks are up to date.</p>
+    </div>
+
+    <button id="sync-btn"
+            class="btn btn-primary"
+            hx-post="/sync"
+            hx-target="#sync-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            style="margin-top: 1rem;">
+        Sync Again
+    </button>
+
+    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
+        <p>Syncing with Google...</p>
+        <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
+            ⏱ <span id="sync-elapsed">0s</span>
+        </p>
+    </div>
+
+    <script>
+        (function() {
+            var btn = document.getElementById("sync-btn");
+            var timerBox = document.getElementById("sync-timer");
+            var elapsedSpan = document.getElementById("sync-elapsed");
+            var intervalId = null;
+            btn.addEventListener("htmx:beforeRequest", function() {
+                timerBox.style.display = "block";
+                var startTime = Date.now();
+                intervalId = setInterval(function() {
+                    var seconds = Math.floor((Date.now() - startTime) / 1000);
+                    if (seconds >= 60) {
+                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
+                    } else {
+                        elapsedSpan.textContent = seconds + "s";
+                    }
+                }, 1000);
+            });
+            btn.addEventListener("htmx:afterRequest", function() {
+                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+            });
+        })();
+    </script>
+{{end}}
+{{end}}

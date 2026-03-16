@@ -37,6 +37,19 @@
          without a full reload. The "defer" attribute means it loads after
          the HTML is parsed, so the page appears faster. -->
     <script src="/static/htmx.min.js" defer></script>
+
+    <!-- Heartbeat — tell the server "I'm still open" every 2 seconds.
+         When the grower closes this browser window, the pings stop, and the
+         server automatically shuts itself down after a few seconds. This
+         means the grower doesn't need to go back to the terminal and press
+         Ctrl+C — closing the window is enough.
+
+         "fetch" is a built-in browser function that sends an HTTP request.
+         "setInterval" calls a function repeatedly at the given interval
+         (2000 milliseconds = 2 seconds). -->
+    <script>
+        setInterval(function() { fetch("/heartbeat"); }, 2000);
+    </script>
 </head>
 <body>
     <div class="app">

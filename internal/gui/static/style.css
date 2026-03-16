@@ -888,3 +888,17 @@ input:focus, select:focus, textarea:focus {
         padding: 1rem;
     }
 }
+
+/* ── htmx indicator ────────────────────────────────────────────────────────
+   Elements with the "htmx-indicator" class are hidden by default. When htmx
+   starts a request, it adds the "htmx-request" class to the indicator element,
+   which makes it visible. When the request finishes, it removes the class and
+   the element hides again. This gives the grower a "working..." message while
+   long operations like Google Calendar sync are running.
+*/
+.htmx-indicator {
+    display: none;
+}
+.htmx-indicator.htmx-request {
+    display: block;
+}

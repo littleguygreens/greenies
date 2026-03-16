@@ -15,6 +15,7 @@ package gui
 
 import (
 	"bytes"
+	"context" // for graceful server shutdown
 	"embed"
 	"fmt"
 	"html/template"
@@ -23,6 +24,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"  // for sync.Mutex — a lock that prevents two things from reading/writing at the same time
+	"time"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,12 +130,75 @@ func renderFragment(w http.ResponseWriter, name string, data any) {
 // Server
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Heartbeat — automatic shutdown when the browser window is closed
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The browser page sends a tiny "I'm still here" ping to /heartbeat every 2
+// seconds (see the <script> in layout.html). A background goroutine on the
+// server watches for these pings. If none arrive for 6 seconds (3 missed
+// beats), the server assumes the browser window was closed and shuts itself
+// down cleanly — no need to press Ctrl+C in the terminal.
+//
+// Think of it like a dead man's switch: as long as someone is watching, the
+// server stays alive. The moment nobody is watching, it stops on its own.
+
+// heartbeatTimeout is how long the server waits without a ping before it
+// decides the browser is gone and shuts down. 6 seconds = 3 missed pings
+// (since pings come every 2 seconds). This gives plenty of margin for a
+// slow page load or brief network hiccup.
+const heartbeatTimeout = 6 * time.Second
+
+// lastHeartbeat records the time of the most recent ping from the browser.
+// Protected by heartbeatMu because the HTTP handler (which receives pings)
+// and the watcher goroutine (which checks the timestamp) run at the same
+// time — without the lock, they could read/write simultaneously and cause
+// unpredictable behaviour.
+var lastHeartbeat time.Time
+var heartbeatMu sync.Mutex
+
+// recordHeartbeat updates the last-seen timestamp. Called by the /heartbeat
+// HTTP handler every time the browser pings.
+func recordHeartbeat() {
+	heartbeatMu.Lock()
+	lastHeartbeat = time.Now()
+	heartbeatMu.Unlock()
+}
+
+// heartbeatExpired checks whether the browser has gone silent for too long.
+// Called by the watcher goroutine to decide whether to shut down.
+func heartbeatExpired() bool {
+	heartbeatMu.Lock()
+	elapsed := time.Since(lastHeartbeat)
+	heartbeatMu.Unlock()
+	return elapsed > heartbeatTimeout
+}
+
+// watchHeartbeat runs in the background and checks every 2 seconds whether
+// the browser is still pinging. If the heartbeat has expired, it tells the
+// server to shut down gracefully — meaning it finishes any in-progress
+// request (like a sync) before stopping, rather than cutting it off mid-way.
+func watchHeartbeat(server *http.Server) {
+	for {
+		time.Sleep(2 * time.Second)
+		if heartbeatExpired() {
+			fmt.Println("\nBrowser window closed — shutting down.")
+			// context.Background() means "take as long as you need" for the
+			// graceful shutdown. In practice it's nearly instant because
+			// there are no active requests (the browser is gone).
+			_ = server.Shutdown(context.Background())
+			return
+		}
+	}
+}
+
 // StartServer launches the web server on the given port. This is the main
 // entry point called by cmd_gui.go when the user runs "greenies gui".
 //
 // It loads templates, registers URL routes (which URL goes to which handler
 // function), and starts listening for browser requests. The server runs
-// until the user presses Ctrl+C in the terminal.
+// until the browser window is closed or the user presses Ctrl+C in the
+// terminal — whichever comes first.
 func StartServer(port int) error {
 	// Step 1: Load all HTML templates into memory.
 	if err := loadTemplates(); err != nil {
@@ -151,6 +217,14 @@ func StartServer(port int) error {
 		return fmt.Errorf("failed to set up static files: %w", err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+
+	// ── Heartbeat endpoint ───────────────────────────────────────────────
+	// The browser pings this every 2 seconds to say "I'm still open."
+	// The handler just records the timestamp — no response body needed.
+	mux.HandleFunc("GET /heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		recordHeartbeat()
+		w.WriteHeader(http.StatusOK)
+	})
 
 	// ── Page routes ──────────────────────────────────────────────────────
 	// Each line maps a URL to a handler function defined in handlers.go.
@@ -187,16 +261,44 @@ func StartServer(port int) error {
 	mux.HandleFunc("POST /adjust/preview", handleAdjustPreview)
 	mux.HandleFunc("POST /adjust/confirm", handleAdjustConfirm)
 
-	// Step 3: Start listening for requests.
+	mux.HandleFunc("GET /sync", handleSyncPage)
+	mux.HandleFunc("POST /sync", handleSyncAction)
+
+	// Step 3: Create the server and start listening.
+	// We use http.Server (instead of the simpler http.ListenAndServe) so
+	// that we can call server.Shutdown() later — that's what lets us stop
+	// the server cleanly when the browser window is closed.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
 	fmt.Printf("Greenies GUI running at http://%s\n", addr)
-	fmt.Println("Press Ctrl+C to stop the server.")
+	fmt.Println("Close the browser window or press Ctrl+C to stop.")
 
 	// Try to open the browser automatically. If it fails, no big deal —
 	// the user can copy the URL from the terminal.
 	go openBrowser(fmt.Sprintf("http://%s", addr))
 
-	return http.ListenAndServe(addr, mux)
+	// Set the initial heartbeat to now so the watcher doesn't immediately
+	// shut down before the browser has had time to load and start pinging.
+	recordHeartbeat()
+
+	// Start the heartbeat watcher in the background. It will call
+	// server.Shutdown() if the browser stops pinging.
+	go watchHeartbeat(server)
+
+	// ListenAndServe blocks (waits) until the server is shut down.
+	// When server.Shutdown() is called (by the heartbeat watcher or
+	// Ctrl+C), ListenAndServe returns http.ErrServerClosed — which is
+	// not a real error, just Go's way of saying "the server stopped
+	// because you asked it to."
+	err = server.ListenAndServe()
+	if err == http.ErrServerClosed {
+		return nil // Clean shutdown — not an error.
+	}
+	return err
 }
 
 // openBrowser tries to open the given URL in a borderless "app" window.

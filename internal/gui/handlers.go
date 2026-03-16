@@ -10,6 +10,7 @@
 package gui
 
 import (
+	"context" // for context.Background(), used when calling Google Calendar
 	"fmt"
 	"math"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/checker"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
+	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -3252,4 +3254,69 @@ func removeTrialTentativeTasks(tr *trial.TrialRecord) {
 		remaining = append(remaining, t)
 	}
 	_ = store.Save(remaining)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync
+// ─────────────────────────────────────────────────────────────────────────────
+
+// handleSyncPage renders the sync page (GET /sync).
+//
+// It checks whether Google Calendar credentials are set up and shows either
+// the "Sync Now" button or a message explaining how to set up credentials.
+// This is the GUI equivalent of the first few lines of "greenies sync".
+func handleSyncPage(w http.ResponseWriter, r *http.Request) {
+	renderPage(w, "sync.html", map[string]any{
+		"CredentialsExist": gcal.CredentialsExist(),
+	})
+}
+
+// handleSyncAction performs the actual Google Calendar sync (POST /sync).
+//
+// This does the same thing as "greenies sync" in the terminal:
+//   1. Loads all tasks, farm layout, and cycle records from disk
+//   2. Connects to Google Calendar and Google Tasks
+//   3. Deletes old entries and creates fresh ones for every upcoming day
+//
+// The response is an htmx fragment (just a piece of HTML, not a full page)
+// that replaces the button area with a success or error message.
+func handleSyncAction(w http.ResponseWriter, r *http.Request) {
+	// Load the schedule and farm data — same as cmd_sync.go does.
+	tasks, err := store.Load()
+	if err != nil {
+		renderFragment(w, "sync_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not load tasks: %v", err),
+		})
+		return
+	}
+
+	envs, _ := farm.LoadConfig()
+	cycles, _ := farm.LoadCycles()
+
+	// Connect to Google. context.Background() means "no deadline, no
+	// cancellation" — fine for a user-initiated action they're waiting on.
+	ctx := context.Background()
+	exporter, err := gcal.NewExporter(ctx)
+	if err != nil {
+		renderFragment(w, "sync_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not connect to Google: %v", err),
+		})
+		return
+	}
+
+	// Run the sync and measure how long it takes.
+	syncStart := time.Now()
+	err = exporter.Sync(tasks, envs, cycles)
+	elapsed := time.Since(syncStart).Round(time.Second)
+
+	if err != nil {
+		renderFragment(w, "sync_result.html", map[string]any{
+			"Error": fmt.Sprintf("%v", err),
+		})
+		return
+	}
+
+	renderFragment(w, "sync_result.html", map[string]any{
+		"Elapsed": elapsed.String(),
+	})
 }
