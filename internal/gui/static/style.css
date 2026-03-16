@@ -6,9 +6,20 @@
 
    Design goals:
      - Clean and readable on any screen size (desktop or phone in the greenhouse)
-     - Dark-ish background that is easy on the eyes
-     - Green accents to match the farm theme
+     - Dark background with green accents to match the farm theme
+     - Quicksand font (loaded from Google Fonts, falls back to system font offline)
      - Simple enough that anyone can modify it
+
+   Colour palette:
+     - Background:    #1a1a1a (near black)
+     - Surfaces:      #242424 (dark grey — sidebar, cards, pre blocks)
+     - Borders:       #333333 (medium grey)
+     - Text:          #f0f0f0 (near white)
+     - Secondary:     #999999 (grey — labels, notes, nav links)
+     - Muted:         #666666 (dark grey — IDs, empty states)
+     - Primary green: #4ecca3 (headings, accents, active buttons)
+     - Hover green:   #3dbb91 (slightly darker for hover states)
+     - Dark green:    #2a7a5a (subtle backgrounds)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Reset ─────────────────────────────────────────────────────────────────
@@ -21,11 +32,12 @@
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────────
-   The overall page: dark background, light text, readable font. */
+   The overall page: dark background, light text, Quicksand font.
+   If Quicksand hasn't loaded (offline), the browser uses the system font. */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #e0e0e0;
+    font-family: "Quicksand", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a1a;
+    color: #f0f0f0;
     line-height: 1.6;
     min-height: 100vh;
 }
@@ -42,34 +54,35 @@ body {
    The sidebar with links to every page. Always visible. */
 .nav {
     width: 200px;
-    background: #16213e;
+    background: #242424;
     padding: 1rem;
     flex-shrink: 0;
-    border-right: 1px solid #0f3460;
+    border-right: 1px solid #333333;
 }
 
 .nav-title {
     color: #4ecca3;
     font-size: 1.2rem;
-    font-weight: bold;
+    font-weight: 700;
     margin-bottom: 1.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid #333333;
 }
 
 .nav a {
     display: block;
-    color: #a0a0b8;
+    color: #999999;
     text-decoration: none;
     padding: 0.4rem 0.6rem;
     border-radius: 4px;
     margin-bottom: 0.2rem;
     font-size: 0.9rem;
+    font-weight: 500;
 }
 
 .nav a:hover,
 .nav a.active {
-    background: #0f3460;
+    background: #333333;
     color: #4ecca3;
 }
 
@@ -84,14 +97,16 @@ body {
 h1 {
     color: #4ecca3;
     font-size: 1.5rem;
+    font-weight: 700;
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid #333333;
 }
 
 h2 {
-    color: #a0a0b8;
+    color: #999999;
     font-size: 1.1rem;
+    font-weight: 600;
     margin: 1.5rem 0 0.75rem;
 }
 
@@ -99,8 +114,8 @@ h2 {
    Used for the farm snapshot, which is plain text formatted with spaces
    and dashes, just like the terminal output. */
 pre {
-    background: #16213e;
-    border: 1px solid #0f3460;
+    background: #242424;
+    border: 1px solid #333333;
     border-radius: 6px;
     padding: 1rem;
     overflow-x: auto;
@@ -114,26 +129,26 @@ pre {
 /* ── Task cards ────────────────────────────────────────────────────────────
    Each task appears as a small card with title, notes, and ID. */
 .task-card {
-    background: #16213e;
-    border: 1px solid #0f3460;
+    background: #242424;
+    border: 1px solid #333333;
     border-radius: 6px;
     padding: 0.75rem 1rem;
     margin-bottom: 0.5rem;
 }
 
 .task-title {
-    color: #e0e0e0;
+    color: #f0f0f0;
     font-weight: 600;
 }
 
 .task-notes {
-    color: #a0a0b8;
+    color: #999999;
     font-size: 0.85rem;
     margin-top: 0.25rem;
 }
 
 .task-id {
-    color: #666;
+    color: #666666;
     font-size: 0.75rem;
     margin-top: 0.25rem;
     font-family: monospace;
@@ -149,12 +164,12 @@ pre {
     cursor: pointer;
     text-decoration: none;
     font-family: inherit;
+    font-weight: 600;
 }
 
 .btn-primary {
     background: #4ecca3;
-    color: #1a1a2e;
-    font-weight: 600;
+    color: #1a1a1a;
 }
 
 .btn-primary:hover {
@@ -173,15 +188,16 @@ pre {
 /* ── Forms ──────────────────────────────────────────────────────────────── */
 label {
     display: block;
-    color: #a0a0b8;
+    color: #999999;
     font-size: 0.85rem;
+    font-weight: 500;
     margin-bottom: 0.25rem;
 }
 
 input, select, textarea {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    color: #e0e0e0;
+    background: #242424;
+    border: 1px solid #333333;
+    color: #f0f0f0;
     padding: 0.5rem;
     border-radius: 4px;
     font-size: 0.9rem;
@@ -199,11 +215,185 @@ input:focus, select:focus, textarea:focus {
     margin-bottom: 1rem;
 }
 
+/* ── Secondary / toggle buttons ───────────────────────────────────────────
+   Used for the week/month toggle on the calendar page. The "active" button
+   is highlighted green; the inactive one is a muted outline style. */
+.btn-secondary {
+    background: transparent;
+    color: #999999;
+    border: 1px solid #333333;
+}
+
+.btn-secondary:hover {
+    border-color: #4ecca3;
+    color: #4ecca3;
+}
+
+.btn-active {
+    background: #4ecca3;
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+/* Toggle bar — a row of buttons for switching views */
+.toggle-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* ── Form rows ────────────────────────────────────────────────────────────
+   Puts a form field and button on the same line (e.g. date picker + Go). */
+.form-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.form-row .form-group {
+    margin-bottom: 0;
+}
+
+/* ── Day cards ────────────────────────────────────────────────────────────
+   On the calendar page, each day gets a card with a heading and task list.
+   The heading shows the date, and task cards are nested inside. */
+.day-card {
+    margin-bottom: 1.5rem;
+}
+
+.day-heading {
+    color: #4ecca3;
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #333333;
+    margin-bottom: 0.5rem;
+}
+
+.empty-day {
+    color: #666666;
+    font-size: 0.85rem;
+    font-style: italic;
+    padding: 0.25rem 0;
+}
+
+/* ── Data tables ──────────────────────────────────────────────────────────
+   Used for the crop library and harvest log. Simple bordered table with
+   alternating row colours for readability. */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.data-table th {
+    text-align: left;
+    color: #4ecca3;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid #333333;
+}
+
+.data-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #333333;
+}
+
+/* Every other row gets a slightly lighter background so rows are easy to
+   follow with your eyes, like a ruled ledger book. */
+.data-table tbody tr:nth-child(even) {
+    background: #242424;
+}
+
+/* Muted text for secondary info in table cells (e.g. "/ 1400g expected") */
+.expected-note {
+    color: #666666;
+    font-size: 0.8rem;
+}
+
 /* ── Empty state ───────────────────────────────────────────────────────── */
 .empty {
-    color: #666;
+    color: #666666;
     font-style: italic;
     padding: 1rem 0;
+}
+
+/* ── Delete page ──────────────────────────────────────────────────────────
+   Task cards on the delete page have the task info on the left and a
+   delete button on the right. */
+.task-delete-row {
+    transition: opacity 0.3s ease;
+}
+
+.task-delete-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.task-delete-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Small variant of the button — used on task rows so the button
+   doesn't dominate the card. */
+.btn-small {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+}
+
+/* The task-vs-cycle choice that appears after clicking "Delete…" */
+.delete-choice {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* Brief message shown after a cycle deletion (e.g. "8 tasks deleted") */
+.delete-message {
+    color: #4ecca3;
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+    font-style: italic;
+}
+
+/* ── Clear page ───────────────────────────────────────────────────────────
+   Warning box with red accent to make it clear this is destructive. */
+.clear-warning {
+    background: #242424;
+    border: 1px solid #e74c3c;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.clear-warning p {
+    margin-bottom: 0.5rem;
+}
+
+.clear-warning ul {
+    list-style: none;
+    margin: 0.5rem 0;
+    padding-left: 0;
+}
+
+.clear-warning li {
+    padding: 0.15rem 0;
+}
+
+.clear-success {
+    padding: 1rem 0;
+}
+
+.clear-success p {
+    margin-bottom: 0.5rem;
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────────
@@ -216,7 +406,7 @@ input:focus, select:focus, textarea:focus {
     .nav {
         width: 100%;
         border-right: none;
-        border-bottom: 1px solid #0f3460;
+        border-bottom: 1px solid #333333;
         display: flex;
         flex-wrap: wrap;
         align-items: center;

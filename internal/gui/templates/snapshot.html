@@ -1,0 +1,40 @@
+{{/*
+    snapshot.html — the farm snapshot page.
+
+    Shows the same text snapshot as "greenies snapshot" in the terminal,
+    wrapped in a <pre> block to preserve the spacing and dashes.
+
+    A date picker at the top lets the grower look at past or future
+    snapshots without typing a date — just click the calendar icon,
+    pick a date, and the page reloads with that day's farm view.
+
+    Data passed from the handler (handleSnapshot in handlers.go):
+      .Date        — human-readable date like "Sunday, 15 March 2026"
+      .DateValue   — machine-readable date like "2026-03-15" (for the picker)
+      .Snapshot    — the farm snapshot as plain text
+      .HasSnapshot — true if the snapshot loaded successfully
+*/}}
+
+{{define "snapshot.html"}}
+<h1>Farm Snapshot</h1>
+
+<!-- Date picker form. When the grower picks a date and clicks "Go",
+     the browser reloads the page with ?date=YYYY-MM-DD in the URL.
+     The handler reads that parameter and renders the snapshot for
+     that specific day. -->
+<form method="GET" action="/snapshot" class="form-row">
+    <div class="form-group">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" value="{{.DateValue}}">
+    </div>
+    <button type="submit" class="btn btn-primary">Go</button>
+</form>
+
+<h2>{{.Date}}</h2>
+
+{{if .HasSnapshot}}
+    <pre>{{.Snapshot}}</pre>
+{{else}}
+    <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
+{{end}}
+{{end}}

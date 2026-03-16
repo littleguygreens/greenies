@@ -1,0 +1,49 @@
+{{/*
+    list.html — the calendar view page.
+
+    Shows tasks grouped by day, like a wall calendar. Each day appears
+    as a card with all its tasks listed inside.
+
+    Two view modes:
+      - Week: today + 6 days (7 days total)
+      - Month: every day in the current calendar month
+
+    The grower switches between views by clicking the Week or Month
+    button. The currently active button is highlighted.
+
+    Data passed from the handler (handleList in handlers.go):
+      .Mode — "week" or "month"
+      .Days — list of dayCard structs, each with DateHeading, Tasks, HasTasks
+*/}}
+
+{{define "list.html"}}
+<h1>Calendar</h1>
+
+<!-- View mode toggle. Each button links to the same page with a
+     different ?mode= parameter. The active button gets the
+     "btn-active" class so it looks pressed. -->
+<div class="toggle-bar">
+    <a href="/list?mode=week" class="btn {{if eq .Mode "week"}}btn-active{{else}}btn-secondary{{end}}">Week</a>
+    <a href="/list?mode=month" class="btn {{if eq .Mode "month"}}btn-active{{else}}btn-secondary{{end}}">Month</a>
+</div>
+
+<!-- One card per day in the range -->
+{{range .Days}}
+    <div class="day-card">
+        <div class="day-heading">{{.DateHeading}}</div>
+        {{if .HasTasks}}
+            {{range .Tasks}}
+                <div class="task-card">
+                    <div class="task-title">{{.Title}}</div>
+                    {{if .Notes}}
+                        <div class="task-notes">{{.Notes}}</div>
+                    {{end}}
+                    <div class="task-id">ID: {{.ID}}</div>
+                </div>
+            {{end}}
+        {{else}}
+            <p class="empty-day">(no tasks)</p>
+        {{end}}
+    </div>
+{{end}}
+{{end}}

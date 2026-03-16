@@ -1,0 +1,124 @@
+{{/*
+    delete.html — the task deletion page.
+
+    Shows all tasks grouped by date, similar to the calendar view, but
+    each task has a "Delete" button. When clicked:
+
+      - If the task is NOT part of a crop cycle: it is deleted immediately
+        and the task card disappears (htmx removes the row).
+
+      - If the task IS part of a crop cycle: the button area changes to
+        show two choices — "Just this task" or "Whole cycle (N tasks)".
+        The grower picks one, and the relevant tasks are deleted.
+
+    This is the GUI equivalent of "greenies delete" in the terminal,
+    but much easier to use — no need to type task IDs.
+
+    Data passed from the handler (handleDeletePage in handlers.go):
+      .Days     — list of deleteDay structs (DateHeading, Tasks)
+      .HasTasks — true if there are any tasks at all
+      .Count    — total number of tasks
+*/}}
+
+{{define "delete.html"}}
+<h1>Delete Tasks</h1>
+
+{{if .HasTasks}}
+    <p>{{.Count}} tasks total. Click the delete button to remove a task.</p>
+
+    {{range .Days}}
+        <div class="day-card">
+            <div class="day-heading">{{.DateHeading}}</div>
+            {{range .Tasks}}
+                <!-- Each task card has an ID so htmx can target and remove it
+                     after deletion. The id="task-xxx" lets us say "remove this
+                     specific card from the page" without reloading everything. -->
+                <div class="task-card task-delete-row" id="task-{{.ID}}">
+                    <div class="task-delete-content">
+                        <div>
+                            <div class="task-title">{{.Title}}</div>
+                            {{if .Notes}}
+                                <div class="task-notes">{{.Notes}}</div>
+                            {{end}}
+                            <div class="task-id">ID: {{.ID}}</div>
+                        </div>
+                        <div class="task-delete-actions">
+                            {{if .HasCycle}}
+                                <!-- This task belongs to a crop cycle. Show a button
+                                     that reveals the task-vs-cycle choice. -->
+                                <button class="btn btn-danger btn-small"
+                                        hx-get="/delete/confirm?id={{.ID}}"
+                                        hx-target="#actions-{{.ID}}"
+                                        hx-swap="innerHTML">
+                                    Delete…
+                                </button>
+                                <span id="actions-{{.ID}}"></span>
+                            {{else}}
+                                <!-- No cycle — delete immediately on click.
+                                     hx-delete sends the request; hx-target + hx-swap
+                                     tells htmx to remove the whole task card. The
+                                     "closest .task-delete-row" selector means "find
+                                     the nearest parent with this class and remove it." -->
+                                <button class="btn btn-danger btn-small"
+                                        hx-post="/delete"
+                                        hx-vals='{"id": "{{.ID}}", "mode": "task"}'
+                                        hx-target="closest .task-delete-row"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="Delete this task?">
+                                    Delete
+                                </button>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            {{end}}
+        </div>
+    {{end}}
+{{else}}
+    <p class="empty">No tasks to delete. The calendar is empty.</p>
+{{end}}
+{{end}}
+
+{{/*
+    delete_confirm.html — htmx fragment shown when "Delete…" is clicked
+    on a cycle task. It replaces the button area with two choices.
+
+    Data:
+      .ID         — the task's ID
+      .CycleCount — how many tasks share this cycle
+*/}}
+{{define "delete_confirm.html"}}
+<span class="delete-choice">
+    <button class="btn btn-danger btn-small"
+            hx-post="/delete"
+            hx-vals='{"id": "{{.ID}}", "mode": "task"}'
+            hx-target="#task-{{.ID}}"
+            hx-swap="outerHTML">
+        Just this task
+    </button>
+    <button class="btn btn-danger btn-small"
+            hx-post="/delete"
+            hx-vals='{"id": "{{.ID}}", "mode": "cycle"}'
+            hx-target="#task-{{.ID}}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete the entire cycle ({{.CycleCount}} tasks)?">
+        Whole cycle ({{.CycleCount}})
+    </button>
+    <button class="btn btn-secondary btn-small"
+            onclick="this.parentElement.innerHTML=''">
+        Cancel
+    </button>
+</span>
+{{end}}
+
+{{/*
+    delete_success.html — htmx fragment returned after a successful deletion.
+    It replaces the deleted task card. If it was a single task deletion, this
+    is just empty (the card disappears). For cycle deletions, we show a brief
+    confirmation message that fades away.
+*/}}
+{{define "delete_success.html"}}
+{{if .Message}}
+    <div class="delete-message">{{.Message}}</div>
+{{end}}
+{{end}}

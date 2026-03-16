@@ -158,6 +158,15 @@ func StartServer(port int) error {
 	// POST = the browser is sending data (form submission, button click).
 
 	mux.HandleFunc("GET /{$}", handleDashboard)
+	mux.HandleFunc("GET /snapshot", handleSnapshot)
+	mux.HandleFunc("GET /list", handleList)
+	mux.HandleFunc("GET /crops", handleCrops)
+	mux.HandleFunc("GET /harvestlog", handleHarvestLog)
+	mux.HandleFunc("GET /delete", handleDeletePage)
+	mux.HandleFunc("GET /delete/confirm", handleDeleteConfirm)
+	mux.HandleFunc("POST /delete", handleDeleteAction)
+	mux.HandleFunc("GET /clear", handleClearPage)
+	mux.HandleFunc("POST /clear", handleClearAction)
 
 	// Step 3: Start listening for requests.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

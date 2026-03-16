@@ -1,0 +1,55 @@
+{{/*
+    clear.html — the "clear all" page.
+
+    This is the nuclear option — it wipes every task and every cycle record
+    from the system. The harvest log is NOT touched (that's permanent history).
+
+    The page shows a big warning and requires the grower to click a confirm
+    button. After clearing, it shows a success message.
+
+    This is the GUI equivalent of "greenies clear" in the terminal.
+
+    Data passed from the handler (handleClearPage in handlers.go):
+      .TaskCount  — number of tasks that will be deleted
+      .CycleCount — number of cycle records that will be deleted
+*/}}
+
+{{define "clear.html"}}
+<h1>Clear All Tasks</h1>
+
+<div id="clear-area">
+    {{if gt .TaskCount 0}}
+        <div class="clear-warning">
+            <p>This will permanently delete:</p>
+            <ul>
+                <li><strong>{{.TaskCount}}</strong> calendar tasks</li>
+                <li><strong>{{.CycleCount}}</strong> cycle records</li>
+            </ul>
+            <p>The harvest log will NOT be affected — that history is permanent.</p>
+            <p>This cannot be undone.</p>
+        </div>
+
+        <button class="btn btn-danger"
+                hx-post="/clear"
+                hx-target="#clear-area"
+                hx-swap="innerHTML"
+                hx-confirm="Are you sure? This deletes ALL tasks and cycle records.">
+            Clear Everything
+        </button>
+    {{else}}
+        <p class="empty">Nothing to clear — the calendar is already empty.</p>
+    {{end}}
+</div>
+{{end}}
+
+{{/*
+    clear_success.html — htmx fragment shown after a successful clear.
+    Replaces the warning + button area with a simple confirmation message.
+*/}}
+{{define "clear_success.html"}}
+<div class="clear-success">
+    <p>All tasks and cycle records have been deleted.</p>
+    <p class="task-notes">Harvest log preserved. <a href="/harvestlog">View harvest log →</a></p>
+    <a href="/" class="btn btn-primary" style="margin-top: 1rem;">Back to Dashboard</a>
+</div>
+{{end}}

@@ -1,0 +1,54 @@
+{{/*
+    harvestlog.html — the harvest history page.
+
+    Shows all logged harvests in a table, most recent first. Each row
+    shows expected vs actual trays and grams so the grower can spot
+    trends over time (e.g. a crop that consistently under-yields).
+
+    This is the GUI version of "greenies harvestlog".
+
+    Data passed from the handler (handleHarvestLog in handlers.go):
+      .Harvests    — list of harvestRow structs (pre-formatted for display)
+      .HasHarvests — true if there is at least one harvest record
+      .Count       — number of harvest records
+*/}}
+
+{{define "harvestlog.html"}}
+<h1>Harvest Log</h1>
+
+{{if .HasHarvests}}
+    <p>{{.Count}} records</p>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Crop</th>
+                <th>Trays</th>
+                <th>Yield</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Harvests}}
+                <tr>
+                    <td>{{.DateDisplay}}</td>
+                    <td>{{.CropName}}</td>
+                    <!-- Show actual/expected trays, e.g. "3/3" -->
+                    <td>{{.ActualTrays}}/{{.ExpectedTrays}}</td>
+                    <!-- Show actual grams, with expected in parentheses if known -->
+                    <td>
+                        {{.ActualGrams}}g
+                        {{if .HasExpected}}
+                            <span class="expected-note">/ {{.ExpectedGrams}}g expected</span>
+                        {{end}}
+                    </td>
+                    <td>{{.Notes}}</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{else}}
+    <p class="empty">No harvests logged yet. Run "greenies harvest" after each harvest to build your log.</p>
+{{end}}
+{{end}}
