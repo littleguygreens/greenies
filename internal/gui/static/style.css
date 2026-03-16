@@ -17,9 +17,9 @@
      - Text:          #f0f0f0 (near white)
      - Secondary:     #999999 (grey — labels, notes, nav links)
      - Muted:         #666666 (dark grey — IDs, empty states)
-     - Primary green: #4ecca3 (headings, accents, active buttons)
-     - Hover green:   #3dbb91 (slightly darker for hover states)
-     - Dark green:    #2a7a5a (subtle backgrounds)
+     - Primary green: #8bc34a (natural leaf green — headings, accents, active buttons)
+     - Hover green:   #7cb342 (slightly deeper for hover states)
+     - Dark green:    #558b2f (rich plant green for subtle backgrounds)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Reset ─────────────────────────────────────────────────────────────────
@@ -58,10 +58,12 @@ body {
     padding: 1rem;
     flex-shrink: 0;
     border-right: 1px solid #333333;
+    display: flex;
+    flex-direction: column;
 }
 
 .nav-title {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 1.2rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
@@ -83,7 +85,14 @@ body {
 .nav a:hover,
 .nav a.active {
     background: #333333;
-    color: #4ecca3;
+    color: #8bc34a;
+}
+
+/* Pushes the "Open Terminal" link to the bottom of the sidebar.
+   flex-grow: 1 tells this invisible element to eat up all the empty space
+   between the last nav link and the terminal link at the bottom. */
+.nav-spacer {
+    flex-grow: 1;
 }
 
 /* ── Main content area ─────────────────────────────────────────────────── */
@@ -95,7 +104,7 @@ body {
 
 /* ── Page headings ─────────────────────────────────────────────────────── */
 h1 {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 1rem;
@@ -168,12 +177,12 @@ pre {
 }
 
 .btn-primary {
-    background: #4ecca3;
+    background: #8bc34a;
     color: #1a1a1a;
 }
 
 .btn-primary:hover {
-    background: #3dbb91;
+    background: #7cb342;
 }
 
 .btn-danger {
@@ -208,7 +217,7 @@ input, select, textarea {
 
 input:focus, select:focus, textarea:focus {
     outline: none;
-    border-color: #4ecca3;
+    border-color: #8bc34a;
 }
 
 .form-group {
@@ -225,12 +234,12 @@ input:focus, select:focus, textarea:focus {
 }
 
 .btn-secondary:hover {
-    border-color: #4ecca3;
-    color: #4ecca3;
+    border-color: #8bc34a;
+    color: #8bc34a;
 }
 
 .btn-active {
-    background: #4ecca3;
+    background: #8bc34a;
     color: #1a1a1a;
     font-weight: 600;
 }
@@ -263,7 +272,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .day-heading {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 1rem;
     font-weight: 600;
     padding-bottom: 0.25rem;
@@ -290,7 +299,7 @@ input:focus, select:focus, textarea:focus {
 
 .data-table th {
     text-align: left;
-    color: #4ecca3;
+    color: #8bc34a;
     font-weight: 600;
     padding: 0.5rem 0.75rem;
     border-bottom: 2px solid #333333;
@@ -358,7 +367,7 @@ input:focus, select:focus, textarea:focus {
 
 /* Brief message shown after a cycle deletion (e.g. "8 tasks deleted") */
 .delete-message {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 0.85rem;
     padding: 0.5rem 0;
     font-style: italic;
@@ -419,7 +428,7 @@ input:focus, select:focus, textarea:focus {
     width: auto;
     max-width: none;
     margin: 0;
-    accent-color: #4ecca3;
+    accent-color: #8bc34a;
 }
 
 /* Hint text below a form field (e.g. "0 = no repeats") */
@@ -480,14 +489,27 @@ input:focus, select:focus, textarea:focus {
     margin-top: 1rem;
 }
 
-/* Error message in the preview area */
-.plan-error {
+/* ── Error box ────────────────────────────────────────────────────────────
+   A single, consistent style for all error messages across the GUI.
+   Used on plan preview, harvest form, trial forms, adjust preview, and
+   sync pages — anywhere something went wrong and the grower needs to
+   know about it. Red border + red text on a dark background. */
+.error-box {
     margin-top: 1.5rem;
     padding: 0.75rem 1rem;
     background: #242424;
     border: 1px solid #e74c3c;
     border-radius: 6px;
     color: #e74c3c;
+    font-size: 0.9rem;
+}
+
+.error-box p {
+    margin-bottom: 0.35rem;
+}
+
+.error-box p:last-child {
+    margin-bottom: 0;
 }
 
 /* Success message after confirming a plan */
@@ -495,7 +517,7 @@ input:focus, select:focus, textarea:focus {
     margin-top: 1.5rem;
     padding: 1rem;
     background: #242424;
-    border: 1px solid #4ecca3;
+    border: 1px solid #8bc34a;
     border-radius: 6px;
 }
 
@@ -561,25 +583,20 @@ input:focus, select:focus, textarea:focus {
 
 /* Success message after logging a harvest */
 .harvest-logged {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 0.9rem;
     padding: 0.75rem 1rem;
     background: #242424;
-    border: 1px solid #4ecca3;
+    border: 1px solid #8bc34a;
     border-radius: 6px;
 }
 
 .harvest-logged a {
-    color: #4ecca3;
+    color: #8bc34a;
     margin-left: 0.5rem;
 }
 
-/* Error message from harvest form validation */
-.harvest-error {
-    color: #e74c3c;
-    font-size: 0.85rem;
-    padding: 0.5rem 0;
-}
+/* Harvest errors now use the shared .error-box class in the template. */
 
 /* ── Trial page ───────────────────────────────────────────────────────────
    Styles for the trial management dashboard, manage form, view, and compare. */
@@ -622,7 +639,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .trial-optional-header:hover {
-    color: #4ecca3;
+    color: #8bc34a;
 }
 
 /* Hidden by default; shown when .trial-optional-open is on the parent */
@@ -645,8 +662,8 @@ input:focus, select:focus, textarea:focus {
 }
 
 .trial-status-active {
-    background: #2a7a5a;
-    color: #4ecca3;
+    background: #558b2f;
+    color: #8bc34a;
 }
 
 .trial-status-harvested {
@@ -676,7 +693,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .trial-day-header {
-    color: #4ecca3;
+    color: #8bc34a;
     font-weight: 600;
     font-size: 0.95rem;
     margin-bottom: 0.5rem;
@@ -690,7 +707,7 @@ input:focus, select:focus, textarea:focus {
 .trial-confirm-row input[type="checkbox"] {
     width: auto;
     max-width: none;
-    accent-color: #4ecca3;
+    accent-color: #8bc34a;
 }
 
 /* Stage + tasks fields that appear when confirm is checked */
@@ -751,7 +768,7 @@ input:focus, select:focus, textarea:focus {
 .trial-compare-group input[type="radio"] {
     width: auto;
     max-width: none;
-    accent-color: #4ecca3;
+    accent-color: #8bc34a;
 }
 
 /* Observation rows in compare view */
@@ -761,7 +778,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .trial-obs-day {
-    color: #4ecca3;
+    color: #8bc34a;
     font-weight: 600;
     margin-right: 0.5rem;
 }
@@ -792,7 +809,7 @@ input:focus, select:focus, textarea:focus {
     width: auto;
     max-width: none;
     margin-top: 0.3rem;
-    accent-color: #4ecca3;
+    accent-color: #8bc34a;
 }
 
 .adjust-cycle-info {
@@ -835,7 +852,7 @@ input:focus, select:focus, textarea:focus {
 .adjust-checkbox-label input[type="checkbox"] {
     width: auto;
     max-width: none;
-    accent-color: #4ecca3;
+    accent-color: #8bc34a;
 }
 
 /* Options section (cascade + csv update) */
@@ -853,7 +870,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .adjust-today-mark {
-    color: #4ecca3;
+    color: #8bc34a;
     font-size: 0.75rem;
     font-weight: 600;
     margin-left: 0.25rem;
@@ -863,9 +880,12 @@ input:focus, select:focus, textarea:focus {
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */
 @media (max-width: 700px) {
+    /* Stack the layout vertically: nav on top, content below. */
     .app {
         flex-direction: column;
     }
+
+    /* Nav becomes a horizontal bar at the top of the screen. */
     .nav {
         width: 100%;
         border-right: none;
@@ -874,6 +894,7 @@ input:focus, select:focus, textarea:focus {
         flex-wrap: wrap;
         align-items: center;
         gap: 0.25rem;
+        padding: 0.5rem 0.75rem;
     }
     .nav-title {
         margin-bottom: 0;
@@ -881,11 +902,121 @@ input:focus, select:focus, textarea:focus {
         padding-bottom: 0;
         margin-right: 1rem;
     }
+    /* On mobile the nav is a horizontal strip — the spacer would push
+       the terminal link off-screen, so hide it. */
+    .nav-spacer {
+        display: none;
+    }
     .nav a {
         margin-bottom: 0;
+        padding: 0.3rem 0.5rem;
+        font-size: 0.8rem;
     }
+
+    /* Content area: tighter padding on small screens. */
     .content {
         padding: 1rem;
+        max-width: 100%;
+    }
+
+    /* Headings: slightly smaller on mobile. */
+    h1 { font-size: 1.25rem; }
+
+    /* Forms: all inputs go full-width so they are easy to tap. */
+    input, select, textarea {
+        max-width: 100%;
+    }
+
+    /* Form rows (e.g. date picker + Go button): stack vertically. */
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .form-row .btn {
+        align-self: flex-start;
+    }
+
+    /* Data tables: wrap in a horizontally scrollable container so they
+       do not break the page layout on narrow screens. */
+    .data-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        font-size: 0.8rem;
+    }
+
+    /* Pre-formatted text (snapshot): smaller font on mobile. */
+    pre {
+        font-size: 0.75rem;
+        padding: 0.75rem;
+    }
+
+    /* Delete page: stack task info and delete button vertically. */
+    .task-delete-content {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Harvest form row: stack fields vertically on narrow screens. */
+    .harvest-form-row {
+        flex-direction: column;
+    }
+    .harvest-form-row .form-group {
+        min-width: 0;
+    }
+
+    /* Harvest card: stack info and button vertically. */
+    .harvest-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Trial form rows: stack side-by-side fields vertically. */
+    .trial-form-row {
+        flex-direction: column;
+    }
+    .trial-form-row .form-group {
+        min-width: 0;
+    }
+
+    /* Trial active row: stack info and manage button vertically. */
+    .trial-active-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Trial confirm fields: stack vertically. */
+    .trial-confirm-fields {
+        flex-direction: column;
+    }
+
+    /* Trial detail table: full width on mobile. */
+    .trial-detail-table {
+        max-width: 100%;
+    }
+
+    /* Adjust cycle labels: allow text to wrap naturally. */
+    .adjust-cycle-info {
+        min-width: 0;
+    }
+
+    /* Radio groups: allow wrapping on very narrow screens. */
+    .radio-group {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    /* Plan actions: buttons stack if space is tight. */
+    .plan-success .btn {
+        display: block;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+
+    /* Toggle bar: smaller buttons on mobile. */
+    .toggle-bar .btn {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.75rem;
     }
 }
 

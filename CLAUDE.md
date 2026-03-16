@@ -287,3 +287,7 @@ The layout is defined in a configuration file — never hardcoded.
   true map of the farm
 - **Discord integration** — standalone bot that reads from the scheduler's local
   data files; daily task summary, task logging, harvest notifications
+- **Cross-platform desktop shortcuts** — `greenies install-desktop` currently
+  targets Linux only (`.desktop` file). Add support for macOS (`.app` bundle)
+  and Windows (GUI-mode build + shortcut creation) so the program can be
+  launched by double-clicking an icon on any OS, with no terminal window

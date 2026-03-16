@@ -157,20 +157,36 @@ const heartbeatTimeout = 6 * time.Second
 var lastHeartbeat time.Time
 var heartbeatMu sync.Mutex
 
+// browserConnected tracks whether the browser has ever sent a heartbeat
+// ping. The watcher goroutine ignores the timeout until this is true —
+// so on a slow machine, the server will wait patiently for the browser
+// to finish loading instead of shutting down after 6 seconds.
+var browserConnected bool
+
 // recordHeartbeat updates the last-seen timestamp. Called by the /heartbeat
 // HTTP handler every time the browser pings.
 func recordHeartbeat() {
 	heartbeatMu.Lock()
 	lastHeartbeat = time.Now()
+	browserConnected = true
 	heartbeatMu.Unlock()
 }
 
 // heartbeatExpired checks whether the browser has gone silent for too long.
-// Called by the watcher goroutine to decide whether to shut down.
+// Returns false if the browser hasn't connected yet — the server will wait
+// indefinitely for the first ping (the grower can always press Ctrl+C).
+// Once the browser has connected, returns true if no ping has arrived
+// within the timeout window.
 func heartbeatExpired() bool {
 	heartbeatMu.Lock()
+	connected := browserConnected
 	elapsed := time.Since(lastHeartbeat)
 	heartbeatMu.Unlock()
+	// Don't shut down if the browser hasn't loaded yet — it might just
+	// be a slow machine. Only start the countdown after the first ping.
+	if !connected {
+		return false
+	}
 	return elapsed > heartbeatTimeout
 }
 
@@ -264,6 +280,15 @@ func StartServer(port int) error {
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync", handleSyncAction)
 
+	// ── Open terminal ───────────────────────────────────────────────
+	// When the grower clicks "Open Terminal" in the nav bar, the browser
+	// sends a POST here. The server opens their system's terminal app
+	// (set to the home directory) so they can type greenies commands.
+	mux.HandleFunc("POST /terminal", func(w http.ResponseWriter, r *http.Request) {
+		openTerminal()
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	// Step 3: Create the server and start listening.
 	// We use http.Server (instead of the simpler http.ListenAndServe) so
 	// that we can call server.Shutdown() later — that's what lets us stop
@@ -281,12 +306,10 @@ func StartServer(port int) error {
 	// the user can copy the URL from the terminal.
 	go openBrowser(fmt.Sprintf("http://%s", addr))
 
-	// Set the initial heartbeat to now so the watcher doesn't immediately
-	// shut down before the browser has had time to load and start pinging.
-	recordHeartbeat()
-
-	// Start the heartbeat watcher in the background. It will call
-	// server.Shutdown() if the browser stops pinging.
+	// Start the heartbeat watcher in the background. It will wait
+	// patiently until the browser sends its first ping (no timeout
+	// until then), then start monitoring. If the browser stops pinging,
+	// it calls server.Shutdown().
 	go watchHeartbeat(server)
 
 	// ListenAndServe blocks (waits) until the server is shut down.
@@ -299,6 +322,25 @@ func StartServer(port int) error {
 		return nil // Clean shutdown — not an error.
 	}
 	return err
+}
+
+// openTerminal launches the system's terminal application so the grower can
+// type greenies commands without leaving the GUI. On Linux, it uses
+// x-terminal-emulator, which opens whatever terminal the user has configured
+// (e.g. GNOME Terminal on Cinnamon, Konsole on KDE). On macOS it opens
+// Terminal.app, and on Windows it opens PowerShell.
+func openTerminal() {
+	switch runtime.GOOS {
+	case "linux":
+		cmd := exec.Command("x-terminal-emulator")
+		_ = cmd.Start()
+	case "darwin":
+		cmd := exec.Command("open", "-a", "Terminal")
+		_ = cmd.Start()
+	case "windows":
+		cmd := exec.Command("cmd", "/c", "start", "powershell")
+		_ = cmd.Start()
+	}
 }
 
 // openBrowser tries to open the given URL in a borderless "app" window.

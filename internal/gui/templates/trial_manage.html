@@ -170,7 +170,7 @@
 */}}
 {{define "trial_manage_result.html"}}
 {{if .Error}}
-    <div class="plan-error">{{.Error}}</div>
+    <div class="error-box">{{.Error}}</div>
 {{else if .Success}}
     <div class="plan-success">
         <p>Saved: {{.ObservationsAdded}} observation(s), {{.DaysConfirmed}} day(s) confirmed.</p>
@@ -190,7 +190,7 @@
 */}}
 {{define "trial_outcome_result.html"}}
 {{if .Error}}
-    <div class="plan-error">{{.Error}}</div>
+    <div class="error-box">{{.Error}}</div>
 {{else if .Success}}
     <div class="plan-success">
         <p>{{.Message}}</p>

@@ -121,7 +121,7 @@
             })();
         </script>
     {{else}}
-        <div class="clear-warning">
+        <div class="error-box">
             <p>Google Calendar is not set up.</p>
             <p>Place <code>credentials.json</code> in <code>~/.greenies/</code> to enable calendar sync.</p>
             <p>See the Phase 5 setup notes for instructions.</p>
@@ -139,7 +139,7 @@
 */}}
 {{define "sync_result.html"}}
 {{if .Error}}
-    <div class="clear-warning">
+    <div class="error-box">
         <p><strong>Sync failed:</strong> {{.Error}}</p>
         <p>Check your internet connection and try again.</p>
     </div>
