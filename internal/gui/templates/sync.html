@@ -1,8 +1,9 @@
 {{/*
-    sync.html — the Google Calendar sync page.
+    sync.html — the Google sync page.
 
     This is the GUI equivalent of "greenies sync" in the terminal. One button
-    pushes the entire schedule to Google Tasks and Google Calendar.
+    syncs everything with Google: pulls the latest data from Google Sheets,
+    then pushes the schedule to Google Tasks and Google Calendar.
 
     The sync can take a minute or two because it makes many individual API
     calls to Google (deleting old entries, creating new ones). While it's
@@ -21,14 +22,14 @@
 */}}
 
 {{define "sync.html"}}
-<h1>Sync to Google</h1>
+<h1>Sync with Google</h1>
 
 <div id="sync-area">
     {{if .CredentialsExist}}
-        <p>Push your current schedule to Google Calendar and Google Tasks.</p>
+        <p>Sync your farm data with Google.</p>
         <p class="task-notes">
-            This creates one task-list entry per day (checkable to-dos) and one
-            calendar event per day (with the full farm snapshot in the description).
+            This pulls the latest crop library from Google Sheets, then pushes
+            your schedule to Google Calendar and Google Tasks.
             Running it multiple times is safe — duplicates are automatically removed.
         </p>
 
@@ -189,7 +190,7 @@
 {{else}}
     <div class="clear-success">
         <p>Sync complete! Finished in {{.Elapsed}}.</p>
-        <p class="task-notes">Your Google Calendar and Google Tasks are up to date.</p>
+        <p class="task-notes">Your Google data is up to date.</p>
     </div>
 
     <button id="sync-btn"
