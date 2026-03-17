@@ -158,9 +158,8 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cropMap := map[string]crop.Crop{}
-	cropsPath, err := crop.CropsFilePath()
-	if err == nil {
-		if allCrops, err := (crop.CSVSource{Path: cropsPath}).LoadCrops(); err == nil {
+	if cropsSource, err := crop.GetSource(); err == nil {
+		if allCrops, err := cropsSource.LoadCrops(); err == nil {
 			for _, cr := range allCrops {
 				cropMap[cr.Name] = cr
 			}
@@ -388,8 +387,8 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 // variety in an HTML table. The table shows the key numbers a grower cares
 // about: cycle length, seed per tray, and expected yield per tray.
 func handleCrops(w http.ResponseWriter, r *http.Request) {
-	// Find and load the crops CSV file.
-	path, err := crop.CropsFilePath()
+	// Load the crop library using the shared factory function.
+	source, err := crop.GetSource()
 	if err != nil {
 		renderPage(w, "crops.html", map[string]any{
 			"Error":    "Could not find crops file: " + err.Error(),
@@ -398,7 +397,6 @@ func handleCrops(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		renderPage(w, "crops.html", map[string]any{
@@ -732,7 +730,7 @@ func handleClearAction(w http.ResponseWriter, r *http.Request) {
 // The form uses htmx to send a preview request without reloading the page.
 func handlePlanPage(w http.ResponseWriter, r *http.Request) {
 	// Load the crop library so we can populate the dropdown.
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		renderPage(w, "plan.html", map[string]any{
 			"HasCrops": false,
@@ -740,7 +738,6 @@ func handlePlanPage(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		renderPage(w, "plan.html", map[string]any{
@@ -804,12 +801,11 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	repeatsStr := r.FormValue("repeats")
 
 	// ── Validate the crop ────────────────────────────────────────────────
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		renderFragment(w, "plan_preview.html", map[string]any{"Error": "Could not find crops file."})
 		return
 	}
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		renderFragment(w, "plan_preview.html", map[string]any{"Error": "Could not load crop library."})
@@ -1023,12 +1019,11 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 	repeatsStr := r.FormValue("repeats")
 
 	// ── Load the crop ────────────────────────────────────────────────────
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		renderFragment(w, "plan_preview.html", map[string]any{"Error": "Could not find crops file."})
 		return
 	}
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		renderFragment(w, "plan_preview.html", map[string]any{"Error": "Could not load crop library."})
@@ -2032,6 +2027,9 @@ func handleTrialPromote(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Mirror the change to Google Sheets (if linked).
+	gcal.SyncLocalToSheet(context.Background())
 
 	tr.Status = trial.StatusPromoted
 	updated := trial.ReplaceByID(trials, *tr)
@@ -3145,6 +3143,8 @@ func handleAdjustConfirm(w http.ResponseWriter, r *http.Request) {
 			modErr := crop.ModifyCropDays(csvPath, chosen.CropName, csvStage, n)
 			if modErr == nil {
 				csvUpdated = true
+				// Mirror the change to Google Sheets (if linked).
+				gcal.SyncLocalToSheet(context.Background())
 			}
 		}
 	}
@@ -3255,11 +3255,11 @@ func buildPreviewRows(before, after []adjustPreviewRow, today time.Time) []adjus
 
 // guiLoadCropByName looks up a crop variety by name in crops.csv.
 func guiLoadCropByName(name string) (crop.Crop, bool) {
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		return crop.Crop{}, false
 	}
-	crops, err := crop.CSVSource{Path: path}.LoadCrops()
+	crops, err := source.LoadCrops()
 	if err != nil {
 		return crop.Crop{}, false
 	}

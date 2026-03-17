@@ -1,0 +1,94 @@
+// Package config manages program-wide settings that persist between runs.
+//
+// Settings are stored in a small JSON file at ~/.greenies/config.json.
+// This file is internal — the user never needs to open or edit it by hand.
+// The program reads and writes it automatically.
+//
+// JSON is used here (instead of CSV) because this is a machine-managed file,
+// not a human-edited one. The CLAUDE.md rule "no JSON for human-edited files"
+// does not apply.
+package config
+
+import (
+	"encoding/json" // for reading/writing the config file in JSON format
+	"fmt"
+	"os"            // for file operations (read, write, check existence)
+	"path/filepath" // for building file paths that work on any operating system
+)
+
+// Config holds program-wide settings. Right now it only stores Google Sheets
+// information, but more fields can be added here later without breaking
+// anything.
+type Config struct {
+	// SheetsEnabled is true once the user has linked a Google Sheet for
+	// their crop library. When false, the program ignores Sheets entirely
+	// and uses the local crops.csv file as before.
+	SheetsEnabled bool `json:"sheets_enabled"`
+
+	// SheetID is the unique identifier Google assigns to the spreadsheet.
+	// It's the long string of characters you see in a Google Sheets URL:
+	//   https://docs.google.com/spreadsheets/d/<THIS PART>/edit
+	// Stored here so the program knows which spreadsheet to talk to.
+	SheetID string `json:"sheet_id"`
+}
+
+// Path returns the full file path to the config file (~/.greenies/config.json).
+// The ~/.greenies/ directory is the same place where tasks.json, crops.csv,
+// and other data files live.
+func Path() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not find home directory: %w", err)
+	}
+	return filepath.Join(home, ".greenies", "config.json"), nil
+}
+
+// Load reads the config file from disk and returns its contents.
+//
+// If the file does not exist yet (first run, or user never enabled Sheets),
+// it returns a zero-value Config with SheetsEnabled=false and SheetID="".
+// This is not an error — it just means "no settings configured yet."
+func Load() (Config, error) {
+	path, err := Path()
+	if err != nil {
+		return Config{}, err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// File doesn't exist yet — that's fine, return defaults.
+		if os.IsNotExist(err) {
+			return Config{}, nil
+		}
+		return Config{}, fmt.Errorf("could not read config file: %w", err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("config file is corrupted: %w", err)
+	}
+	return cfg, nil
+}
+
+// Save writes the config to disk, creating the file if it doesn't exist.
+// The file is written with permissions 0644 (owner can read/write, others
+// can only read) — the same permissions used for tasks.json and other data.
+func Save(cfg Config) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+
+	// json.MarshalIndent makes the file human-readable (with indentation)
+	// even though humans shouldn't need to edit it — it's nice for
+	// debugging if something ever goes wrong.
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not encode config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("could not write config file: %w", err)
+	}
+	return nil
+}

@@ -79,6 +79,27 @@ type Crop struct {
 	Days []CropDay
 }
 
+// GetSource returns the crop data source for the current configuration.
+//
+// Right now this always returns a CSVSource pointing at the local
+// ~/.greenies/crops.csv file — the same file that has always been used.
+// When Google Sheets sync is enabled, "greenies sync" pulls the latest
+// data from the Sheet into this local CSV file, so reading from CSV
+// always gives the freshest available data (even if you last synced an
+// hour ago, the local copy is still the best we have without internet).
+//
+// The purpose of this function is to centralise all 12+ places in the
+// program that create a CSVSource, so that if the source logic ever needs
+// to change (e.g. checking a "last synced" timestamp, or adding a cache
+// layer), there is exactly one place to update.
+func GetSource() (CropSource, error) {
+	path, err := CropsFilePath()
+	if err != nil {
+		return nil, err
+	}
+	return CSVSource{Path: path}, nil
+}
+
 // CropSource is an interface — a promise that whatever implements it can
 // hand back a complete list of crop varieties.
 //

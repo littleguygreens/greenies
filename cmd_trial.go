@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"   // for reading a full line of user input from the terminal
+	"context" // for context.Background(), used when pushing to Google Sheets
 	"fmt"
 	"os"      // for os.Exit
 	"sort"    // for sorting observations and days
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/crop"
+	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/task"
 	"github.com/littleguygreens/greenies/internal/trial"
@@ -668,8 +670,11 @@ func trialPromote(ask func(string) string, tr *trial.TrialRecord, trials []trial
 
 	// Warn if this crop name already appears in crops.csv — the grower should
 	// know they are adding a second entry, not replacing the existing one.
-	source := crop.CSVSource{Path: cropsPath}
-	existingCrops, _ := source.LoadCrops()
+	existingSource, _ := crop.GetSource()
+	var existingCrops []crop.Crop
+	if existingSource != nil {
+		existingCrops, _ = existingSource.LoadCrops()
+	}
 	for _, c := range existingCrops {
 		if strings.EqualFold(c.Name, tr.CropName) {
 			fmt.Printf("Note: %s already exists in crops.csv.\n",
@@ -692,6 +697,9 @@ func trialPromote(ask func(string) string, tr *trial.TrialRecord, trials []trial
 		fmt.Printf("Error writing to crops.csv: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Mirror the change to Google Sheets (if linked).
+	gcal.SyncLocalToSheet(context.Background())
 
 	// Mark the trial as promoted and save.
 	tr.Status = trial.StatusPromoted

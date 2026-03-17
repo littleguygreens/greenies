@@ -40,12 +40,11 @@ func runPlan() {
 
 	// Load the crop library up front so we can show the available varieties
 	// before asking which one the user wants.
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		fmt.Printf("Error loading crop library: %v\n", err)

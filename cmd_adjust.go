@@ -1,7 +1,8 @@
 package main
 
 import (
-	"bufio"   // for reading a full line of user input, including spaces
+	"bufio"    // for reading a full line of user input, including spaces
+	"context"  // for context.Background(), used when pushing to Google Sheets
 	"fmt"
 	"os"      // for os.Exit and os.Stdin
 	"strconv" // for converting text like "2" into the number 2
@@ -11,6 +12,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/checker"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
+	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -988,11 +990,11 @@ func saveAndCheck(tasks []task.Task, cycles []farm.Cycle, envs []farm.Environmen
 // loadCropByName looks up a crop variety by name in crops.csv.
 // Returns the Crop value and true if found; an empty Crop and false if not.
 func loadCropByName(name string) (crop.Crop, bool) {
-	path, err := crop.CropsFilePath()
+	source, err := crop.GetSource()
 	if err != nil {
 		return crop.Crop{}, false
 	}
-	crops, err := crop.CSVSource{Path: path}.LoadCrops()
+	crops, err := source.LoadCrops()
 	if err != nil {
 		return crop.Crop{}, false
 	}
@@ -1274,6 +1276,10 @@ func offerCropsUpdate(reader *bufio.Reader, cropName, stage string, n int) {
 		fmt.Printf("Error updating crops.csv: %v\n", err)
 		return
 	}
+
+	// Mirror the change to Google Sheets (if linked). Fire-and-forget —
+	// if offline or Sheets not configured, prints a warning and continues.
+	gcal.SyncLocalToSheet(context.Background())
 
 	colName := "dark_days"
 	if stage == "light" {

@@ -86,17 +86,23 @@ func loadConfig() (*oauth2.Config, error) {
 
 	// google.ConfigFromJSON reads the credentials file format that Google
 	// Cloud Console produces. The extra arguments are "scopes" — the specific
-	// permissions we are requesting. We need two:
-	//   - calendar: read and write Google Calendar events
-	//   - tasks:    read and write Google Tasks (for daily task entries)
+	// permissions we are requesting. We need three:
+	//   - calendar:     read and write Google Calendar events
+	//   - tasks:        read and write Google Tasks (for daily task entries)
+	//   - spreadsheets: read and write Google Sheets (for the crop library)
 	//
 	// IMPORTANT: if you add or remove a scope here, delete ~/.greenies/token.json
 	// and run "greenies sync" again. The browser login must be repeated any time
 	// the list of permissions changes, because the saved token only covers the
 	// scopes that were active when it was created.
+	//
+	// NOTE (Phase 8.5): The spreadsheets scope was added for Google Sheets
+	// crop library sync. Users upgrading from an earlier version must delete
+	// their token.json once and re-authorise to pick up this new permission.
 	config, err := google.ConfigFromJSON(b,
 		"https://www.googleapis.com/auth/calendar",
 		"https://www.googleapis.com/auth/tasks",
+		"https://www.googleapis.com/auth/spreadsheets",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse credentials.json: %w", err)

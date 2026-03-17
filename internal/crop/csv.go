@@ -478,6 +478,86 @@ func ModifyCropDays(cropsPath, cropName, stage string, delta int) error {
 	return w.Error()
 }
 
+// WriteCrops writes a complete list of crops to a CSV file in the standard
+// sparse format — the same format that LoadCrops expects.
+//
+// This is used to update the local crops.csv cache after pulling fresh data
+// from Google Sheets. It completely replaces the file contents.
+//
+// The "sparse format" means:
+//   - The first row of each crop block has all columns filled in (name,
+//     parameters, day, stage, tasks).
+//   - Subsequent day rows for the same crop only have day, stage, and tasks
+//     filled in — the name and parameter columns are left empty.
+//
+// This round-trips cleanly: WriteCrops(path, crops) followed by
+// CSVSource{Path: path}.LoadCrops() returns the same data.
+func WriteCrops(path string, crops []Crop) error {
+	out, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("could not create crops file: %w", err)
+	}
+	defer out.Close()
+
+	w := csv.NewWriter(out)
+
+	// Write the header row — same column order as the original crops.csv.
+	header := []string{
+		"name", "day", "stage", "tasks",
+		"overnight_soak", "soak_hours", "seed_grams",
+		"dirt_litres", "dark_days", "light_days", "yield_grams",
+	}
+	if err := w.Write(header); err != nil {
+		return fmt.Errorf("could not write header: %w", err)
+	}
+
+	for _, c := range crops {
+		for i, d := range c.Days {
+			row := make([]string, len(header))
+
+			// Day, stage, and tasks are always filled in.
+			row[1] = strconv.Itoa(d.Day)
+			row[2] = d.Stage
+			row[3] = d.Tasks
+
+			if i == 0 {
+				// First row of the crop block: fill in name + all parameters.
+				row[0] = c.Name
+
+				// Format overnight_soak as TRUE/FALSE (matches Google Sheets).
+				if c.OvernightSoak {
+					row[4] = "TRUE"
+				} else {
+					row[4] = "FALSE"
+				}
+
+				row[5] = strconv.Itoa(c.SoakHours)
+				row[6] = strconv.Itoa(c.SeedGrams)
+
+				// Format dirt_litres: use integer form ("1") when there are
+				// no decimal places, decimal form ("1.5") otherwise.
+				if c.DirtLitres == float64(int(c.DirtLitres)) {
+					row[7] = strconv.Itoa(int(c.DirtLitres))
+				} else {
+					row[7] = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
+				}
+
+				row[8] = strconv.Itoa(c.DarkDays)
+				row[9] = strconv.Itoa(c.LightDays)
+				row[10] = strconv.Itoa(c.YieldGrams)
+			}
+
+			// Subsequent rows: name and parameter columns stay empty (sparse).
+			if err := w.Write(row); err != nil {
+				return fmt.Errorf("could not write row for %s day %d: %w", c.Name, d.Day, err)
+			}
+		}
+	}
+
+	w.Flush()
+	return w.Error()
+}
+
 // insertCSVRows inserts a slice of new rows into rows at position idx,
 // returning the extended slice. All rows from idx onwards are shifted right
 // to make room. Uses a fresh slice to avoid overlapping-copy issues.

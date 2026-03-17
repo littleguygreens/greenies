@@ -11,14 +11,13 @@ import (
 // runCrops handles the "greenies crops" command.
 // It reads the crop library and prints a summary of every available variety.
 func runCrops() {
-	// Find the crops file and load it.
-	path, err := crop.CropsFilePath()
+	// Load the crop library using the shared factory function.
+	source, err := crop.GetSource()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	source := crop.CSVSource{Path: path}
 	crops, err := source.LoadCrops()
 	if err != nil {
 		fmt.Printf("Error loading crop library: %v\n", err)
