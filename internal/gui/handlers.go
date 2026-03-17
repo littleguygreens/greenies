@@ -135,43 +135,219 @@ type dayCard struct {
 	HasTasks bool
 }
 
-// handleList renders the calendar view at "/list".
+// handleCalendar renders the combined calendar page at "/list".
 //
-// It works like "greenies list" but without the interactive prompt — instead,
-// the grower clicks buttons to switch between week and month views. The URL
-// parameter ?mode=week or ?mode=month controls which view is shown.
+// This is the main scheduling view — two sections stacked on one page:
+//   1. Swim-lane month grid (coloured bars showing crop stages at a glance)
+//   2. Daily task tiles (every task for each day, grouped by date)
 //
-// Each day appears as a card with all its tasks listed inside.
-func handleList(w http.ResponseWriter, r *http.Request) {
-	// Load all saved tasks from disk.
+// Both sections show the same month. The grower navigates with prev/next
+// buttons — one set of controls for the whole page.
+func handleCalendar(w http.ResponseWriter, r *http.Request) {
+	// ── Load data ────────────────────────────────────────────────────────
+	// Tasks (for the daily tile list).
 	allTasks, err := store.Load()
 	if err != nil {
 		allTasks = []task.Task{}
 	}
 
-	// Decide the view mode. Default is "week" if nothing is specified.
-	mode := r.URL.Query().Get("mode")
-	if mode != "month" {
-		mode = "week"
+	// Cycles + crop library (for the swim-lane grid).
+	cycles, err := farm.LoadCycles()
+	if err != nil {
+		cycles = []farm.Cycle{}
 	}
 
-	// Work out the date range to display based on the mode.
+	cropMap := map[string]crop.Crop{}
+	cropsPath, err := crop.CropsFilePath()
+	if err == nil {
+		if allCrops, err := (crop.CSVSource{Path: cropsPath}).LoadCrops(); err == nil {
+			for _, cr := range allCrops {
+				cropMap[cr.Name] = cr
+			}
+		}
+	}
+
+	// ── Determine the displayed month ────────────────────────────────────
 	now := task.Today()
-	var start, end time.Time
+	year, month := now.Year(), now.Month()
 
-	if mode == "month" {
-		// Show the full current calendar month: 1st to last day.
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-		end = start.AddDate(0, 1, -1) // last day of this month
-	} else {
-		// Show 7 days starting from today.
-		start = now
-		end = now.AddDate(0, 0, 6)
+	// Allow ?year=2026&month=4 to navigate to a different month.
+	if y := r.URL.Query().Get("year"); y != "" {
+		if parsed, err := strconv.Atoi(y); err == nil {
+			year = parsed
+		}
+	}
+	if m := r.URL.Query().Get("month"); m != "" {
+		if parsed, err := strconv.Atoi(m); err == nil && parsed >= 1 && parsed <= 12 {
+			month = time.Month(parsed)
+		}
 	}
 
-	// Build a card for each day in the range.
+	// ── Week start preference ───────────────────────────────────────────
+	// The grower can choose whether weeks start on Sunday or Monday.
+	// ?weekstart=sun or ?weekstart=mon — defaults to Sunday.
+	weekStartDay := r.URL.Query().Get("weekstart")
+	if weekStartDay != "mon" {
+		weekStartDay = "sun"
+	}
+
+	var firstWeekday, lastWeekday time.Weekday
+	if weekStartDay == "sun" {
+		firstWeekday = time.Sunday
+		lastWeekday = time.Saturday
+	} else {
+		firstWeekday = time.Monday
+		lastWeekday = time.Sunday
+	}
+
+	dayLabels := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	if weekStartDay == "sun" {
+		dayLabels = [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+	}
+
+	// First and last day of the displayed month.
+	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+
+	// The grid starts on the chosen weekday at or before the 1st, and
+	// ends on the corresponding last weekday at or after the last day
+	// of the month. This fills out complete weeks so the grid is
+	// rectangular.
+	gridStart := firstOfMonth
+	for gridStart.Weekday() != firstWeekday {
+		gridStart = gridStart.AddDate(0, 0, -1)
+	}
+	gridEnd := lastOfMonth
+	for gridEnd.Weekday() != lastWeekday {
+		gridEnd = gridEnd.AddDate(0, 0, 1)
+	}
+
+	// ── Sort cycles oldest-first ─────────────────────────────────────────
+	sort.Slice(cycles, func(i, j int) bool {
+		if cycles[i].SowDate != cycles[j].SowDate {
+			return cycles[i].SowDate < cycles[j].SowDate
+		}
+		return cycles[i].CropName < cycles[j].CropName
+	})
+
+	// ── Pre-compute each cycle's daily stage map ─────────────────────────
+	// For each cycle, build a map from date string → stage name. This makes
+	// it fast to look up "what stage is this cycle in on March 12th?"
+	type cycleInfo struct {
+		CycleID  string
+		CropName string
+		Trays    int
+		DayStage map[string]string // date → "soak"/"dark"/"light"/"harvest"
+	}
+
+	var allCycleInfo []cycleInfo
+
+	for _, c := range cycles {
+		sowDate, err1 := time.Parse(task.DateFormat, c.SowDate)
+		harvestDate, err2 := time.Parse(task.DateFormat, c.HarvestDate)
+		mtlDate, err3 := time.Parse(task.DateFormat, c.MoveToLightDate)
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+
+		stages := map[string]string{}
+		cr, hasCrop := cropMap[c.CropName]
+
+		// Soak day(s) — before the blackout bar starts.
+		if hasCrop && cr.OvernightSoak {
+			soakDay := sowDate.AddDate(0, 0, -1)
+			stages[soakDay.Format(task.DateFormat)] = "soak"
+		} else if hasCrop && cr.SoakHours > 0 {
+			stages[sowDate.Format(task.DateFormat)] = "soak"
+		}
+
+		// Walk from sow date to harvest date, assigning stages.
+		for d := sowDate; !d.After(harvestDate); d = d.AddDate(0, 0, 1) {
+			ds := d.Format(task.DateFormat)
+			if _, already := stages[ds]; already {
+				continue // soak day already set
+			}
+			if d.Equal(harvestDate) {
+				stages[ds] = "harvest"
+			} else if d.Before(mtlDate) {
+				stages[ds] = "dark"
+			} else {
+				stages[ds] = "light"
+			}
+		}
+
+		allCycleInfo = append(allCycleInfo, cycleInfo{
+			CycleID:  c.CycleID,
+			CropName: c.CropName,
+			Trays:    c.Trays,
+			DayStage: stages,
+		})
+	}
+
+	// ── Build the swim-lane week sections ────────────────────────────────
+	var weeks []monthWeek
+
+	for weekStart := gridStart; !weekStart.After(gridEnd); weekStart = weekStart.AddDate(0, 0, 7) {
+		week := monthWeek{}
+
+		// Fill in the 7 date headers for this week row.
+		for i := 0; i < 7; i++ {
+			d := weekStart.AddDate(0, 0, i)
+			week.Headers[i] = monthDayHeader{
+				DayNum:  d.Day(),
+				InMonth: d.Month() == month,
+			}
+		}
+
+		// Check each cycle — does it have any activity this week?
+		for _, ci := range allCycleInfo {
+			row := monthCycleRow{
+				CropName: ci.CropName,
+				Trays:    ci.Trays,
+			}
+			hasActivity := false
+
+			prevStage := ""
+			for i := 0; i < 7; i++ {
+				d := weekStart.AddDate(0, 0, i)
+				ds := d.Format(task.DateFormat)
+				stage := ci.DayStage[ds]
+
+				// Put a label on the first cell of each new stage run.
+				label := ""
+				if stage != "" && stage != prevStage {
+					label = fmt.Sprintf("%s %dx", ci.CropName, ci.Trays)
+				}
+
+				row.Cells[i] = monthCell{
+					DayNum:  d.Day(),
+					Stage:   stage,
+					Label:   label,
+					Trays:   ci.Trays,
+					InMonth: d.Month() == month,
+				}
+
+				prevStage = stage
+				if stage != "" {
+					hasActivity = true
+				}
+			}
+
+			if hasActivity {
+				week.Rows = append(week.Rows, row)
+			}
+		}
+
+		// Only include weeks that have at least one active cycle.
+		if len(week.Rows) > 0 {
+			weeks = append(weeks, week)
+		}
+	}
+
+	// ── Build the daily task tiles ───────────────────────────────────────
+	// Show every day of the displayed month with that day's tasks.
 	var days []dayCard
-	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+	for d := firstOfMonth; !d.After(lastOfMonth); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format(task.DateFormat)
 		dayTasks := calendar.TasksForDate(allTasks, dateStr)
 		days = append(days, dayCard{
@@ -181,8 +357,23 @@ func handleList(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// ── Navigation: previous and next month ──────────────────────────────
+	prevMonth := firstOfMonth.AddDate(0, -1, 0)
+	nextMonth := firstOfMonth.AddDate(0, 1, 0)
+
 	renderPage(w, "list.html", map[string]any{
-		"Mode": mode,
+		// Swim-lane data
+		"MonthLabel": firstOfMonth.Format("January 2006"),
+		"Weeks":      weeks,
+		"DayLabels":  dayLabels,
+		"WeekStart":  weekStartDay,
+		"Year":       year,
+		"Month":      int(month),
+		"PrevYear":   prevMonth.Year(),
+		"PrevMonth":  int(prevMonth.Month()),
+		"NextYear":   nextMonth.Year(),
+		"NextMonth":  int(nextMonth.Month()),
+		// Task tile data
 		"Days": days,
 	})
 }
@@ -998,13 +1189,14 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 // harvest page. It adds human-readable date formatting and pre-computes
 // labels so the HTML template doesn't need to do any date parsing.
 type eligibleCycle struct {
-	CycleID       string // the unique ID for this crop cycle
-	CropName      string // capitalised crop name, e.g. "Sunnies"
-	Trays         int    // how many trays were planned
-	TrayWord      string // "tray" or "trays" — English is weird about plurals
-	HarvestDate   string // human-readable date, e.g. "Mar 15"
-	ExpectedGrams int    // planned yield in grams (may be 0 for older cycles)
-	HasExpected   bool   // true if ExpectedGrams > 0
+	CycleID         string // the unique ID for this crop cycle
+	CropName        string // capitalised crop name, e.g. "Sunnies"
+	Trays           int    // how many trays were planned
+	TrayWord        string // "tray" or "trays" — English is weird about plurals
+	HarvestDate     string // human-readable date, e.g. "Mar 15"
+	HarvestDateSort string // YYYY-MM-DD format, used for sorting (not displayed)
+	ExpectedGrams   int    // planned yield in grams (may be 0 for older cycles)
+	HasExpected     bool   // true if ExpectedGrams > 0
 }
 
 // handleHarvestPage renders the harvest logging page at GET /harvest.
@@ -1052,20 +1244,24 @@ func handleHarvestPage(w http.ResponseWriter, r *http.Request) {
 				trayWord = "trays"
 			}
 			eligible = append(eligible, eligibleCycle{
-				CycleID:       c.CycleID,
-				CropName:      task.Capitalize(c.CropName),
-				Trays:         c.Trays,
-				TrayWord:      trayWord,
-				HarvestDate:   harv.Format("Jan 02"),
-				ExpectedGrams: c.ExpectedGrams,
-				HasExpected:   c.ExpectedGrams > 0,
+				CycleID:         c.CycleID,
+				CropName:        task.Capitalize(c.CropName),
+				Trays:           c.Trays,
+				TrayWord:        trayWord,
+				HarvestDate:     harv.Format("Jan 02"),
+				HarvestDateSort: c.HarvestDate, // YYYY-MM-DD — sorts chronologically
+				ExpectedGrams:   c.ExpectedGrams,
+				HasExpected:     c.ExpectedGrams > 0,
 			})
 		}
 	}
 
 	// Sort most recent harvest first — same order as the CLI.
+	// HarvestDateSort is YYYY-MM-DD so string comparison gives correct
+	// chronological order. The display field (HarvestDate = "Jan 02")
+	// would sort alphabetically, not by date.
 	sort.Slice(eligible, func(i, j int) bool {
-		return eligible[i].HarvestDate > eligible[j].HarvestDate
+		return eligible[i].HarvestDateSort > eligible[j].HarvestDateSort
 	})
 
 	renderPage(w, "harvest.html", map[string]any{
@@ -3320,3 +3516,70 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 		"Elapsed": elapsed.String(),
 	})
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Month calendar with swim lanes
+// ─────────────────────────────────────────────────────────────────────────────
+
+// monthCell holds the display info for one day-cell in the month calendar grid.
+// Each cell belongs to a specific cycle on a specific day. The template uses
+// the Stage field to pick the background colour.
+type monthCell struct {
+	// DayNum is the calendar day number (1–31). Zero means this cell is
+	// outside the current month (padding at the start or end of the grid).
+	DayNum int
+
+	// Stage is which phase of the crop cycle falls on this day:
+	// "soak", "dark", "light", "harvest", or "" (no activity).
+	Stage string
+
+	// Label is the text shown on the first cell of each stage run — e.g.
+	// "sunnies 16x — dark". Empty on continuation cells (2nd, 3rd day
+	// of the same stage) so the text only appears once at the start.
+	Label string
+
+	// Trays is the batch size — shown as a tooltip or label so the grower
+	// can tell overlapping batches apart.
+	Trays int
+
+	// InMonth is true if this cell falls within the displayed month.
+	// False for padding cells at the start/end of the grid. The template
+	// dims or hides these cells so they don't distract.
+	InMonth bool
+}
+
+// monthCycleRow is one swim-lane row in a week section. It represents one
+// crop cycle's activity across 7 days (Monday to Sunday).
+type monthCycleRow struct {
+	// CropName is the variety label shown in the left column.
+	CropName string
+
+	// Trays is the batch size — appended to the label so the grower can
+	// distinguish "sunnies 16x" from "sunnies 12x" in the same week.
+	Trays int
+
+	// Cells holds exactly 7 entries, one per day (Monday index 0 through
+	// Sunday index 6). Each cell is either coloured by stage or empty.
+	Cells [7]monthCell
+}
+
+// monthDayHeader holds the info for one column header in a week row.
+type monthDayHeader struct {
+	// DayNum is the calendar day number (1–31).
+	DayNum int
+
+	// InMonth is true if this day falls within the displayed month.
+	InMonth bool
+}
+
+// monthWeek groups all the cycle rows that have activity in one calendar week.
+type monthWeek struct {
+	// Headers holds 7 entries (Mon–Sun) with the date number and
+	// whether that day is inside the displayed month.
+	Headers [7]monthDayHeader
+
+	// Rows holds one swim-lane row per cycle that has activity this week.
+	// Sorted oldest cycle first (by sow date).
+	Rows []monthCycleRow
+}
+

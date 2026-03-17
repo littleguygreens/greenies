@@ -1033,3 +1033,139 @@ input:focus, select:focus, textarea:focus {
 .htmx-indicator.htmx-request {
     display: block;
 }
+
+/* ── Month Calendar with Swim Lanes ───────────────────────────────────────
+   A wall-calendar layout: 7 columns (Mon–Sun), one section per week. Inside
+   each week, every crop cycle gets its own swim-lane row. Cells are coloured
+   by stage so the grower can see what's soaking, in blackout, on light, or
+   ready to harvest at a glance. */
+
+/* Legend — the small colour key above the swim-lane grid */
+.mcal-legend {
+    display: flex;
+    gap: 1.5rem;
+    margin: 0.5rem 0 1rem 0;
+    font-size: 0.9rem;
+    color: #999999;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+}
+
+/* Each week is a separate table block with a small gap between them */
+.mcal-week {
+    margin-bottom: 0.25rem;
+}
+
+/* The table itself fills the available width */
+.mcal-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+/* Crop name column — fixed width on the left */
+.mcal-crop-header {
+    width: 120px;
+    background: #242424;
+    border: 1px solid #333333;
+}
+
+/* Day-of-week headers (Mon, Tue, etc.) with the date number below */
+.mcal-day-header {
+    background: #242424;
+    color: #f0f0f0;
+    text-align: center;
+    padding: 0.25rem 0.15rem;
+    border: 1px solid #333333;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* The date number (e.g. "12") shown below the day name */
+.mcal-date-num {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #8bc34a;
+}
+
+/* Crop name label in the left column of each swim lane row */
+.mcal-crop-label {
+    background: #242424;
+    color: #999999;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #333333;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Individual day cells — empty by default (dark background).
+   position:relative lets the label inside position itself relative to
+   the cell. overflow:visible lets the label text spill across into
+   neighbouring cells so long labels remain readable. */
+.mcal-cell {
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    height: 28px;
+    position: relative;
+    overflow: visible;
+}
+
+/* Label text on the first cell of each stage run — floats on top of
+   the coloured cells and overflows to the right so you can read
+   "sunnies 16x — dark" even though one cell is only one day wide. */
+.mcal-label {
+    position: absolute;
+    top: 50%;
+    left: 4px;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #f0f0f0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Stage colours — each stage gets its own background */
+.mcal-soak {
+    background: #1565c0;
+}
+
+.mcal-dark {
+    background: #558b2f;
+}
+
+.mcal-light {
+    background: #8bc34a;
+}
+
+.mcal-harvest {
+    background: #f9a825;
+}
+
+/* Days outside the displayed month are dimmed so they don't distract */
+.mcal-outside {
+    opacity: 0.3;
+}
+
+/* Swim lane rows — subtle bottom border between cycles */
+.mcal-row td {
+    border-bottom: 1px solid #2a2a2a;
+}

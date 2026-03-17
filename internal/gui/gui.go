@@ -144,10 +144,10 @@ func renderFragment(w http.ResponseWriter, name string, data any) {
 // server stays alive. The moment nobody is watching, it stops on its own.
 
 // heartbeatTimeout is how long the server waits without a ping before it
-// decides the browser is gone and shuts down. 6 seconds = 3 missed pings
-// (since pings come every 2 seconds). This gives plenty of margin for a
-// slow page load or brief network hiccup.
-const heartbeatTimeout = 6 * time.Second
+// decides the browser is gone and shuts down. 10 seconds is generous enough
+// to survive page transitions and brief network hiccups without false
+// shutdowns.
+const heartbeatTimeout = 10 * time.Second
 
 // lastHeartbeat records the time of the most recent ping from the browser.
 // Protected by heartbeatMu because the HTTP handler (which receives pings)
@@ -249,7 +249,7 @@ func StartServer(port int) error {
 
 	mux.HandleFunc("GET /{$}", handleDashboard)
 	mux.HandleFunc("GET /snapshot", handleSnapshot)
-	mux.HandleFunc("GET /list", handleList)
+	mux.HandleFunc("GET /list", handleCalendar)
 	mux.HandleFunc("GET /crops", handleCrops)
 	mux.HandleFunc("GET /harvestlog", handleHarvestLog)
 	mux.HandleFunc("GET /delete", handleDeletePage)
@@ -293,10 +293,21 @@ func StartServer(port int) error {
 	// We use http.Server (instead of the simpler http.ListenAndServe) so
 	// that we can call server.Shutdown() later — that's what lets us stop
 	// the server cleanly when the browser window is closed.
+	//
+	// We wrap the mux in a heartbeat middleware so that ANY request from
+	// the browser (page loads, form submissions, static file requests)
+	// counts as proof the browser is still open — not just the dedicated
+	// /heartbeat pings. This prevents false shutdowns during slow page
+	// transitions where the old page has unloaded but the new page
+	// hasn't started sending heartbeat pings yet.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordHeartbeat()
+		mux.ServeHTTP(w, r)
+	})
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: handler,
 	}
 
 	fmt.Printf("Greenies GUI running at http://%s\n", addr)
