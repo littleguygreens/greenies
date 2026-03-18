@@ -12,10 +12,13 @@
 //   "Farm" — the physical farm layout (environments, slot capacities, and
 //   inventory counts). Two-way sync, same as Crops.
 //
-//   "Trials" — trial run data (push-only). The program pushes confirmed
-//   trial parameters to this tab so you can view them in Sheets, but edits
-//   in the Sheet are NOT pulled back — trial data is managed through the
-//   "greenies trial" command.
+//   "Trials" — trial run data (push-only).
+//
+//   "Schedule Tasks" — every calendar task from tasks.json (push-only).
+//
+//   "Schedule Cycles" — every planned crop cycle from cycles.json (push-only).
+//
+//   "Harvests" — the harvest log from harvests.json (push-only).
 //
 // The Google Sheet is the "source of truth" for crops and farm layout —
 // when you edit them in Google Sheets, running "greenies sync" pulls those
@@ -36,6 +39,8 @@ import (
 	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
+	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/task"
 	"github.com/littleguygreens/greenies/internal/trial"
 )
 
@@ -89,6 +94,47 @@ var trialsHeaders = []interface{}{
 	"dark_days", "light_days", "yield_grams",
 }
 
+// scheduleTab is the name of the spreadsheet tab that holds every task from
+// the calendar (tasks.json). Push-only — the program writes here so the
+// grower can view their full schedule on their phone, but edits in the
+// Sheet are not pulled back. Named "Schedule Tasks" to distinguish it from
+// the "Schedule Cycles" tab.
+const scheduleTab = "Schedule Tasks"
+
+// scheduleHeaders are the column headings for the Schedule Tasks tab.
+// One row per calendar task: date, title, notes, and the cycle ID that
+// groups tasks from the same planning run.
+var scheduleHeaders = []interface{}{
+	"date", "title", "notes", "cycle_id",
+}
+
+// batchesTab is the name of the spreadsheet tab that holds planned crop
+// cycle records (cycles.json). Push-only — view on your phone, edit
+// through the CLI/GUI.
+//
+// Called "Schedule Cycles" rather than "Cycles" because the "Cycle" tab
+// already exists (it holds the day-by-day crop schedule template). Each
+// row here represents one run of "greenies plan" — one planned cycle.
+const batchesTab = "Schedule Cycles"
+
+// batchesHeaders are the column headings for the Schedule Cycles tab.
+var batchesHeaders = []interface{}{
+	"crop", "trays", "sow_date", "harvest_date",
+	"move_to_light_date", "lit_environment", "expected_grams",
+}
+
+// harvestsTab is the name of the spreadsheet tab that holds the harvest
+// log (harvests.json). Push-only — view your harvest history on any device.
+const harvestsTab = "Harvests"
+
+// harvestsHeaders are the column headings for the Harvests tab.
+var harvestsHeaders = []interface{}{
+	"crop", "harvest_date",
+	"expected_trays", "actual_trays",
+	"expected_grams", "actual_grams",
+	"notes",
+}
+
 // ─── SheetsClient ───────────────────────────────────────────────────────────
 
 // SheetsClient wraps the Google Sheets API service with helper methods
@@ -132,8 +178,8 @@ func NewSheetsClient(ctx context.Context, sheetID string) (*SheetsClient, error)
 
 // ─── Sheet creation ─────────────────────────────────────────────────────────
 
-// CreateSheet creates a brand-new Google Spreadsheet with all four tabs
-// ("Crops", "Cycle", "Farm", "Trials") and their header rows already in place.
+// CreateSheet creates a brand-new Google Spreadsheet with all seven tabs
+// and their header rows already in place.
 //
 // This is called only once — the very first time the user runs "greenies sync"
 // and agrees to link Google Sheets. After creation, the spreadsheet ID is
@@ -152,7 +198,7 @@ func CreateSheet(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not create Google Sheets service: %w", err)
 	}
 
-	// Define the spreadsheet structure: four tabs with specific names.
+	// Define the spreadsheet structure: seven tabs with specific names.
 	// Google always creates a default "Sheet1" tab, but by specifying our
 	// own tabs here it only creates the ones we ask for.
 	spreadsheet := &sheets.Spreadsheet{
@@ -164,6 +210,9 @@ func CreateSheet(ctx context.Context) (string, error) {
 			{Properties: &sheets.SheetProperties{Title: cycleTab}},
 			{Properties: &sheets.SheetProperties{Title: farmTab}},
 			{Properties: &sheets.SheetProperties{Title: trialsTab}},
+			{Properties: &sheets.SheetProperties{Title: scheduleTab}},
+			{Properties: &sheets.SheetProperties{Title: batchesTab}},
+			{Properties: &sheets.SheetProperties{Title: harvestsTab}},
 		},
 	}
 
@@ -224,6 +273,36 @@ func CreateSheet(ctx context.Context) (string, error) {
 	}).ValueInputOption("RAW").Context(ctx).Do()
 	if err != nil {
 		return sheetID, fmt.Errorf("created sheet but could not write Trials header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Schedule tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, scheduleTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{scheduleHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Schedule header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Batches tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, batchesTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{batchesHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Batches header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Harvests tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, harvestsTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{harvestsHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Harvests header: %w", err)
 	}
 
 	return sheetID, nil
@@ -658,12 +737,163 @@ func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
 	return nil
 }
 
+// ─── Schedule (tasks.json): push-only ────────────────────────────────────────
+
+// PushSchedule writes every calendar task to the "Schedule" tab. Push-only —
+// the program never reads tasks back from the Sheet. The tab exists so the
+// grower can view their full schedule on any device.
+//
+// Tasks are sorted by date (earliest first) so the spreadsheet reads like
+// a chronological list. "No tasks today" placeholder tasks are excluded —
+// they exist only for slot tracking and would clutter the view.
+func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
+	// Build the rows: header + one row per task.
+	rows := [][]interface{}{scheduleHeaders}
+
+	for _, t := range tasks {
+		// Skip placeholder tasks — they have no real actions and would
+		// just clutter the spreadsheet.
+		if t.Notes == task.NoTasksNote {
+			continue
+		}
+
+		rows = append(rows, []interface{}{
+			t.Date,
+			t.Title,
+			t.Notes,
+			t.CycleID,
+		})
+	}
+
+	// Clear the tab and rewrite from scratch.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, scheduleTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Schedule tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, scheduleTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Schedule tab: %w", err)
+	}
+
+	return nil
+}
+
+// ─── Batches (cycles.json): push-only ───────────────────────────────────────
+
+// PushBatches writes every planned crop cycle to the "Batches" tab. Push-only
+// — the program never reads cycle records back from the Sheet. The tab exists
+// so the grower can see all their planned batches on any device.
+func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
+	// Build the rows: header + one row per cycle.
+	rows := [][]interface{}{batchesHeaders}
+
+	for _, c := range cycles {
+		// Format expected grams: empty string for zero so the cell stays
+		// blank rather than showing a misleading "0".
+		gramsStr := ""
+		if c.ExpectedGrams > 0 {
+			gramsStr = strconv.Itoa(c.ExpectedGrams)
+		}
+
+		rows = append(rows, []interface{}{
+			c.CropName,
+			c.Trays,
+			c.SowDate,
+			c.HarvestDate,
+			c.MoveToLightDate,
+			c.LitEnvironment,
+			gramsStr,
+		})
+	}
+
+	// Clear the tab and rewrite from scratch.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, batchesTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Batches tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, batchesTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Batches tab: %w", err)
+	}
+
+	return nil
+}
+
+// ─── Harvests (harvests.json): push-only ────────────────────────────────────
+
+// PushHarvests writes the harvest log to the "Harvests" tab. Push-only —
+// the program never reads harvest records back from the Sheet. The tab
+// exists so the grower can review their harvest history on any device.
+func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
+	// Build the rows: header + one row per harvest record.
+	rows := [][]interface{}{harvestsHeaders}
+
+	for _, h := range records {
+		// Format expected grams: empty string for zero (means "unknown").
+		expectedStr := ""
+		if h.ExpectedGrams > 0 {
+			expectedStr = strconv.Itoa(h.ExpectedGrams)
+		}
+
+		rows = append(rows, []interface{}{
+			h.CropName,
+			h.HarvestDate,
+			h.ExpectedTrays,
+			h.ActualTrays,
+			expectedStr,
+			h.ActualGrams,
+			h.Notes,
+		})
+	}
+
+	// Clear the tab and rewrite from scratch.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, harvestsTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Harvests tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, harvestsTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Harvests tab: %w", err)
+	}
+
+	return nil
+}
+
 // ─── Fire-and-forget sync helper ────────────────────────────────────────────
 
-// SyncLocalToSheet reads the local data files (crops.csv, farm.csv, and
-// trials.json) and pushes their contents to the configured Google Sheet.
-// This is called after local modifications (adjust stages, promote trial,
-// etc.) to keep the Sheet in sync.
+// SyncLocalToSheet reads all local data files and pushes their contents to
+// the configured Google Sheet. This is called after local modifications
+// (adjust stages, promote trial, plan a batch, log a harvest, etc.) to
+// keep the Sheet in sync.
+//
+// Files pushed:
+//   - crops.csv     → Crops + Cycle tabs (two-way source of truth)
+//   - farm.csv      → Farm tab (two-way source of truth)
+//   - trials.json   → Trials tab (push-only)
+//   - tasks.json    → Schedule Tasks tab (push-only)
+//   - cycles.json   → Schedule Cycles tab (push-only)
+//   - harvests.json → Harvests tab (push-only)
 //
 // It is "fire-and-forget" — if Sheets is not enabled, or the push fails
 // (e.g. no internet), it prints a warning and returns without error.
@@ -707,6 +937,30 @@ func SyncLocalToSheet(ctx context.Context) {
 	if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 		if pushErr := sc.PushTrials(records); pushErr != nil {
 			fmt.Printf("  ⚠ Could not push trials to Google Sheet: %v\n", pushErr)
+		}
+		time.Sleep(apiPause)
+	}
+
+	// ── Push schedule (tasks.json) ──────────────────────────────────────
+	if tasks, loadErr := store.Load(); loadErr == nil {
+		if pushErr := sc.PushSchedule(tasks); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push schedule to Google Sheet: %v\n", pushErr)
+		}
+		time.Sleep(apiPause)
+	}
+
+	// ── Push batches (cycles.json) ──────────────────────────────────────
+	if cycles, loadErr := farm.LoadCycles(); loadErr == nil {
+		if pushErr := sc.PushBatches(cycles); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push batches to Google Sheet: %v\n", pushErr)
+		}
+		time.Sleep(apiPause)
+	}
+
+	// ── Push harvests (harvests.json) ────────────────────────────────────
+	if harvests, loadErr := farm.LoadHarvests(); loadErr == nil {
+		if pushErr := sc.PushHarvests(harvests); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push harvests to Google Sheet: %v\n", pushErr)
 		}
 	}
 

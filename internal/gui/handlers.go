@@ -3520,6 +3520,21 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 			if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 				_ = sc.PushTrials(records)
 			}
+
+			// Push schedule (one-way to Sheet).
+			if allTasks, loadErr := store.Load(); loadErr == nil {
+				_ = sc.PushSchedule(allTasks)
+			}
+
+			// Push batches (one-way to Sheet).
+			if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
+				_ = sc.PushBatches(allCycles)
+			}
+
+			// Push harvests (one-way to Sheet).
+			if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
+				_ = sc.PushHarvests(allHarvests)
+			}
 		}
 	}
 
@@ -3565,9 +3580,10 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 // in the terminal during the first "greenies sync". When the user clicks the
 // "Link Google Sheets" button on the sync page, this handler:
 //
-//  1. Creates a new Google Spreadsheet with all four tabs (Crops, Cycle, Farm, Trials)
+//  1. Creates a new Google Spreadsheet with all seven tabs
+//     (Crops, Cycle, Farm, Trials, Schedule, Batches, Harvests)
 //  2. Saves the spreadsheet ID to config.json
-//  3. Pushes existing local data (crops, farm layout, trials) to the new Sheet
+//  3. Pushes all existing local data to the new Sheet
 //  4. Returns an htmx fragment showing the Sheet URL and a "Sync Now" button
 //
 // The response replaces the setup section with a success message, so the user
@@ -3575,7 +3591,7 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
-	// Create the Google Sheet with all four tabs and headers.
+	// Create the Google Sheet with all seven tabs and headers.
 	sheetID, err := gcal.CreateSheet(ctx)
 	if err != nil {
 		renderFragment(w, "sheets_setup_result.html", map[string]any{
@@ -3615,6 +3631,21 @@ func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 		// Push trials.
 		if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 			_ = sc.PushTrials(records)
+		}
+
+		// Push schedule (tasks.json).
+		if allTasks, loadErr := store.Load(); loadErr == nil {
+			_ = sc.PushSchedule(allTasks)
+		}
+
+		// Push batches (cycles.json).
+		if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
+			_ = sc.PushBatches(allCycles)
+		}
+
+		// Push harvests (harvests.json).
+		if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
+			_ = sc.PushHarvests(allHarvests)
 		}
 	}
 

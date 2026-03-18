@@ -200,7 +200,7 @@ func syncSheets(ctx context.Context) {
 			return
 		}
 
-		// Create the Google Sheet with all four tabs and headers.
+		// Create the Google Sheet with all seven tabs and headers.
 		fmt.Println("Creating Google Sheet...")
 		sheetID, err := gcal.CreateSheet(ctx)
 		if err != nil {
@@ -260,6 +260,33 @@ func syncSheets(ctx context.Context) {
 			fmt.Println("Uploading trial data...")
 			if pushErr := sc.PushTrials(records); pushErr != nil {
 				fmt.Printf("  Warning: could not upload trials: %v\n", pushErr)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Push schedule (tasks.json).
+		if tasks, loadErr := store.Load(); loadErr == nil && len(tasks) > 0 {
+			fmt.Printf("Uploading schedule (%d tasks)...\n", len(tasks))
+			if pushErr := sc.PushSchedule(tasks); pushErr != nil {
+				fmt.Printf("  Warning: could not upload schedule: %v\n", pushErr)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Push batches (cycles.json).
+		if cycles, loadErr := farm.LoadCycles(); loadErr == nil && len(cycles) > 0 {
+			fmt.Printf("Uploading batches (%d cycles)...\n", len(cycles))
+			if pushErr := sc.PushBatches(cycles); pushErr != nil {
+				fmt.Printf("  Warning: could not upload batches: %v\n", pushErr)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Push harvests (harvests.json).
+		if harvests, loadErr := farm.LoadHarvests(); loadErr == nil && len(harvests) > 0 {
+			fmt.Printf("Uploading harvest log (%d records)...\n", len(harvests))
+			if pushErr := sc.PushHarvests(harvests); pushErr != nil {
+				fmt.Printf("  Warning: could not upload harvest log: %v\n", pushErr)
 			}
 		}
 
@@ -331,6 +358,39 @@ func syncSheets(ctx context.Context) {
 			fmt.Printf("  ⚠ Could not push trials to Sheet: %v\n", pushErr)
 		} else {
 			fmt.Println("  Trials pushed to Sheet.")
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// ── Push schedule (one-way to Sheet) ────────────────────────────────
+	if tasks, loadErr := store.Load(); loadErr == nil {
+		if pushErr := sc.PushSchedule(tasks); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push schedule to Sheet: %v\n", pushErr)
+		} else {
+			fmt.Println("  Schedule pushed to Sheet.")
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// ── Push batches (one-way to Sheet) ─────────────────────────────────
+	if cycles, loadErr := farm.LoadCycles(); loadErr == nil {
+		if pushErr := sc.PushBatches(cycles); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push batches to Sheet: %v\n", pushErr)
+		} else {
+			fmt.Println("  Batches pushed to Sheet.")
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// ── Push harvests (one-way to Sheet) ────────────────────────────────
+	if harvests, loadErr := farm.LoadHarvests(); loadErr == nil {
+		if pushErr := sc.PushHarvests(harvests); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push harvests to Sheet: %v\n", pushErr)
+		} else {
+			fmt.Println("  Harvests pushed to Sheet.")
 		}
 	}
 
