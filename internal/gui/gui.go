@@ -279,6 +279,8 @@ func StartServer(port int) error {
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync", handleSyncAction)
+	mux.HandleFunc("POST /google-signin", handleGoogleSignIn)
+	mux.HandleFunc("POST /sheets-setup", handleSheetsSetup)
 
 	// ── Open terminal ───────────────────────────────────────────────
 	// When the grower clicks "Open Terminal" in the nav bar, the browser

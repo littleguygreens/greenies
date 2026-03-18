@@ -291,3 +291,13 @@ The layout is defined in a configuration file — never hardcoded.
   targets Linux only (`.desktop` file). Add support for macOS (`.app` bundle)
   and Windows (GUI-mode build + shortcut creation) so the program can be
   launched by double-clicking an icon on any OS, with no terminal window
+- **Embedded Google OAuth credentials** — embed the OAuth client ID and secret
+  directly in the binary so new users can sign in with one click instead of
+  manually creating a Google Cloud project and downloading credentials.json.
+  This is standard practice for open-source desktop apps (e.g. rclone) —
+  Google treats desktop client secrets as non-confidential. Tradeoffs to
+  consider before enabling: all users share one API quota (could hit limits
+  if the tool gets popular), abuse by third parties could get the Cloud
+  project suspended, and Google requires a verification review before more
+  than 100 users can authorise. Best to revisit once the tool is published
+  and user count is known.

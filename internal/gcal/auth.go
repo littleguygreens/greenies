@@ -69,6 +69,20 @@ func CredentialsExist() bool {
 	return err == nil
 }
 
+// TokenExists returns true if the user has already completed the Google
+// sign-in flow and a saved token.json exists. This is separate from
+// CredentialsExist — credentials.json is the app's identity (downloaded
+// from Google Cloud Console), while token.json is the user's sign-in
+// (created after they approve in the browser).
+func TokenExists() bool {
+	path, err := tokenPath()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 // loadConfig reads credentials.json and builds an OAuth2 configuration.
 // The configuration tells the library which Google account the program
 // belongs to (client ID and secret) and what permissions it needs (in this
@@ -239,7 +253,7 @@ func runBrowserAuthFlow(ctx context.Context, config *oauth2.Config) (*oauth2.Tok
 		// Send the code back to the waiting main flow.
 		codeCh <- code
 		// Show a friendly message in the browser — the user can close the tab.
-		fmt.Fprintf(w, "<h2>Authorisation complete!</h2><p>You can close this browser tab and return to the terminal.</p>")
+		fmt.Fprintf(w, "<h2>Authorisation complete!</h2><p>You can close this browser tab and return to greenies.</p>")
 	})
 
 	// Start the server in the background — it handles one request then stops.

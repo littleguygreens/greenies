@@ -13,6 +13,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/trial"
 )
 
 // runSync handles the "greenies sync" command.
@@ -33,9 +34,39 @@ import (
 // need to appear in Google.
 func runSync() {
 	if !gcal.CredentialsExist() {
-		fmt.Println("Google Calendar is not set up.")
-		fmt.Println("Place credentials.json in ~/.greenies/ to enable calendar sync.")
-		fmt.Println("See the Phase 5 setup notes for instructions.")
+		fmt.Println("Google sync is not set up yet.")
+		fmt.Println()
+		fmt.Println("To connect greenies to your Google account, you need a credentials")
+		fmt.Println("file from Google. This is a one-time setup that takes about 5 minutes:")
+		fmt.Println()
+		fmt.Println("  1. Go to https://console.cloud.google.com/")
+		fmt.Println("     Sign in with the Google account you want greenies to use.")
+		fmt.Println()
+		fmt.Println("  2. Create a new project (click the project dropdown at the top,")
+		fmt.Println("     then \"New Project\"). Name it anything — \"greenies\" works.")
+		fmt.Println()
+		fmt.Println("  3. Enable three APIs for your project. Go to \"APIs & Services\" →")
+		fmt.Println("     \"Library\" and search for each of these, then click \"Enable\":")
+		fmt.Println("       • Google Calendar API")
+		fmt.Println("       • Google Tasks API")
+		fmt.Println("       • Google Sheets API")
+		fmt.Println()
+		fmt.Println("  4. Set up the consent screen. Go to \"APIs & Services\" →")
+		fmt.Println("     \"OAuth consent screen\". Choose \"External\", fill in the app")
+		fmt.Println("     name (\"greenies\"), your email, and save. Add yourself as a")
+		fmt.Println("     test user under \"Test users\".")
+		fmt.Println()
+		fmt.Println("  5. Create credentials. Go to \"APIs & Services\" → \"Credentials\",")
+		fmt.Println("     click \"+ Create Credentials\" → \"OAuth client ID\".")
+		fmt.Println("     Application type: \"Desktop app\". Name: \"greenies\".")
+		fmt.Println("     Click \"Create\", then \"Download JSON\".")
+		fmt.Println()
+		fmt.Println("  6. Move the downloaded file to ~/.greenies/credentials.json")
+		fmt.Println("     (you may need to rename it — the download has a long name).")
+		fmt.Println()
+		fmt.Println("  7. Run \"greenies sync\" again. You'll be asked to sign in once.")
+		fmt.Println()
+		fmt.Println("After this one-time setup, syncing is just one click.")
 		return
 	}
 
@@ -128,17 +159,18 @@ loop:
 }
 
 // syncSheets handles the Google Sheets portion of the sync — pulling the
-// latest crop library from the Google Sheet and saving it to the local
-// crops.csv cache.
+// latest crop library and farm layout from the Google Sheet and saving
+// them to local CSV files, then pushing trials data to the Sheet.
 //
 // On first run: asks the user if they want to link Google Sheets, creates
-// the spreadsheet, and populates it from existing crops.csv data.
+// the spreadsheet, and populates it from existing local data.
 //
-// On subsequent runs: pulls from the Sheet and overwrites the local cache.
+// On subsequent runs: pulls crops and farm from the Sheet and overwrites
+// local caches; pushes trials to the Sheet (push-only).
 //
 // If anything goes wrong (no internet, API error), it prints a warning and
-// continues — the local crops.csv is left untouched and the Calendar/Tasks
-// sync proceeds as normal.
+// continues — local files are left untouched and the Calendar/Tasks sync
+// proceeds as normal.
 func syncSheets(ctx context.Context) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -153,8 +185,9 @@ func syncSheets(ctx context.Context) {
 	// remembers their choice.
 	if !cfg.SheetsEnabled {
 		fmt.Println()
-		fmt.Println("Link Google Sheets for your crop library?")
-		fmt.Println("This lets you edit crop parameters in Google Sheets from any device.")
+		fmt.Println("Link Google Sheets for your farm data?")
+		fmt.Println("This lets you view and edit your crop library and farm layout")
+		fmt.Println("in Google Sheets from any device.")
 		fmt.Print("(y/n): ")
 
 		reader := bufio.NewReader(os.Stdin)
@@ -162,17 +195,17 @@ func syncSheets(ctx context.Context) {
 		answer = strings.ToLower(strings.TrimSpace(answer))
 
 		if answer != "y" && answer != "yes" {
-			fmt.Println("Skipping Google Sheets — using local crops.csv only.")
+			fmt.Println("Skipping Google Sheets — using local files only.")
 			fmt.Println()
 			return
 		}
 
-		// Create the Google Sheet with the two tabs and headers.
+		// Create the Google Sheet with all four tabs and headers.
 		fmt.Println("Creating Google Sheet...")
-		sheetID, err := gcal.CreateCropSheet(ctx)
+		sheetID, err := gcal.CreateSheet(ctx)
 		if err != nil {
 			fmt.Printf("  Could not create Google Sheet: %v\n", err)
-			fmt.Println("  Continuing with local crops.csv only.")
+			fmt.Println("  Continuing with local files only.")
 			fmt.Println()
 			return
 		}
@@ -189,32 +222,53 @@ func syncSheets(ctx context.Context) {
 		fmt.Println("Google Sheet created!")
 		fmt.Printf("  URL: https://docs.google.com/spreadsheets/d/%s/edit\n", sheetID)
 		fmt.Println()
-		fmt.Println("Bookmark that URL — it's where you'll edit your crop library.")
+		fmt.Println("Bookmark that URL — it's where you'll view and edit your farm data.")
 
-		// If the user already has crop data in their local CSV, push it to
-		// the new Sheet so they don't have to re-enter everything by hand.
+		// Push existing local data to the new Sheet so the user doesn't
+		// have to re-enter everything by hand.
+		sc, clientErr := gcal.NewSheetsClient(ctx, sheetID)
+		if clientErr != nil {
+			fmt.Printf("  Warning: could not connect to push data: %v\n", clientErr)
+			fmt.Println()
+			return
+		}
+
+		// Push crops.
 		cropsPath, pathErr := crop.CropsFilePath()
 		if pathErr == nil {
 			localSource := crop.CSVSource{Path: cropsPath}
 			if localCrops, loadErr := localSource.LoadCrops(); loadErr == nil && len(localCrops) > 0 {
-				fmt.Printf("Uploading %d crop varieties to Google Sheet...\n", len(localCrops))
-
-				sc, clientErr := gcal.NewSheetsClient(ctx, sheetID)
-				if clientErr == nil {
-					if pushErr := sc.PushCrops(localCrops); pushErr == nil {
-						fmt.Println("Crop library uploaded successfully.")
-					} else {
-						fmt.Printf("  Warning: could not upload crops: %v\n", pushErr)
-					}
+				fmt.Printf("Uploading %d crop varieties...\n", len(localCrops))
+				if pushErr := sc.PushCrops(localCrops); pushErr != nil {
+					fmt.Printf("  Warning: could not upload crops: %v\n", pushErr)
 				}
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 
+		// Push farm layout.
+		if envs, loadErr := farm.LoadConfig(); loadErr == nil && len(envs) > 0 {
+			fmt.Printf("Uploading farm layout (%d environments)...\n", len(envs))
+			if pushErr := sc.PushFarm(envs); pushErr != nil {
+				fmt.Printf("  Warning: could not upload farm layout: %v\n", pushErr)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Push trials.
+		if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
+			fmt.Println("Uploading trial data...")
+			if pushErr := sc.PushTrials(records); pushErr != nil {
+				fmt.Printf("  Warning: could not upload trials: %v\n", pushErr)
+			}
+		}
+
+		fmt.Println("Data uploaded successfully.")
 		fmt.Println()
 		return
 	}
 
-	// ── Subsequent sync: pull from Sheet → update local CSV ─────────────
+	// ── Subsequent sync: pull from Sheet → update local files ───────────
 
 	if cfg.SheetID == "" {
 		// Sheets is "enabled" but has no sheet ID — shouldn't happen, but
@@ -222,47 +276,63 @@ func syncSheets(ctx context.Context) {
 		return
 	}
 
-	fmt.Println("Syncing crop library from Google Sheets...")
+	fmt.Println("Syncing from Google Sheets...")
 	sc, err := gcal.NewSheetsClient(ctx, cfg.SheetID)
 	if err != nil {
 		fmt.Printf("  ⚠ Could not connect to Google Sheets: %v\n", err)
-		fmt.Println("  Using local crops.csv (may be out of date).")
+		fmt.Println("  Using local files (may be out of date).")
 		fmt.Println()
 		return
 	}
 
-	// Pull the latest crop data from the Sheet.
+	// ── Pull crops (two-way) ────────────────────────────────────────────
 	pulledCrops, err := sc.PullCrops()
 	if err != nil {
-		fmt.Printf("  ⚠ Could not read Google Sheet: %v\n", err)
-		fmt.Println("  Using local crops.csv (may be out of date).")
-		fmt.Println()
-		return
+		fmt.Printf("  ⚠ Could not read Crops tab: %v\n", err)
+		fmt.Println("  Keeping local crops.csv as-is.")
+	} else if len(pulledCrops) == 0 {
+		fmt.Println("  Crops tab is empty — keeping local crops.csv as-is.")
+	} else {
+		cropsPath, pathErr := crop.CropsFilePath()
+		if pathErr != nil {
+			fmt.Printf("  Warning: could not find crops.csv path: %v\n", pathErr)
+		} else if writeErr := crop.WriteCrops(cropsPath, pulledCrops); writeErr != nil {
+			fmt.Printf("  Warning: could not update local crops.csv: %v\n", writeErr)
+		} else {
+			fmt.Printf("  Crop library synced (%d varieties).\n", len(pulledCrops))
+		}
 	}
 
-	// If the Sheet is empty (just headers, no crop data), don't overwrite
-	// the local CSV — the user might not have populated the Sheet yet.
-	if len(pulledCrops) == 0 {
-		fmt.Println("  Google Sheet is empty — keeping local crops.csv as-is.")
-		fmt.Println("  Add crops to your Google Sheet and sync again.")
-		fmt.Println()
-		return
-	}
+	time.Sleep(100 * time.Millisecond)
 
-	// Write the pulled data to the local CSV cache.
-	cropsPath, err := crop.CropsFilePath()
+	// ── Pull farm layout (two-way) ──────────────────────────────────────
+	pulledFarm, err := sc.PullFarm()
 	if err != nil {
-		fmt.Printf("  Warning: could not find crops.csv path: %v\n", err)
-		fmt.Println()
-		return
+		fmt.Printf("  ⚠ Could not read Farm tab: %v\n", err)
+		fmt.Println("  Keeping local farm.csv as-is.")
+	} else if len(pulledFarm) == 0 {
+		fmt.Println("  Farm tab is empty — keeping local farm.csv as-is.")
+	} else {
+		farmPath, pathErr := farm.FarmConfigPath()
+		if pathErr != nil {
+			fmt.Printf("  Warning: could not find farm.csv path: %v\n", pathErr)
+		} else if writeErr := farm.WriteConfig(farmPath, pulledFarm); writeErr != nil {
+			fmt.Printf("  Warning: could not update local farm.csv: %v\n", writeErr)
+		} else {
+			fmt.Printf("  Farm layout synced (%d environments).\n", len(pulledFarm))
+		}
 	}
 
-	if err := crop.WriteCrops(cropsPath, pulledCrops); err != nil {
-		fmt.Printf("  Warning: could not update local crops.csv: %v\n", err)
-		fmt.Println()
-		return
+	time.Sleep(100 * time.Millisecond)
+
+	// ── Push trials (one-way to Sheet) ──────────────────────────────────
+	if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
+		if pushErr := sc.PushTrials(records); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push trials to Sheet: %v\n", pushErr)
+		} else {
+			fmt.Println("  Trials pushed to Sheet.")
+		}
 	}
 
-	fmt.Printf("  Crop library synced (%d varieties).\n", len(pulledCrops))
 	fmt.Println()
 }

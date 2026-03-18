@@ -1,29 +1,26 @@
 // This file handles all communication with the Google Sheets API.
 //
 // It lets the program create, read, and write a Google Spreadsheet that
-// contains the crop library — the same data that lives locally in
-// ~/.greenies/crops.csv.
-//
-// The spreadsheet has two tabs (sheets):
+// mirrors the farm's local data files:
 //
 //   "Crops" — one row per crop variety with its parameters (seed weight,
-//   soak hours, dark days, light days, etc.). This is the "settings" tab
-//   that a grower scans to see all their varieties at a glance.
+//   soak hours, dark days, light days, etc.). Two-way sync: edits in the
+//   Sheet are pulled down; local changes are pushed up.
 //
-//   "Cycle" — the day-by-day schedule for every crop. Each row is one day
-//   in one crop's growing cycle, with the stage (sow/dark/light/harvest)
-//   and the specific tasks for that day.
+//   "Cycle" — the day-by-day schedule for every crop. Two-way with Crops.
 //
-// Why two tabs instead of one?
-//   The old crops.csv crammed everything into one file using a "sparse"
-//   format where parameters only appeared on the first row of each crop
-//   block. That's hard to read in a spreadsheet. Two tabs are cleaner:
-//   each tab does one job, and every row makes sense on its own.
+//   "Farm" — the physical farm layout (environments, slot capacities, and
+//   inventory counts). Two-way sync, same as Crops.
 //
-// The Google Sheet is the "source of truth" — when you edit crops in
-// Google Sheets, running "greenies sync" pulls those changes down to the
-// local CSV. When the program modifies crops (e.g. adjusting stages or
-// promoting a trial), it pushes the changes back up to the Sheet.
+//   "Trials" — trial run data (push-only). The program pushes confirmed
+//   trial parameters to this tab so you can view them in Sheets, but edits
+//   in the Sheet are NOT pulled back — trial data is managed through the
+//   "greenies trial" command.
+//
+// The Google Sheet is the "source of truth" for crops and farm layout —
+// when you edit them in Google Sheets, running "greenies sync" pulls those
+// changes down to the local CSV. When the program modifies data locally
+// (e.g. adjusting stages or promoting a trial), it pushes changes back up.
 package gcal
 
 import (
@@ -38,6 +35,8 @@ import (
 
 	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
+	"github.com/littleguygreens/greenies/internal/farm"
+	"github.com/littleguygreens/greenies/internal/trial"
 )
 
 // ─── Sheet layout constants ─────────────────────────────────────────────────
@@ -64,6 +63,30 @@ var cropsHeaders = []interface{}{
 // cycleHeaders are the column headings for the Cycle tab.
 var cycleHeaders = []interface{}{
 	"name", "day", "stage", "tasks",
+}
+
+// farmTab is the name of the spreadsheet tab that holds the physical farm
+// layout — environments, slot capacities, and inventory counts.
+const farmTab = "Farm"
+
+// farmHeaders are the column headings for the Farm tab.
+// Matches the columns in ~/.greenies/farm.csv exactly.
+var farmHeaders = []interface{}{
+	"name", "type", "capacity",
+}
+
+// trialsTab is the name of the spreadsheet tab that holds trial run data.
+// This tab is push-only — the program writes to it, but never reads from it.
+const trialsTab = "Trials"
+
+// trialsHeaders are the column headings for the Trials tab.
+// One row per trial-day, with trial metadata on the first row of each block
+// (same layout as trials.csv, but not sparse — every row has the crop name).
+var trialsHeaders = []interface{}{
+	"name", "trial_variable", "status", "sow_date",
+	"day", "stage", "tasks",
+	"overnight_soak", "soak_hours", "seed_grams", "dirt_litres",
+	"dark_days", "light_days", "yield_grams",
 }
 
 // ─── SheetsClient ───────────────────────────────────────────────────────────
@@ -109,15 +132,15 @@ func NewSheetsClient(ctx context.Context, sheetID string) (*SheetsClient, error)
 
 // ─── Sheet creation ─────────────────────────────────────────────────────────
 
-// CreateCropSheet creates a brand-new Google Spreadsheet with the two tabs
-// ("Crops" and "Cycle") and their header rows already in place.
+// CreateSheet creates a brand-new Google Spreadsheet with all four tabs
+// ("Crops", "Cycle", "Farm", "Trials") and their header rows already in place.
 //
 // This is called only once — the very first time the user runs "greenies sync"
 // and agrees to link Google Sheets. After creation, the spreadsheet ID is
 // saved to config.json and reused on every future sync.
 //
 // Returns the new spreadsheet's ID (the string needed to access it via the API).
-func CreateCropSheet(ctx context.Context) (string, error) {
+func CreateSheet(ctx context.Context) (string, error) {
 	// Get the shared OAuth HTTP client.
 	client, err := AuthorizeClient(ctx)
 	if err != nil {
@@ -129,7 +152,7 @@ func CreateCropSheet(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not create Google Sheets service: %w", err)
 	}
 
-	// Define the spreadsheet structure: two tabs with specific names.
+	// Define the spreadsheet structure: four tabs with specific names.
 	// Google always creates a default "Sheet1" tab, but by specifying our
 	// own tabs here it only creates the ones we ask for.
 	spreadsheet := &sheets.Spreadsheet{
@@ -139,6 +162,8 @@ func CreateCropSheet(ctx context.Context) (string, error) {
 		Sheets: []*sheets.Sheet{
 			{Properties: &sheets.SheetProperties{Title: cropsTab}},
 			{Properties: &sheets.SheetProperties{Title: cycleTab}},
+			{Properties: &sheets.SheetProperties{Title: farmTab}},
+			{Properties: &sheets.SheetProperties{Title: trialsTab}},
 		},
 	}
 
@@ -179,6 +204,26 @@ func CreateCropSheet(ctx context.Context) (string, error) {
 	}).ValueInputOption("RAW").Context(ctx).Do()
 	if err != nil {
 		return sheetID, fmt.Errorf("created sheet but could not write Cycle header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Farm tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, farmTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{farmHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Farm header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Trials tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, trialsTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{trialsHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Trials header: %w", err)
 	}
 
 	return sheetID, nil
@@ -431,16 +476,199 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 	return nil
 }
 
+// ─── Farm layout: pull and push ─────────────────────────────────────────────
+
+// PullFarm reads the "Farm" tab from the Google Sheet and returns the data as
+// []farm.Environment — the same type used everywhere else in the program.
+//
+// If the tab is empty (just headers, no data rows), it returns an empty slice
+// and no error — same behaviour as PullCrops for an empty sheet.
+func (sc *SheetsClient) PullFarm() ([]farm.Environment, error) {
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, farmTab+"!A:C",
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Farm tab: %w", err)
+	}
+
+	var envs []farm.Environment
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue // blank row
+		}
+
+		name := strings.TrimSpace(cellString(row, 0))
+		if name == "" {
+			continue
+		}
+
+		envType := strings.TrimSpace(cellString(row, 1))
+		capacity := parseIntCell(row, 2)
+
+		envs = append(envs, farm.Environment{
+			Name:     name,
+			Type:     envType,
+			Capacity: capacity,
+		})
+	}
+
+	return envs, nil
+}
+
+// PushFarm writes the given farm environments to the "Farm" tab, completely
+// replacing any existing data. Same clear-and-rewrite approach as PushCrops.
+func (sc *SheetsClient) PushFarm(envs []farm.Environment) error {
+	// Build the rows: header + one row per environment.
+	rows := [][]interface{}{farmHeaders}
+
+	for _, env := range envs {
+		rows = append(rows, []interface{}{
+			env.Name,
+			env.Type,
+			env.Capacity,
+		})
+	}
+
+	// Clear the tab and rewrite from scratch.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, farmTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Farm tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, farmTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Farm tab: %w", err)
+	}
+
+	return nil
+}
+
+// ─── Trials: push-only ─────────────────────────────────────────────────────
+
+// PushTrials writes trial data to the "Trials" tab. This is push-only —
+// the program never reads trial data back from the Sheet. The tab exists
+// so the grower can view trial progress in Google Sheets from any device.
+//
+// Only trials with at least one confirmed day are included — a brand-new
+// trial with no confirmed parameters has nothing useful to show yet.
+func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
+	// Build the rows: header + one row per trial-day.
+	rows := [][]interface{}{trialsHeaders}
+
+	for _, tr := range records {
+		// Skip trials with no confirmed day data — nothing to display.
+		if len(tr.ConfirmedDays) == 0 {
+			continue
+		}
+
+		// Count dark and light days from the confirmed parameters.
+		darkDays := 0
+		lightDays := 0
+		for _, d := range tr.ConfirmedDays {
+			switch d.Stage {
+			case "dark":
+				darkDays++
+			case "light":
+				lightDays++
+			}
+		}
+
+		// Format parameter fields. Empty string for zero/unknown values
+		// so the Sheet cell stays blank rather than showing a misleading "0".
+		soakStr := "FALSE"
+		if tr.OvernightSoak {
+			soakStr = "TRUE"
+		}
+		soakHoursStr := ""
+		if tr.SoakHours > 0 {
+			soakHoursStr = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
+		}
+		seedStr := ""
+		if tr.SeedGrams > 0 {
+			seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
+		}
+		dirtStr := ""
+		if tr.DirtLitres > 0 {
+			dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
+		}
+		yieldStr := ""
+		if tr.ActualYieldGrams > 0 {
+			yieldStr = strconv.Itoa(tr.ActualYieldGrams)
+		}
+
+		// One row per confirmed day. Every row has the crop name and
+		// trial variable filled in (not sparse) so it reads cleanly.
+		// Parameters only appear on the first row of each trial block.
+		for i, d := range tr.ConfirmedDays {
+			row := []interface{}{
+				tr.CropName,
+				tr.TrialVariable,
+				tr.Status,
+				tr.SowDate,
+				d.Day,
+				d.Stage,
+				d.Tasks,
+			}
+
+			if i == 0 {
+				// First row: include all parameters.
+				row = append(row,
+					soakStr, soakHoursStr, seedStr, dirtStr,
+					darkDays, lightDays, yieldStr,
+				)
+			} else {
+				// Subsequent rows: leave parameter columns empty.
+				row = append(row,
+					"", "", "", "",
+					"", "", "",
+				)
+			}
+
+			rows = append(rows, row)
+		}
+	}
+
+	// Clear the tab and rewrite from scratch.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, trialsTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Trials tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, trialsTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Trials tab: %w", err)
+	}
+
+	return nil
+}
+
 // ─── Fire-and-forget sync helper ────────────────────────────────────────────
 
-// SyncLocalToSheet reads the local crops.csv and pushes its contents to
-// the configured Google Sheet. This is called after local modifications
-// (adjust stages, promote trial) to keep the Sheet in sync.
+// SyncLocalToSheet reads the local data files (crops.csv, farm.csv, and
+// trials.json) and pushes their contents to the configured Google Sheet.
+// This is called after local modifications (adjust stages, promote trial,
+// etc.) to keep the Sheet in sync.
 //
 // It is "fire-and-forget" — if Sheets is not enabled, or the push fails
 // (e.g. no internet), it prints a warning and returns without error.
-// The local CSV is always the immediate write target; this is a best-effort
-// mirror to keep the Sheet up to date.
+// The local files are always the immediate write target; this is a
+// best-effort mirror to keep the Sheet up to date.
 func SyncLocalToSheet(ctx context.Context) {
 	// Check if Sheets integration is enabled.
 	cfg, err := config.Load()
@@ -448,31 +676,38 @@ func SyncLocalToSheet(ctx context.Context) {
 		return // Sheets not configured — nothing to do.
 	}
 
-	// Load the local crops.csv.
-	cropsPath, err := crop.CropsFilePath()
-	if err != nil {
-		fmt.Println("  ⚠ Could not find crops.csv path — Sheet not updated.")
-		return
-	}
-
-	source := crop.CSVSource{Path: cropsPath}
-	crops, err := source.LoadCrops()
-	if err != nil {
-		fmt.Println("  ⚠ Could not read local crops.csv — Sheet not updated.")
-		return
-	}
-
-	// Create a Sheets client and push.
+	// Create a Sheets client — shared for all three pushes.
 	sc, err := NewSheetsClient(ctx, cfg.SheetID)
 	if err != nil {
 		fmt.Println("  ⚠ Could not connect to Google Sheets — Sheet not updated.")
 		return
 	}
 
-	if err := sc.PushCrops(crops); err != nil {
-		fmt.Printf("  ⚠ Could not push to Google Sheet: %v\n", err)
-		fmt.Println("  Your local crops.csv is up to date. Run \"greenies sync\" later to update the Sheet.")
-		return
+	// ── Push crops ──────────────────────────────────────────────────────
+	cropsPath, err := crop.CropsFilePath()
+	if err == nil {
+		source := crop.CSVSource{Path: cropsPath}
+		if crops, loadErr := source.LoadCrops(); loadErr == nil {
+			if pushErr := sc.PushCrops(crops); pushErr != nil {
+				fmt.Printf("  ⚠ Could not push crops to Google Sheet: %v\n", pushErr)
+			}
+			time.Sleep(apiPause)
+		}
+	}
+
+	// ── Push farm layout ────────────────────────────────────────────────
+	if envs, loadErr := farm.LoadConfig(); loadErr == nil {
+		if pushErr := sc.PushFarm(envs); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push farm layout to Google Sheet: %v\n", pushErr)
+		}
+		time.Sleep(apiPause)
+	}
+
+	// ── Push trials ─────────────────────────────────────────────────────
+	if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
+		if pushErr := sc.PushTrials(records); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push trials to Google Sheet: %v\n", pushErr)
+		}
 	}
 
 	fmt.Println("  ✓ Google Sheet updated.")

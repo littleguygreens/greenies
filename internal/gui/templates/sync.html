@@ -1,43 +1,250 @@
 {{/*
     sync.html — the Google sync page.
 
-    This is the GUI equivalent of "greenies sync" in the terminal. One button
-    syncs everything with Google: pulls the latest data from Google Sheets,
-    then pushes the schedule to Google Tasks and Google Calendar.
+    This page handles four states, shown as a natural progression:
+
+      1. No credentials.json — setup instructions (one-time manual step)
+      2. Has credentials but not signed in — "Sign in with Google" button
+      3. Signed in but Sheets not linked — "Link Google Sheets" button
+      4. Everything linked — "Sync Now" button (full sync)
 
     The sync can take a minute or two because it makes many individual API
     calls to Google (deleting old entries, creating new ones). While it's
-    working, a live stopwatch ticks on screen — just like the CLI version —
-    so the grower knows it hasn't frozen.
-
-    How the timer works:
-      - When the grower clicks "Sync Now", a small JavaScript function starts
-        a 1-second interval that updates the timer display.
-      - htmx sends the POST request to /sync in the background.
-      - When the server responds (success or error), htmx swaps in the result
-        HTML, which replaces the timer — so it stops automatically.
+    working, a live stopwatch ticks on screen so the grower knows it hasn't
+    frozen.
 
     Data passed from the handler (handleSyncPage in handlers.go):
       .CredentialsExist — whether credentials.json is set up in ~/.greenies/
+      .TokenExists      — whether the user has signed in (token.json exists)
+      .SheetsEnabled    — whether the Google Sheet has been created and linked
+      .SheetID          — the Google-assigned spreadsheet ID (for building URL)
 */}}
 
 {{define "sync.html"}}
 <h1>Sync with Google</h1>
 
 <div id="sync-area">
-    {{if .CredentialsExist}}
+    {{if not .CredentialsExist}}
+        <!-- ── State 1: No credentials.json ──────────────────────────────
+             This is a one-time manual step. The user downloads a file from
+             Google Cloud Console and places it in ~/.greenies/. We can't
+             automate this part because it requires a Google Cloud account.
+             The walkthrough guides a complete beginner through the process. -->
+        <h2 style="margin-top: 0;">Connect to Google</h2>
+        <p>
+            To sync with Google Calendar and Sheets, you need a credentials file from
+            Google. This is a one-time setup that takes about 5 minutes.
+        </p>
+
+        <div style="background: #1a1a2e; border-radius: 8px; padding: 1.25rem 1.5rem; margin: 1.5rem 0; line-height: 1.8;">
+            <p><strong>Step 1:</strong> Go to
+                <a href="https://console.cloud.google.com/" target="_blank" style="color: #4ecca3;">
+                    Google Cloud Console</a>.
+                Sign in with the Google account you want greenies to use.
+            </p>
+
+            <p style="margin-top: 1rem;"><strong>Step 2:</strong> Create a new project.
+                Click the project dropdown at the top of the page, then "New Project".
+                Name it anything — "greenies" works fine.
+            </p>
+
+            <p style="margin-top: 1rem;"><strong>Step 3:</strong> Enable three APIs.
+                Go to <strong>APIs &amp; Services → Library</strong> and search for each
+                of these, then click "Enable":
+            </p>
+            <ul style="margin: 0.25rem 0 0 1.5rem;">
+                <li>Google Calendar API</li>
+                <li>Google Tasks API</li>
+                <li>Google Sheets API</li>
+            </ul>
+
+            <p style="margin-top: 1rem;"><strong>Step 4:</strong> Set up the consent screen.
+                Go to <strong>APIs &amp; Services → OAuth consent screen</strong>.
+                Choose "External", fill in the app name ("greenies") and your email, then save.
+                Under "Test users", add yourself.
+            </p>
+
+            <p style="margin-top: 1rem;"><strong>Step 5:</strong> Create credentials.
+                Go to <strong>APIs &amp; Services → Credentials</strong>,
+                click <strong>+ Create Credentials → OAuth client ID</strong>.
+                Application type: "Desktop app". Name: "greenies".
+                Click "Create", then <strong>"Download JSON"</strong>.
+            </p>
+
+            <p style="margin-top: 1rem;"><strong>Step 6:</strong> Move the downloaded file to:
+            </p>
+            <code style="display: block; margin: 0.25rem 0 0 1.5rem; color: #4ecca3;">~/.greenies/credentials.json</code>
+            <p class="task-notes" style="margin-top: 0.25rem; margin-left: 1.5rem;">
+                The download will have a long name — rename it to <code>credentials.json</code>.
+            </p>
+
+            <p style="margin-top: 1rem;"><strong>Step 7:</strong> Come back here and reload this page.
+                You'll see a "Sign in with Google" button.
+            </p>
+        </div>
+
+        <p class="task-notes">After this one-time setup, syncing is just one click.</p>
+
+    {{else if not .TokenExists}}
+        <!-- ── State 2: Has credentials but not signed in ────────────────
+             The credentials.json file is in place, but the user hasn't
+             completed the Google sign-in yet. A button triggers the OAuth
+             browser flow — Google opens in a new tab, the user approves,
+             and the token is saved. -->
+        <div id="signin-area">
+            <h2 style="margin-top: 0;">Sign in with Google</h2>
+            <p>
+                Your credentials file is set up. The next step is to sign in with
+                your Google account so greenies can access your calendar and sheets.
+            </p>
+            <p class="task-notes">
+                Clicking below will open Google in your browser.
+                Sign in and click "Allow" to grant greenies permission to manage
+                your calendar, tasks, and spreadsheets.
+            </p>
+
+            <button id="signin-btn"
+                    class="btn btn-primary"
+                    hx-post="/google-signin"
+                    hx-target="#signin-area"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this">
+                Sign in with Google
+            </button>
+
+            <!-- Shown while waiting for the user to approve in their browser. -->
+            <div id="signin-spinner" style="display: none; margin-top: 1.5rem;">
+                <p>Waiting for you to approve in the browser...</p>
+                <p class="task-notes">
+                    A Google sign-in page should have opened in your browser.
+                    Sign in and click "Allow", then come back here.
+                </p>
+            </div>
+
+            <script>
+                (function() {
+                    var btn = document.getElementById("signin-btn");
+                    var spinner = document.getElementById("signin-spinner");
+                    btn.addEventListener("htmx:beforeRequest", function() {
+                        spinner.style.display = "block";
+                    });
+                })();
+            </script>
+        </div>
+
+    {{else if not .SheetsEnabled}}
+        <!-- ── State 3: Signed in but Sheets not linked ──────────────────
+             The user is authenticated with Google. Now offer to create
+             the Google Sheet that mirrors their local farm data. -->
+        <div id="sheets-setup-area">
+            <h2 style="margin-top: 0;">Link Google Sheets</h2>
+            <p>
+                You're signed in with Google. The next step is to create a Google
+                Sheet for your farm data.
+            </p>
+            <p class="task-notes">
+                This creates a spreadsheet called "greenies" in your Google Drive
+                with four tabs: Crops, Cycle, Farm, and Trials.
+                Your existing local data will be uploaded automatically.
+                You'll be able to view and edit your crop library and farm layout
+                from any device.
+            </p>
+
+            <button id="sheets-setup-btn"
+                    class="btn btn-primary"
+                    hx-post="/sheets-setup"
+                    hx-target="#sheets-setup-area"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this">
+                Link Google Sheets
+            </button>
+
+            <div id="sheets-setup-spinner" style="display: none; margin-top: 1.5rem;">
+                <p>Creating Google Sheet and uploading data...</p>
+            </div>
+
+            <script>
+                (function() {
+                    var btn = document.getElementById("sheets-setup-btn");
+                    var spinner = document.getElementById("sheets-setup-spinner");
+                    btn.addEventListener("htmx:beforeRequest", function() {
+                        spinner.style.display = "block";
+                    });
+                })();
+            </script>
+        </div>
+
+        <!-- The Sync Now button is still available for Calendar-only sync. -->
+        <hr style="border-color: #333; margin: 2rem 0;">
+
+        <p>You can also sync your schedule to Google Calendar without linking Sheets.</p>
+
+        <button id="sync-btn"
+                class="btn btn-primary"
+                hx-post="/sync"
+                hx-target="#sync-result-area"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                style="margin-top: 0.5rem;">
+            Sync Calendar Only
+        </button>
+
+        <div id="sync-result-area"></div>
+
+        <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
+            <p>Syncing with Google...</p>
+            <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
+                ⏱ <span id="sync-elapsed">0s</span>
+            </p>
+        </div>
+
+        <script>
+            (function() {
+                var btn = document.getElementById("sync-btn");
+                var timerBox = document.getElementById("sync-timer");
+                var elapsedSpan = document.getElementById("sync-elapsed");
+                var intervalId = null;
+                btn.addEventListener("htmx:beforeRequest", function() {
+                    timerBox.style.display = "block";
+                    var startTime = Date.now();
+                    intervalId = setInterval(function() {
+                        var seconds = Math.floor((Date.now() - startTime) / 1000);
+                        if (seconds >= 60) {
+                            elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
+                        } else {
+                            elapsedSpan.textContent = seconds + "s";
+                        }
+                    }, 1000);
+                });
+                btn.addEventListener("htmx:afterRequest", function() {
+                    if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+                });
+            })();
+        </script>
+
+    {{else}}
+        <!-- ── State 4: Everything linked — full sync ────────────────────
+             Credentials, token, and Sheet are all set up. One button does
+             the full sync: pull from Sheets, push to Sheets, then sync
+             Calendar and Tasks. -->
         <p>Sync your farm data with Google.</p>
         <p class="task-notes">
-            This pulls the latest crop library from Google Sheets, then pushes
-            your schedule to Google Calendar and Google Tasks.
+            This pulls your crop library and farm layout from Google Sheets,
+            pushes trial data to Google Sheets, then syncs your schedule to
+            Google Calendar and Google Tasks.
             Running it multiple times is safe — duplicates are automatically removed.
         </p>
 
-        <!-- hx-post sends a POST request to /sync when clicked.
-             hx-target tells htmx to replace the content of #sync-area with
-             the response (the success/error fragment).
-             hx-disabled-elt disables the button while the request is running
-             so the grower can't accidentally click it twice. -->
+        {{if .SheetID}}
+            <p style="margin-bottom: 1.5rem;">
+                <a href="https://docs.google.com/spreadsheets/d/{{.SheetID}}/edit"
+                   target="_blank"
+                   style="color: #4ecca3;">
+                    Open Google Sheet
+                </a>
+            </p>
+        {{end}}
+
         <button id="sync-btn"
                 class="btn btn-primary"
                 hx-post="/sync"
@@ -47,10 +254,6 @@
             Sync Now
         </button>
 
-        <!-- The timer area is hidden by default (display:none). The JavaScript
-             below makes it visible when the sync starts, then htmx replaces
-             the whole #sync-area with the result when the response arrives —
-             so the timer disappears on its own. -->
         <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
             <p>Syncing with Google...</p>
             <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
@@ -58,48 +261,18 @@
             </p>
         </div>
 
-        <!-- This script runs the live stopwatch. It's a small piece of
-             JavaScript (a programming language that runs inside the browser)
-             that listens for htmx events and updates the timer display.
-
-             htmx fires two events we care about:
-               htmx:beforeRequest — the request is about to be sent
-               htmx:afterRequest  — the response has arrived
-
-             We use the first one to start the clock and the second to stop it.
-             In practice, the "stop" event doesn't matter much because htmx
-             replaces the entire #sync-area (including this script) with the
-             result HTML — so the timer element just disappears. But we clean
-             up the interval anyway, just to be tidy. -->
         <script>
             (function() {
-                // Get references to the HTML elements we need to interact with.
                 var btn = document.getElementById("sync-btn");
                 var timerBox = document.getElementById("sync-timer");
                 var elapsedSpan = document.getElementById("sync-elapsed");
-                // "intervalId" will hold a reference to the ticking clock so
-                // we can stop it later. null means the clock isn't running.
                 var intervalId = null;
 
-                // Listen for the "request is about to be sent" event on the
-                // sync button. This fires the moment the grower clicks "Sync Now".
                 btn.addEventListener("htmx:beforeRequest", function() {
-                    // Show the timer area.
                     timerBox.style.display = "block";
-
-                    // Record the current time so we can calculate elapsed seconds.
                     var startTime = Date.now();
-
-                    // Start a repeating clock that fires once per second.
-                    // setInterval(function, milliseconds) calls the function
-                    // repeatedly at the given interval. 1000ms = 1 second.
                     intervalId = setInterval(function() {
-                        // Calculate how many whole seconds have passed.
-                        // Math.floor rounds down (e.g. 3.7 → 3).
                         var seconds = Math.floor((Date.now() - startTime) / 1000);
-
-                        // If it's been more than 60 seconds, show minutes too.
-                        // For example: "1m 23s" instead of "83s".
                         if (seconds >= 60) {
                             var minutes = Math.floor(seconds / 60);
                             var remainSeconds = seconds % 60;
@@ -110,9 +283,6 @@
                     }, 1000);
                 });
 
-                // Listen for the "response has arrived" event. Clean up the
-                // interval so it stops ticking. (htmx is about to replace
-                // the whole #sync-area anyway, but this is good housekeeping.)
                 btn.addEventListener("htmx:afterRequest", function() {
                     if (intervalId !== null) {
                         clearInterval(intervalId);
@@ -121,22 +291,127 @@
                 });
             })();
         </script>
-    {{else}}
-        <div class="error-box">
-            <p>Google Calendar is not set up.</p>
-            <p>Place <code>credentials.json</code> in <code>~/.greenies/</code> to enable calendar sync.</p>
-            <p>See the Phase 5 setup notes for instructions.</p>
-        </div>
     {{end}}
 </div>
 {{end}}
 
 {{/*
+    google_signin_result.html — htmx fragment shown after Google sign-in.
+    Replaces the sign-in section with a success message and a prompt to
+    reload the page (which will now show the "Link Google Sheets" step).
+*/}}
+{{define "google_signin_result.html"}}
+{{if .Error}}
+    <div class="error-box">
+        <p><strong>Sign-in failed:</strong> {{.Error}}</p>
+        <p>Check your internet connection and try again.</p>
+    </div>
+
+    <button id="signin-btn"
+            class="btn btn-primary"
+            hx-post="/google-signin"
+            hx-target="#signin-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            style="margin-top: 1rem;">
+        Retry
+    </button>
+{{else}}
+    <div class="clear-success">
+        <p>Signed in with Google!</p>
+    </div>
+
+    <!-- Reload the page to show the next step (Link Google Sheets). -->
+    <a href="/sync" class="btn btn-primary" style="display: inline-block; margin-top: 1rem;">
+        Continue
+    </a>
+{{end}}
+{{end}}
+
+{{/*
+    sheets_setup_result.html — htmx fragment shown after Sheets setup completes.
+    Replaces the setup section with a success message and the Sheet URL,
+    or an error message with a retry button.
+*/}}
+{{define "sheets_setup_result.html"}}
+{{if .Error}}
+    <div class="error-box">
+        <p><strong>Setup failed:</strong> {{.Error}}</p>
+        <p>Check your internet connection and try again.</p>
+    </div>
+
+    <button id="sheets-setup-btn"
+            class="btn btn-primary"
+            hx-post="/sheets-setup"
+            hx-target="#sheets-setup-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            style="margin-top: 1rem;">
+        Retry
+    </button>
+{{else}}
+    <div class="clear-success">
+        <p>Google Sheet created and linked!</p>
+        <p style="margin-top: 0.75rem;">
+            <a href="https://docs.google.com/spreadsheets/d/{{.SheetID}}/edit"
+               target="_blank"
+               style="color: #4ecca3; font-weight: 600;">
+                Open your Google Sheet
+            </a>
+        </p>
+        <p class="task-notes" style="margin-top: 0.5rem;">
+            Bookmark that link — it's where you'll view and edit your farm data
+            from any device. Your existing data has been uploaded.
+        </p>
+    </div>
+
+    <!-- After setup succeeds, offer the full Sync Now button. -->
+    <button id="sync-btn"
+            class="btn btn-primary"
+            hx-post="/sync"
+            hx-target="#sync-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            style="margin-top: 1rem;">
+        Sync Now
+    </button>
+
+    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
+        <p>Syncing with Google...</p>
+        <p style="font-size: 1.5rem; font-weight: 600; color: #4ecca3;">
+            ⏱ <span id="sync-elapsed">0s</span>
+        </p>
+    </div>
+
+    <script>
+        (function() {
+            var btn = document.getElementById("sync-btn");
+            var timerBox = document.getElementById("sync-timer");
+            var elapsedSpan = document.getElementById("sync-elapsed");
+            var intervalId = null;
+            btn.addEventListener("htmx:beforeRequest", function() {
+                timerBox.style.display = "block";
+                var startTime = Date.now();
+                intervalId = setInterval(function() {
+                    var seconds = Math.floor((Date.now() - startTime) / 1000);
+                    if (seconds >= 60) {
+                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
+                    } else {
+                        elapsedSpan.textContent = seconds + "s";
+                    }
+                }, 1000);
+            });
+            btn.addEventListener("htmx:afterRequest", function() {
+                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+            });
+        })();
+    </script>
+{{end}}
+{{end}}
+
+{{/*
     sync_result.html — htmx fragment shown after a sync completes.
     Replaces the button + timer area with a success or error message.
-
-    Because this fragment replaces everything inside #sync-area, the timer
-    script from the main page is gone — no cleanup needed.
 */}}
 {{define "sync_result.html"}}
 {{if .Error}}
@@ -145,8 +420,6 @@
         <p>Check your internet connection and try again.</p>
     </div>
 
-    <!-- Let the grower retry without reloading the page. Same htmx pattern
-         as the original button — posts to /sync, replaces #sync-area. -->
     <button id="sync-btn"
             class="btn btn-primary"
             hx-post="/sync"

@@ -243,7 +243,7 @@ func LoadConfig() ([]Environment, error) {
 		defaults := defaultConfig()
 		// Try to write the default file, but don't fail if we can't — the
 		// program can still run using the in-memory defaults.
-		_ = writeConfig(path, defaults)
+		_ = WriteConfig(path, defaults)
 		return defaults, nil
 	}
 
@@ -315,9 +315,10 @@ func LoadConfig() ([]Environment, error) {
 	return envs, nil
 }
 
-// writeConfig writes a list of environments to a CSV file at the given path.
-// Used internally to create the default farm.csv on first run.
-func writeConfig(path string, envs []Environment) error {
+// WriteConfig writes a list of environments to a CSV file at the given path.
+// Used to create the default farm.csv on first run, and to save farm data
+// pulled from Google Sheets during sync.
+func WriteConfig(path string, envs []Environment) error {
 	// Make sure the ~/.greenies directory exists before trying to write.
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("could not create data directory: %w", err)
