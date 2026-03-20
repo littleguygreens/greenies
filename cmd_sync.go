@@ -13,6 +13,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/supply"
 	"github.com/littleguygreens/greenies/internal/trial"
 )
 
@@ -255,6 +256,15 @@ func syncSheets(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
 		}
 
+		// Push supplies.
+		if supplies, loadErr := supply.Load(); loadErr == nil && len(supplies) > 0 {
+			fmt.Printf("Uploading supplies (%d items)...\n", len(supplies))
+			if pushErr := sc.PushSupplies(supplies); pushErr != nil {
+				fmt.Printf("  Warning: could not upload supplies: %v\n", pushErr)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
 		// Push trials.
 		if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 			fmt.Println("Uploading trial data...")
@@ -347,6 +357,23 @@ func syncSheets(ctx context.Context) {
 			fmt.Printf("  Warning: could not update local farm.csv: %v\n", writeErr)
 		} else {
 			fmt.Printf("  Farm layout synced (%d environments).\n", len(pulledFarm))
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// ── Pull supplies (two-way) ──────────────────────────────────────────
+	pulledSupplies, err := sc.PullSupplies()
+	if err != nil {
+		fmt.Printf("  ⚠ Could not read Supplies tab: %v\n", err)
+		fmt.Println("  Keeping local supplies.csv as-is.")
+	} else if len(pulledSupplies) == 0 {
+		fmt.Println("  Supplies tab is empty — keeping local supplies.csv as-is.")
+	} else {
+		if writeErr := supply.Save(pulledSupplies); writeErr != nil {
+			fmt.Printf("  Warning: could not update local supplies.csv: %v\n", writeErr)
+		} else {
+			fmt.Printf("  Supplies synced (%d items).\n", len(pulledSupplies))
 		}
 	}
 

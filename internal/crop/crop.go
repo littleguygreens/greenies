@@ -74,6 +74,31 @@ type Crop struct {
 	// Multiply by tray count to estimate total yield for a batch.
 	YieldGrams int
 
+	// ── Business / costing fields ────────────────────────────────────────
+	//
+	// These fields capture what the grower pays for seed and what they
+	// charge per unit sold. Combined with farm-wide supply costs (labels,
+	// containers, dirt — stored separately in supplies.csv), the program
+	// can calculate per-crop profitability on the fly.
+
+	// SeedCost is the purchase price of one bag/lot of seed, in dollars.
+	// Example: $15.00 for a 500 g bag.
+	SeedCost float64
+
+	// SeedPurchaseWeight is the weight of that purchase unit, in grams.
+	// Used together with SeedCost and SeedGrams to calculate the seed
+	// cost per tray: (SeedCost / SeedPurchaseWeight) × SeedGrams.
+	SeedPurchaseWeight int
+
+	// UnitWeight is the weight in grams of one sellable unit (e.g. one
+	// clamshell). Defaults to 100 g if not specified. The number of units
+	// per tray is derived: YieldGrams / UnitWeight, rounded down.
+	UnitWeight int
+
+	// UnitSellPrice is the retail price per sellable unit, in dollars.
+	// Example: $4.50 per clamshell.
+	UnitSellPrice float64
+
 	// Days is the ordered list of daily entries for this crop, from Day 0 or
 	// Day 1 through to the harvest day. Each entry maps to one calendar task.
 	Days []CropDay

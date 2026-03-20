@@ -40,6 +40,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/supply"
 	"github.com/littleguygreens/greenies/internal/task"
 	"github.com/littleguygreens/greenies/internal/trial"
 )
@@ -63,6 +64,7 @@ const cycleTab = "Cycle"
 var cropsHeaders = []interface{}{
 	"name", "overnight_soak", "soak_hours", "seed_grams",
 	"dirt_litres", "dark_days", "light_days", "yield_grams",
+	"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 }
 
 // cycleHeaders are the column headings for the Cycle tab.
@@ -78,6 +80,17 @@ const farmTab = "Farm"
 // Matches the columns in ~/.greenies/farm.csv exactly.
 var farmHeaders = []interface{}{
 	"name", "type", "capacity",
+}
+
+// suppliesTab is the name of the spreadsheet tab that holds farm-wide
+// supply costs (labels, containers, dirt). Two-way sync — the grower can
+// edit prices in the Sheet and pull them down with "greenies sync".
+const suppliesTab = "Supplies"
+
+// suppliesHeaders are the column headings for the Supplies tab.
+// Push and pull functions look up columns by name, so reordering is safe.
+var suppliesHeaders = []interface{}{
+	"name", "cost_per_case", "units_per_case",
 }
 
 // trialsTab is the name of the spreadsheet tab that holds trial run data.
@@ -260,6 +273,7 @@ func CreateSheet(ctx context.Context) (string, error) {
 			{Properties: &sheets.SheetProperties{Title: cropsTab}},
 			{Properties: &sheets.SheetProperties{Title: cycleTab}},
 			{Properties: &sheets.SheetProperties{Title: farmTab}},
+			{Properties: &sheets.SheetProperties{Title: suppliesTab}},
 			{Properties: &sheets.SheetProperties{Title: trialsTab}},
 			{Properties: &sheets.SheetProperties{Title: scheduleTab}},
 			{Properties: &sheets.SheetProperties{Title: batchesTab}},
@@ -314,6 +328,16 @@ func CreateSheet(ctx context.Context) (string, error) {
 	}).ValueInputOption("RAW").Context(ctx).Do()
 	if err != nil {
 		return sheetID, fmt.Errorf("created sheet but could not write Farm header: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	// Supplies tab header.
+	_, err = svc.Spreadsheets.Values.Update(sheetID, suppliesTab+"!A1", &sheets.ValueRange{
+		Values: [][]interface{}{suppliesHeaders},
+	}).ValueInputOption("RAW").Context(ctx).Do()
+	if err != nil {
+		return sheetID, fmt.Errorf("created sheet but could not write Supplies header: %w", err)
 	}
 
 	time.Sleep(apiPause)
@@ -399,13 +423,17 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 	// The map preserves insertion order via a separate name slice so the
 	// final output is in the same order the grower arranged their rows.
 	type cropParams struct {
-		OvernightSoak bool
-		SoakHours     int
-		SeedGrams     int
-		DirtLitres    float64
-		DarkDays      int
-		LightDays     int
-		YieldGrams    int
+		OvernightSoak      bool
+		SoakHours          int
+		SeedGrams          int
+		DirtLitres         float64
+		DarkDays           int
+		LightDays          int
+		YieldGrams         int
+		SeedCost           float64
+		SeedPurchaseWeight int
+		UnitWeight         int
+		UnitSellPrice      float64
 	}
 
 	paramMap := make(map[string]*cropParams)
@@ -435,18 +463,27 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 		}
 
 		p := &cropParams{
-			OvernightSoak: parseBoolCell(row, cropsCol["overnight_soak"]),
-			SoakHours:     parseIntCell(row, cropsCol["soak_hours"]),
-			SeedGrams:     parseIntCell(row, cropsCol["seed_grams"]),
-			DirtLitres:    parseFloatCell(row, cropsCol["dirt_litres"]),
-			DarkDays:      parseIntCell(row, cropsCol["dark_days"]),
-			LightDays:     parseIntCell(row, cropsCol["light_days"]),
-			YieldGrams:    parseIntCell(row, cropsCol["yield_grams"]),
+			OvernightSoak:      parseBoolCell(row, cropsCol["overnight_soak"]),
+			SoakHours:          parseIntCell(row, cropsCol["soak_hours"]),
+			SeedGrams:          parseIntCell(row, cropsCol["seed_grams"]),
+			DirtLitres:         parseFloatCell(row, cropsCol["dirt_litres"]),
+			DarkDays:           parseIntCell(row, cropsCol["dark_days"]),
+			LightDays:          parseIntCell(row, cropsCol["light_days"]),
+			YieldGrams:         parseIntCell(row, cropsCol["yield_grams"]),
+			SeedCost:           parseFloatCell(row, cropsCol["seed_cost"]),
+			SeedPurchaseWeight: parseIntCell(row, cropsCol["seed_purchase_weight"]),
+			UnitWeight:         parseIntCell(row, cropsCol["unit_weight"]),
+			UnitSellPrice:      parseFloatCell(row, cropsCol["unit_sell_price"]),
 		}
 
 		// Default dirt to 1 litre if the cell is empty or zero.
 		if p.DirtLitres == 0 {
 			p.DirtLitres = 1.0
+		}
+
+		// Default unit weight to 100 g (a common clamshell size).
+		if p.UnitWeight == 0 {
+			p.UnitWeight = 100
 		}
 
 		paramMap[strings.ToLower(name)] = p
@@ -509,16 +546,20 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 		}
 
 		crops = append(crops, crop.Crop{
-			Name:          name,
-			CycleDays:     cycleDays,
-			OvernightSoak: p.OvernightSoak,
-			SoakHours:     p.SoakHours,
-			SeedGrams:     p.SeedGrams,
-			DirtLitres:    p.DirtLitres,
-			DarkDays:      p.DarkDays,
-			LightDays:     p.LightDays,
-			YieldGrams:    p.YieldGrams,
-			Days:          days,
+			Name:               name,
+			CycleDays:          cycleDays,
+			OvernightSoak:      p.OvernightSoak,
+			SoakHours:          p.SoakHours,
+			SeedGrams:          p.SeedGrams,
+			DirtLitres:         p.DirtLitres,
+			DarkDays:           p.DarkDays,
+			LightDays:          p.LightDays,
+			YieldGrams:         p.YieldGrams,
+			SeedCost:           p.SeedCost,
+			SeedPurchaseWeight: p.SeedPurchaseWeight,
+			UnitWeight:         p.UnitWeight,
+			UnitSellPrice:      p.UnitSellPrice,
+			Days:               days,
 		})
 	}
 
@@ -565,6 +606,16 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 			dirtStr = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
 		}
 
+		// Format money fields cleanly: "15" not "15.000000".
+		seedCostStr := ""
+		if c.SeedCost > 0 {
+			seedCostStr = formatSheetFloat(c.SeedCost)
+		}
+		sellPriceStr := ""
+		if c.UnitSellPrice > 0 {
+			sellPriceStr = formatSheetFloat(c.UnitSellPrice)
+		}
+
 		row := make([]interface{}, len(cropsHeaders))
 		row[cropCol["name"]] = c.Name
 		row[cropCol["overnight_soak"]] = soakStr
@@ -574,6 +625,10 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 		row[cropCol["dark_days"]] = c.DarkDays
 		row[cropCol["light_days"]] = c.LightDays
 		row[cropCol["yield_grams"]] = c.YieldGrams
+		row[cropCol["seed_cost"]] = seedCostStr
+		row[cropCol["seed_purchase_weight"]] = c.SeedPurchaseWeight
+		row[cropCol["unit_weight"]] = c.UnitWeight
+		row[cropCol["unit_sell_price"]] = sellPriceStr
 
 		cropsRows = append(cropsRows, row)
 	}
@@ -736,6 +791,103 @@ func (sc *SheetsClient) PushFarm(envs []farm.Environment) error {
 	).ValueInputOption("RAW").Do()
 	if err != nil {
 		return fmt.Errorf("could not write Farm tab: %w", err)
+	}
+
+	return nil
+}
+
+// ─── Supplies: pull and push ─────────────────────────────────────────────────
+
+// PullSupplies reads the "Supplies" tab from the Google Sheet and returns
+// the data as []supply.Supply. Two-way sync — the grower can edit prices
+// in the Sheet and pull them down with "greenies sync".
+func (sc *SheetsClient) PullSupplies() ([]supply.Supply, error) {
+	// Make sure the tab exists — it may be missing if the user's sheet
+	// was created before supplies support was added.
+	if err := sc.ensureTab(suppliesTab); err != nil {
+		return nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, suppliesTab,
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Supplies tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	supCol := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			supCol[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	var supplies []supply.Supply
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue
+		}
+
+		name := strings.TrimSpace(cellString(row, supCol["name"]))
+		if name == "" {
+			continue
+		}
+
+		supplies = append(supplies, supply.Supply{
+			Name:         name,
+			CostPerCase:  parseFloatCell(row, supCol["cost_per_case"]),
+			UnitsPerCase: parseFloatCell(row, supCol["units_per_case"]),
+		})
+	}
+
+	return supplies, nil
+}
+
+// PushSupplies writes supply costs to the "Supplies" tab, completely
+// replacing any existing data. Same clear-and-rewrite approach as PushCrops.
+func (sc *SheetsClient) PushSupplies(supplies []supply.Supply) error {
+	// Make sure the tab exists.
+	if err := sc.ensureTab(suppliesTab); err != nil {
+		return err
+	}
+
+	// Build a column-name → position map.
+	sCol := make(map[string]int, len(suppliesHeaders))
+	for i, h := range suppliesHeaders {
+		sCol[h.(string)] = i
+	}
+
+	rows := [][]interface{}{suppliesHeaders}
+
+	for _, s := range supplies {
+		row := make([]interface{}, len(suppliesHeaders))
+		row[sCol["name"]] = s.Name
+		row[sCol["cost_per_case"]] = formatSheetFloat(s.CostPerCase)
+		row[sCol["units_per_case"]] = formatSheetFloat(s.UnitsPerCase)
+
+		rows = append(rows, row)
+	}
+
+	// Clear and rewrite.
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, suppliesTab, &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear Supplies tab: %w", err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, suppliesTab+"!A1", &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write Supplies tab: %w", err)
 	}
 
 	return nil
@@ -1060,6 +1212,14 @@ func SyncLocalToSheet(ctx context.Context) {
 		time.Sleep(apiPause)
 	}
 
+	// ── Push supplies ────────────────────────────────────────────────────
+	if supplies, loadErr := supply.Load(); loadErr == nil && len(supplies) > 0 {
+		if pushErr := sc.PushSupplies(supplies); pushErr != nil {
+			fmt.Printf("  ⚠ Could not push supplies to Google Sheet: %v\n", pushErr)
+		}
+		time.Sleep(apiPause)
+	}
+
 	// ── Push trials ─────────────────────────────────────────────────────
 	if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 		if pushErr := sc.PushTrials(records); pushErr != nil {
@@ -1141,6 +1301,16 @@ func parseFloatCell(row []interface{}, idx int) float64 {
 func parseBoolCell(row []interface{}, idx int) bool {
 	s := strings.ToLower(strings.TrimSpace(cellString(row, idx)))
 	return s == "true" || s == "yes"
+}
+
+// formatSheetFloat formats a float64 for Google Sheets output. Whole numbers
+// are written without a decimal point ("15" not "15.0"), while fractional
+// values keep their natural precision ("4.5", "1.25").
+func formatSheetFloat(f float64) string {
+	if f == float64(int(f)) {
+		return strconv.Itoa(int(f))
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // isInsufficientScopeError checks if a Google API error is about missing

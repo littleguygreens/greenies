@@ -197,6 +197,40 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	if err != nil {
 		return Crop{}, err
 	}
+
+	// ── Business / costing fields ────────────────────────────────────────
+	seedCost, err := parseFloat("seed_cost")
+	if err != nil {
+		return Crop{}, err
+	}
+	// parseFloat defaults empty cells to 1.0 (for dirt), but seed_cost
+	// should default to 0 (meaning "not set yet"). Override here.
+	if get(row, "seed_cost") == "" {
+		seedCost = 0
+	}
+
+	seedPurchaseWeight, err := parseInt("seed_purchase_weight")
+	if err != nil {
+		return Crop{}, err
+	}
+
+	unitWeight, err := parseInt("unit_weight")
+	if err != nil {
+		return Crop{}, err
+	}
+	// Default to 100 g per unit if not specified — a common clamshell size.
+	if unitWeight == 0 {
+		unitWeight = 100
+	}
+
+	unitSellPrice, err := parseFloat("unit_sell_price")
+	if err != nil {
+		return Crop{}, err
+	}
+	if get(row, "unit_sell_price") == "" {
+		unitSellPrice = 0
+	}
+
 	return Crop{
 		Name:          get(row, "name"),
 		// CycleDays is not set here — it is derived from the last day row
@@ -208,6 +242,12 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 		DarkDays:      darkDays,
 		LightDays:     lightDays,
 		YieldGrams:    yieldGrams,
+
+		// Business fields — zero means "not configured yet".
+		SeedCost:           seedCost,
+		SeedPurchaseWeight: seedPurchaseWeight,
+		UnitWeight:         unitWeight,
+		UnitSellPrice:      unitSellPrice,
 	}, nil
 }
 
@@ -502,10 +542,13 @@ func WriteCrops(path string, crops []Crop) error {
 	w := csv.NewWriter(out)
 
 	// Write the header row — same column order as the original crops.csv.
+	// New columns can be added anywhere in this list — the name-based
+	// lookup map below ensures values always land in the right column.
 	header := []string{
 		"name", "day", "stage", "tasks",
 		"overnight_soak", "soak_hours", "seed_grams",
 		"dirt_litres", "dark_days", "light_days", "yield_grams",
+		"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 	}
 	if err := w.Write(header); err != nil {
 		return fmt.Errorf("could not write header: %w", err)
@@ -543,17 +586,18 @@ func WriteCrops(path string, crops []Crop) error {
 				row[col["soak_hours"]] = strconv.Itoa(c.SoakHours)
 				row[col["seed_grams"]] = strconv.Itoa(c.SeedGrams)
 
-				// Format dirt_litres: use integer form ("1") when there are
-				// no decimal places, decimal form ("1.5") otherwise.
-				if c.DirtLitres == float64(int(c.DirtLitres)) {
-					row[col["dirt_litres"]] = strconv.Itoa(int(c.DirtLitres))
-				} else {
-					row[col["dirt_litres"]] = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
-				}
+				row[col["dirt_litres"]] = formatFloat(c.DirtLitres)
 
 				row[col["dark_days"]] = strconv.Itoa(c.DarkDays)
 				row[col["light_days"]] = strconv.Itoa(c.LightDays)
 				row[col["yield_grams"]] = strconv.Itoa(c.YieldGrams)
+
+				// Business / costing fields.
+				// Format money as clean decimals: "15" not "15.00", "4.5" stays "4.5".
+				row[col["seed_cost"]] = formatFloat(c.SeedCost)
+				row[col["seed_purchase_weight"]] = strconv.Itoa(c.SeedPurchaseWeight)
+				row[col["unit_weight"]] = strconv.Itoa(c.UnitWeight)
+				row[col["unit_sell_price"]] = formatFloat(c.UnitSellPrice)
 			}
 
 			// Subsequent rows: name and parameter columns stay empty (sparse).
@@ -651,6 +695,17 @@ func ReplaceCrop(originalName string, newCrop Crop) error {
 	existing[found] = newCrop
 
 	return WriteCrops(path, existing)
+}
+
+// formatFloat formats a float64 for CSV output. Whole numbers are written
+// without a decimal point ("15" not "15.000000"), while fractional values
+// keep their natural precision ("4.5", "1.25"). This keeps the CSV clean
+// and readable in a spreadsheet.
+func formatFloat(f float64) string {
+	if f == float64(int(f)) {
+		return strconv.Itoa(int(f))
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // insertCSVRows inserts a slice of new rows into rows at position idx,
