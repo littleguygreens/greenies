@@ -29,6 +29,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/supply"
 	"github.com/littleguygreens/greenies/internal/task"
 	"github.com/littleguygreens/greenies/internal/trial"
 	"github.com/littleguygreens/greenies/internal/visualizer"
@@ -409,6 +410,32 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 // It works like "greenies crops" — loads the crop CSV and displays every
 // variety in an HTML table. The table shows the key numbers a grower cares
 // about: cycle length, seed per tray, and expected yield per tray.
+// CropRow holds one row of the crop library table. It wraps the Crop struct
+// with pre-calculated profitability numbers so the HTML template can display
+// them without needing to call methods with arguments (Go templates cannot
+// pass arguments to methods).
+type CropRow struct {
+	crop.Crop
+
+	// UnitsPerTray is how many sellable units one tray produces.
+	UnitsPerTray int
+
+	// CostPerTray is the all-in cost to grow and package one tray, in dollars.
+	CostPerTray float64
+
+	// RevenuePerTray is total revenue from selling one tray's harvest.
+	RevenuePerTray float64
+
+	// ProfitPerTray is revenue minus cost, in dollars.
+	ProfitPerTray float64
+
+	// ProfitMargin is profit as a percentage of revenue (e.g. 62.5).
+	ProfitMargin float64
+
+	// HasProfit is true if we have enough data to show profitability numbers.
+	HasProfit bool
+}
+
 func handleCrops(w http.ResponseWriter, r *http.Request) {
 	// Load the crop library using the shared factory function.
 	source, err := crop.GetSource()
@@ -429,10 +456,40 @@ func handleCrops(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load farm-wide supply costs so we can calculate profitability.
+	// If supplies can't be loaded, we just skip the profitability column.
+	supplies, _ := supply.Load()
+	sc := crop.SupplyCosts{}
+	if supplies != nil {
+		if s := supply.Find(supplies, "dirt"); s != nil {
+			sc.DirtPerLitre = s.CostPerUnit()
+		}
+		if s := supply.Find(supplies, "containers"); s != nil {
+			sc.ContainerEach = s.CostPerUnit()
+		}
+		if s := supply.Find(supplies, "labels"); s != nil {
+			sc.LabelEach = s.CostPerUnit()
+		}
+	}
+
+	// Build a CropRow for each crop with pre-calculated profit numbers.
+	rows := make([]CropRow, len(crops))
+	for i, c := range crops {
+		rows[i] = CropRow{
+			Crop:           c,
+			UnitsPerTray:   c.UnitsPerTray(),
+			CostPerTray:    crop.RoundCents(c.TotalCostPerTray(sc)),
+			RevenuePerTray: crop.RoundCents(c.RevenuePerTray()),
+			ProfitPerTray:  crop.RoundCents(c.ProfitPerTray(sc)),
+			ProfitMargin:   crop.RoundCents(c.ProfitMargin(sc)),
+			HasProfit:      c.HasCostingData(),
+		}
+	}
+
 	renderPage(w, "crops.html", map[string]any{
-		"Crops":    crops,
-		"HasCrops": len(crops) > 0,
-		"Count":    len(crops),
+		"Crops":    rows,
+		"HasCrops": len(rows) > 0,
+		"Count":    len(rows),
 	})
 }
 
@@ -501,6 +558,27 @@ func handleCropNewAction(w http.ResponseWriter, r *http.Request) {
 		yieldGrams = v
 	}
 
+	// ── Read costing parameters (all optional) ──────────────────────────
+	seedCost := 0.0
+	if v, err := strconv.ParseFloat(r.FormValue("seed_cost"), 64); err == nil {
+		seedCost = v
+	}
+
+	seedPurchaseWeight := 0
+	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
+		seedPurchaseWeight = v
+	}
+
+	unitWeight := 100 // default: 100 g per sellable unit
+	if v, err := strconv.Atoi(r.FormValue("unit_weight")); err == nil && v > 0 {
+		unitWeight = v
+	}
+
+	unitSellPrice := 0.0
+	if v, err := strconv.ParseFloat(r.FormValue("unit_sell_price"), 64); err == nil {
+		unitSellPrice = v
+	}
+
 	// ── Read the day rows ───────────────────────────────────────────────
 	// The form sends parallel arrays: day_num[], day_stage[], day_tasks[].
 	dayNums := r.Form["day_num[]"]
@@ -561,16 +639,20 @@ func handleCropNewAction(w http.ResponseWriter, r *http.Request) {
 	// CycleDays is derived from the last day's number — same as the CSV
 	// loader does, so it can never get out of sync.
 	newCrop := crop.Crop{
-		Name:          cropName,
-		CycleDays:     days[len(days)-1].Day,
-		OvernightSoak: overnightSoak,
-		SoakHours:     soakHours,
-		SeedGrams:     seedGrams,
-		DirtLitres:    dirtLitres,
-		DarkDays:      darkDays,
-		LightDays:     lightDays,
-		YieldGrams:    yieldGrams,
-		Days:          days,
+		Name:               cropName,
+		CycleDays:          days[len(days)-1].Day,
+		OvernightSoak:      overnightSoak,
+		SoakHours:          soakHours,
+		SeedGrams:          seedGrams,
+		DirtLitres:         dirtLitres,
+		DarkDays:           darkDays,
+		LightDays:          lightDays,
+		YieldGrams:         yieldGrams,
+		SeedCost:           seedCost,
+		SeedPurchaseWeight: seedPurchaseWeight,
+		UnitWeight:         unitWeight,
+		UnitSellPrice:      unitSellPrice,
+		Days:               days,
 	}
 
 	// ── Save to crops.csv ───────────────────────────────────────────────
@@ -723,6 +805,27 @@ func handleCropEditAction(w http.ResponseWriter, r *http.Request) {
 		yieldGrams = v
 	}
 
+	// ── Read costing parameters (all optional) ──────────────────────────
+	seedCost := 0.0
+	if v, err := strconv.ParseFloat(r.FormValue("seed_cost"), 64); err == nil {
+		seedCost = v
+	}
+
+	seedPurchaseWeight := 0
+	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
+		seedPurchaseWeight = v
+	}
+
+	unitWeight := 100 // default: 100 g per sellable unit
+	if v, err := strconv.Atoi(r.FormValue("unit_weight")); err == nil && v > 0 {
+		unitWeight = v
+	}
+
+	unitSellPrice := 0.0
+	if v, err := strconv.ParseFloat(r.FormValue("unit_sell_price"), 64); err == nil {
+		unitSellPrice = v
+	}
+
 	// ── Read the day rows ─────────────────────────────────────────────
 	dayNums := r.Form["day_num[]"]
 	dayStages := r.Form["day_stage[]"]
@@ -778,16 +881,20 @@ func handleCropEditAction(w http.ResponseWriter, r *http.Request) {
 
 	// ── Build the updated Crop value ──────────────────────────────────
 	updatedCrop := crop.Crop{
-		Name:          cropName,
-		CycleDays:     days[len(days)-1].Day,
-		OvernightSoak: overnightSoak,
-		SoakHours:     soakHours,
-		SeedGrams:     seedGrams,
-		DirtLitres:    dirtLitres,
-		DarkDays:      darkDays,
-		LightDays:     lightDays,
-		YieldGrams:    yieldGrams,
-		Days:          days,
+		Name:               cropName,
+		CycleDays:          days[len(days)-1].Day,
+		OvernightSoak:      overnightSoak,
+		SoakHours:          soakHours,
+		SeedGrams:          seedGrams,
+		DirtLitres:         dirtLitres,
+		DarkDays:           darkDays,
+		LightDays:          lightDays,
+		YieldGrams:         yieldGrams,
+		SeedCost:           seedCost,
+		SeedPurchaseWeight: seedPurchaseWeight,
+		UnitWeight:         unitWeight,
+		UnitSellPrice:      unitSellPrice,
+		Days:               days,
 	}
 
 	// ── Replace in crops.csv ──────────────────────────────────────────

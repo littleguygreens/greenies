@@ -26,13 +26,18 @@
     <p>{{.Count}} varieties</p>
 
     <table class="data-table">
-        <!-- Table header — one column per key number -->
+        <!-- Table header — one column per key number, plus profitability -->
         <thead>
             <tr>
                 <th>Crop</th>
                 <th>Cycle (days)</th>
                 <th>Seed (g/tray)</th>
                 <th>Yield (g/tray)</th>
+                <th>Units/tray</th>
+                <th>Sell $/unit</th>
+                <th>Cost/tray</th>
+                <th>Profit/tray</th>
+                <th>Margin</th>
                 <th></th>
             </tr>
         </thead>
@@ -44,6 +49,11 @@
                     <td>{{.CycleDays}}</td>
                     <td>{{.SeedGrams}}</td>
                     <td>{{.YieldGrams}}</td>
+                    <td>{{if .UnitsPerTray}}{{.UnitsPerTray}}{{else}}—{{end}}</td>
+                    <td>{{if gt .UnitSellPrice 0.0}}${{printf "%.2f" .UnitSellPrice}}{{else}}—{{end}}</td>
+                    <td>{{if .HasProfit}}${{printf "%.2f" .CostPerTray}}{{else}}—{{end}}</td>
+                    <td>{{if .HasProfit}}${{printf "%.2f" .ProfitPerTray}}{{else}}—{{end}}</td>
+                    <td>{{if .HasProfit}}{{printf "%.0f" .ProfitMargin}}%{{else}}—{{end}}</td>
                     <td><a href="/crops/edit?name={{.Name}}" class="btn btn-secondary btn-small">Edit</a></td>
                 </tr>
             {{end}}

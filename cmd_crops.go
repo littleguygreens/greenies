@@ -153,6 +153,19 @@ func runCrops() {
 	dirtLitres := askFloat("Dirt litres per tray [1]: ", 1.0)
 	yieldGrams := askInt("Expected yield grams per tray (e.g. 500) [0]: ", 0)
 
+	// ── Costing parameters (optional) ───────────────────────────────────
+	//
+	// These let the grower enter what they pay for seed and what they
+	// charge per unit. All optional — press Enter to skip.
+
+	fmt.Println()
+	fmt.Println("Costing (optional — press Enter to skip):")
+	seedCost := askFloat("  Seed bag cost in $ (e.g. 15.00) [0]: ", 0)
+	seedPurchaseWeight := askInt("  Seed bag weight in grams (e.g. 500) [0]: ", 0)
+	unitWeight := askInt("  Grams per sellable unit (e.g. 100) [100]: ", 100)
+	unitSellPrice := askFloat("  Sell price per unit in $ (e.g. 4.50) [0]: ", 0)
+	fmt.Println()
+
 	// ── Total cycle days ────────────────────────────────────────────────
 	//
 	// This is how many days the crop takes from sow to harvest. For crops
@@ -267,16 +280,20 @@ func runCrops() {
 	// ── Build the Crop and save ─────────────────────────────────────────
 
 	newCrop := crop.Crop{
-		Name:          cropName,
-		CycleDays:     days[len(days)-1].Day,
-		OvernightSoak: overnightSoak,
-		SoakHours:     soakHours,
-		SeedGrams:     seedGrams,
-		DirtLitres:    dirtLitres,
-		DarkDays:      darkDays,
-		LightDays:     lightDays,
-		YieldGrams:    yieldGrams,
-		Days:          days,
+		Name:               cropName,
+		CycleDays:          days[len(days)-1].Day,
+		OvernightSoak:      overnightSoak,
+		SoakHours:          soakHours,
+		SeedGrams:          seedGrams,
+		DirtLitres:         dirtLitres,
+		DarkDays:           darkDays,
+		LightDays:          lightDays,
+		YieldGrams:         yieldGrams,
+		SeedCost:           seedCost,
+		SeedPurchaseWeight: seedPurchaseWeight,
+		UnitWeight:         unitWeight,
+		UnitSellPrice:      unitSellPrice,
+		Days:               days,
 	}
 
 	if err := crop.AppendCrop(newCrop); err != nil {
@@ -372,6 +389,16 @@ func editCropCLI(
 	picked.SeedGrams = askInt(fmt.Sprintf("Seed grams per tray [%d]: ", picked.SeedGrams), picked.SeedGrams)
 	picked.DirtLitres = askFloat(fmt.Sprintf("Dirt litres per tray [%.1f]: ", picked.DirtLitres), picked.DirtLitres)
 	picked.YieldGrams = askInt(fmt.Sprintf("Expected yield grams per tray [%d]: ", picked.YieldGrams), picked.YieldGrams)
+
+	// ── Costing parameters (optional) ───────────────────────────────────
+
+	fmt.Println()
+	fmt.Println("Costing (press Enter to keep current values):")
+	picked.SeedCost = askFloat(fmt.Sprintf("  Seed bag cost in $ [%.2f]: ", picked.SeedCost), picked.SeedCost)
+	picked.SeedPurchaseWeight = askInt(fmt.Sprintf("  Seed bag weight in grams [%d]: ", picked.SeedPurchaseWeight), picked.SeedPurchaseWeight)
+	picked.UnitWeight = askInt(fmt.Sprintf("  Grams per sellable unit [%d]: ", picked.UnitWeight), picked.UnitWeight)
+	picked.UnitSellPrice = askFloat(fmt.Sprintf("  Sell price per unit in $ [%.2f]: ", picked.UnitSellPrice), picked.UnitSellPrice)
+	fmt.Println()
 
 	// ── Total cycle days ────────────────────────────────────────────────
 
@@ -497,16 +524,20 @@ func editCropCLI(
 	// ── Build the updated Crop and save ─────────────────────────────────
 
 	updated := crop.Crop{
-		Name:          picked.Name,
-		CycleDays:     days[len(days)-1].Day,
-		OvernightSoak: picked.OvernightSoak,
-		SoakHours:     picked.SoakHours,
-		SeedGrams:     picked.SeedGrams,
-		DirtLitres:    picked.DirtLitres,
-		DarkDays:      darkDays,
-		LightDays:     lightDays,
-		YieldGrams:    picked.YieldGrams,
-		Days:          days,
+		Name:               picked.Name,
+		CycleDays:          days[len(days)-1].Day,
+		OvernightSoak:      picked.OvernightSoak,
+		SoakHours:          picked.SoakHours,
+		SeedGrams:          picked.SeedGrams,
+		DirtLitres:         picked.DirtLitres,
+		DarkDays:           darkDays,
+		LightDays:          lightDays,
+		YieldGrams:         picked.YieldGrams,
+		SeedCost:           picked.SeedCost,
+		SeedPurchaseWeight: picked.SeedPurchaseWeight,
+		UnitWeight:         picked.UnitWeight,
+		UnitSellPrice:      picked.UnitSellPrice,
+		Days:               days,
 	}
 
 	if err := crop.ReplaceCrop(originalName, updated); err != nil {

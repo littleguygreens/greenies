@@ -76,6 +76,43 @@
         </div>
     </div>
 
+    <!-- ── Costing fields (optional) ─────────────────────────────────── -->
+    <!--
+        These fields capture what the grower pays for seed and what they
+        charge per sellable unit. They are optional — leave them blank now
+        and fill them in later if you prefer.
+    -->
+
+    <hr style="margin: 1.5rem 0; border-color: var(--border);">
+    <p style="margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+        Costing (optional) — fill these in to see profitability numbers.</p>
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="seed_cost">Seed bag cost ($)</label>
+            <input type="number" name="seed_cost" id="seed_cost"
+                   min="0" step="0.01" placeholder="e.g. 15.00" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="seed_purchase_weight">Seed bag weight (g)</label>
+            <input type="number" name="seed_purchase_weight" id="seed_purchase_weight"
+                   min="0" step="1" placeholder="e.g. 500" style="max-width:120px;">
+        </div>
+    </div>
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="unit_weight">Unit weight (g)</label>
+            <input type="number" name="unit_weight" id="unit_weight"
+                   min="1" step="1" value="100" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="unit_sell_price">Sell price per unit ($)</label>
+            <input type="number" name="unit_sell_price" id="unit_sell_price"
+                   min="0" step="0.01" placeholder="e.g. 4.50" style="max-width:120px;">
+        </div>
+    </div>
+
     <!-- ── Cycle days control ──────────────────────────────────────────── -->
 
     <hr style="margin: 1.5rem 0; border-color: var(--border);">
