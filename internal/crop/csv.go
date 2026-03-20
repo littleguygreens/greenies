@@ -511,40 +511,49 @@ func WriteCrops(path string, crops []Crop) error {
 		return fmt.Errorf("could not write header: %w", err)
 	}
 
+	// Build a lookup map from column name → position in the header.
+	// This way we refer to columns by name ("seed_grams") instead of by
+	// number (6). If we ever add, remove, or reorder columns, we only
+	// need to update the header list above — the rest adjusts automatically.
+	col := make(map[string]int, len(header))
+	for i, name := range header {
+		col[name] = i
+	}
+
 	for _, c := range crops {
 		for i, d := range c.Days {
 			row := make([]string, len(header))
 
 			// Day, stage, and tasks are always filled in.
-			row[1] = strconv.Itoa(d.Day)
-			row[2] = d.Stage
-			row[3] = d.Tasks
+			row[col["day"]] = strconv.Itoa(d.Day)
+			row[col["stage"]] = d.Stage
+			row[col["tasks"]] = d.Tasks
 
 			if i == 0 {
 				// First row of the crop block: fill in name + all parameters.
-				row[0] = c.Name
+				row[col["name"]] = c.Name
 
 				// Format overnight_soak as TRUE/FALSE (matches Google Sheets).
 				if c.OvernightSoak {
-					row[4] = "TRUE"
+					row[col["overnight_soak"]] = "TRUE"
 				} else {
-					row[4] = "FALSE"
+					row[col["overnight_soak"]] = "FALSE"
 				}
 
-				row[5] = strconv.Itoa(c.SoakHours)
-				row[6] = strconv.Itoa(c.SeedGrams)
+				row[col["soak_hours"]] = strconv.Itoa(c.SoakHours)
+				row[col["seed_grams"]] = strconv.Itoa(c.SeedGrams)
 
 				// Format dirt_litres: use integer form ("1") when there are
 				// no decimal places, decimal form ("1.5") otherwise.
 				if c.DirtLitres == float64(int(c.DirtLitres)) {
-					row[7] = strconv.Itoa(int(c.DirtLitres))
+					row[col["dirt_litres"]] = strconv.Itoa(int(c.DirtLitres))
 				} else {
-					row[7] = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
+					row[col["dirt_litres"]] = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
 				}
 
-				row[8] = strconv.Itoa(c.DarkDays)
-				row[9] = strconv.Itoa(c.LightDays)
-				row[10] = strconv.Itoa(c.YieldGrams)
+				row[col["dark_days"]] = strconv.Itoa(c.DarkDays)
+				row[col["light_days"]] = strconv.Itoa(c.LightDays)
+				row[col["yield_grams"]] = strconv.Itoa(c.YieldGrams)
 			}
 
 			// Subsequent rows: name and parameter columns stay empty (sparse).

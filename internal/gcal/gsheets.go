@@ -59,7 +59,7 @@ const cropsTab = "Crops"
 const cycleTab = "Cycle"
 
 // cropsHeaders are the column headings for the Crops tab.
-// Order matters — the push and pull functions rely on this exact sequence.
+// Push and pull functions look up columns by name, so reordering is safe.
 var cropsHeaders = []interface{}{
 	"name", "overnight_soak", "soak_hours", "seed_grams",
 	"dirt_litres", "dark_days", "light_days", "yield_grams",
@@ -373,8 +373,10 @@ func CreateSheet(ctx context.Context) (string, error) {
 // hasn't populated yet.
 func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 	// ── Read the Crops tab ──────────────────────────────────────────────
+	// Read all columns (not a fixed range like A:H) so that newly added
+	// parameter columns are automatically picked up without code changes.
 	cropsResp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, cropsTab+"!A:H",
+		sc.sheetID, cropsTab,
 	).Do()
 	if err != nil {
 		return nil, fmt.Errorf("could not read Crops tab: %w", err)
@@ -383,8 +385,9 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 	time.Sleep(apiPause)
 
 	// ── Read the Cycle tab ──────────────────────────────────────────────
+	// Read all columns — same approach as the Crops tab above.
 	cycleResp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, cycleTab+"!A:D",
+		sc.sheetID, cycleTab,
 	).Do()
 	if err != nil {
 		return nil, fmt.Errorf("could not read Cycle tab: %w", err)
@@ -408,6 +411,16 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 	paramMap := make(map[string]*cropParams)
 	var nameOrder []string // preserves the row order from the Sheet
 
+	// Build a lookup map from the header row so we find columns by name
+	// instead of by position number. If someone reorders or adds columns
+	// in the Google Sheet, the code still picks up the right values.
+	cropsCol := make(map[string]int)
+	if len(cropsResp.Values) > 0 {
+		for i, cell := range cropsResp.Values[0] {
+			cropsCol[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
 	for i, row := range cropsResp.Values {
 		if i == 0 {
 			continue // skip header row
@@ -416,19 +429,19 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			continue // blank row
 		}
 
-		name := strings.TrimSpace(cellString(row, 0))
+		name := strings.TrimSpace(cellString(row, cropsCol["name"]))
 		if name == "" {
 			continue
 		}
 
 		p := &cropParams{
-			OvernightSoak: parseBoolCell(row, 1),
-			SoakHours:     parseIntCell(row, 2),
-			SeedGrams:     parseIntCell(row, 3),
-			DirtLitres:    parseFloatCell(row, 4),
-			DarkDays:      parseIntCell(row, 5),
-			LightDays:     parseIntCell(row, 6),
-			YieldGrams:    parseIntCell(row, 7),
+			OvernightSoak: parseBoolCell(row, cropsCol["overnight_soak"]),
+			SoakHours:     parseIntCell(row, cropsCol["soak_hours"]),
+			SeedGrams:     parseIntCell(row, cropsCol["seed_grams"]),
+			DirtLitres:    parseFloatCell(row, cropsCol["dirt_litres"]),
+			DarkDays:      parseIntCell(row, cropsCol["dark_days"]),
+			LightDays:     parseIntCell(row, cropsCol["light_days"]),
+			YieldGrams:    parseIntCell(row, cropsCol["yield_grams"]),
 		}
 
 		// Default dirt to 1 litre if the cell is empty or zero.
@@ -445,6 +458,15 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 	// dayMap collects all CropDay entries for each crop, in the order they
 	// appear in the sheet. The crop name is lowercased for matching but
 	// the original casing from the Crops tab is used in the final output.
+
+	// Build a header lookup for the Cycle tab — same approach as Crops.
+	cycleCol := make(map[string]int)
+	if len(cycleResp.Values) > 0 {
+		for i, cell := range cycleResp.Values[0] {
+			cycleCol[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
 	dayMap := make(map[string][]crop.CropDay)
 
 	for i, row := range cycleResp.Values {
@@ -455,14 +477,14 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			continue
 		}
 
-		name := strings.TrimSpace(cellString(row, 0))
+		name := strings.TrimSpace(cellString(row, cycleCol["name"]))
 		if name == "" {
 			continue
 		}
 
-		dayNum := parseIntCell(row, 1)
-		stage := strings.TrimSpace(cellString(row, 2))
-		tasks := strings.TrimSpace(cellString(row, 3))
+		dayNum := parseIntCell(row, cycleCol["day"])
+		stage := strings.TrimSpace(cellString(row, cycleCol["stage"]))
+		tasks := strings.TrimSpace(cellString(row, cycleCol["tasks"]))
 
 		key := strings.ToLower(name)
 		dayMap[key] = append(dayMap[key], crop.CropDay{
@@ -517,6 +539,16 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 	//
 	// One row per variety: name, overnight_soak, soak_hours, seed_grams,
 	// dirt_litres, dark_days, light_days, yield_grams.
+	//
+	// We build a column-name → position map from cropsHeaders so that
+	// adding a new parameter column means updating the header list and
+	// the row-building code below — the positions are always derived
+	// automatically. No counting required.
+	cropCol := make(map[string]int, len(cropsHeaders))
+	for i, h := range cropsHeaders {
+		cropCol[h.(string)] = i
+	}
+
 	cropsRows := [][]interface{}{cropsHeaders}
 
 	for _, c := range crops {
@@ -533,16 +565,17 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 			dirtStr = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
 		}
 
-		cropsRows = append(cropsRows, []interface{}{
-			c.Name,
-			soakStr,
-			c.SoakHours,
-			c.SeedGrams,
-			dirtStr,
-			c.DarkDays,
-			c.LightDays,
-			c.YieldGrams,
-		})
+		row := make([]interface{}, len(cropsHeaders))
+		row[cropCol["name"]] = c.Name
+		row[cropCol["overnight_soak"]] = soakStr
+		row[cropCol["soak_hours"]] = c.SoakHours
+		row[cropCol["seed_grams"]] = c.SeedGrams
+		row[cropCol["dirt_litres"]] = dirtStr
+		row[cropCol["dark_days"]] = c.DarkDays
+		row[cropCol["light_days"]] = c.LightDays
+		row[cropCol["yield_grams"]] = c.YieldGrams
+
+		cropsRows = append(cropsRows, row)
 	}
 
 	// ── Build the Cycle tab data ────────────────────────────────────────
@@ -550,16 +583,24 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 	// One row per crop-day: name, day number, stage, tasks.
 	// Every row has the crop name filled in (not sparse) so it reads
 	// naturally in a spreadsheet.
+	//
+	// Same header-lookup approach as the Crops tab.
+	cyCol := make(map[string]int, len(cycleHeaders))
+	for i, h := range cycleHeaders {
+		cyCol[h.(string)] = i
+	}
+
 	cycleRows := [][]interface{}{cycleHeaders}
 
 	for _, c := range crops {
 		for _, d := range c.Days {
-			cycleRows = append(cycleRows, []interface{}{
-				c.Name,
-				d.Day,
-				d.Stage,
-				d.Tasks,
-			})
+			row := make([]interface{}, len(cycleHeaders))
+			row[cyCol["name"]] = c.Name
+			row[cyCol["day"]] = d.Day
+			row[cyCol["stage"]] = d.Stage
+			row[cyCol["tasks"]] = d.Tasks
+
+			cycleRows = append(cycleRows, row)
 		}
 	}
 
@@ -614,11 +655,20 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 // If the tab is empty (just headers, no data rows), it returns an empty slice
 // and no error — same behaviour as PullCrops for an empty sheet.
 func (sc *SheetsClient) PullFarm() ([]farm.Environment, error) {
+	// Read all columns so newly added columns are picked up automatically.
 	resp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, farmTab+"!A:C",
+		sc.sheetID, farmTab,
 	).Do()
 	if err != nil {
 		return nil, fmt.Errorf("could not read Farm tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	farmCol := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			farmCol[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
 	}
 
 	var envs []farm.Environment
@@ -631,13 +681,13 @@ func (sc *SheetsClient) PullFarm() ([]farm.Environment, error) {
 			continue // blank row
 		}
 
-		name := strings.TrimSpace(cellString(row, 0))
+		name := strings.TrimSpace(cellString(row, farmCol["name"]))
 		if name == "" {
 			continue
 		}
 
-		envType := strings.TrimSpace(cellString(row, 1))
-		capacity := parseIntCell(row, 2)
+		envType := strings.TrimSpace(cellString(row, farmCol["type"]))
+		capacity := parseIntCell(row, farmCol["capacity"])
 
 		envs = append(envs, farm.Environment{
 			Name:     name,
@@ -652,15 +702,23 @@ func (sc *SheetsClient) PullFarm() ([]farm.Environment, error) {
 // PushFarm writes the given farm environments to the "Farm" tab, completely
 // replacing any existing data. Same clear-and-rewrite approach as PushCrops.
 func (sc *SheetsClient) PushFarm(envs []farm.Environment) error {
+	// Build a column-name → position map so we place values by name,
+	// not by counting positions. Same approach as PushCrops.
+	fCol := make(map[string]int, len(farmHeaders))
+	for i, h := range farmHeaders {
+		fCol[h.(string)] = i
+	}
+
 	// Build the rows: header + one row per environment.
 	rows := [][]interface{}{farmHeaders}
 
 	for _, env := range envs {
-		rows = append(rows, []interface{}{
-			env.Name,
-			env.Type,
-			env.Capacity,
-		})
+		row := make([]interface{}, len(farmHeaders))
+		row[fCol["name"]] = env.Name
+		row[fCol["type"]] = env.Type
+		row[fCol["capacity"]] = env.Capacity
+
+		rows = append(rows, row)
 	}
 
 	// Clear the tab and rewrite from scratch.
