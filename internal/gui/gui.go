@@ -135,6 +135,7 @@ func renderPage(w http.ResponseWriter, name string, data any) {
 	err = templates.ExecuteTemplate(w, "layout.html", map[string]any{
 		"Content":   template.HTML(buf.String()),
 		"Lowercase": cfg.Lowercase,
+		"Theme":     cfg.Theme,
 	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Layout error: %v", err), http.StatusInternalServerError)

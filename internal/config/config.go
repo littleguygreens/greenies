@@ -40,6 +40,10 @@ type Config struct {
 	// Either "sun" (Sunday, the default) or "mon" (Monday).
 	// Used by the swim-lane calendar and the snapshot week view.
 	WeekStart string `json:"week_start"`
+
+	// Theme controls the GUI colour scheme. Either "dark" (the default) or
+	// "light". The CSS uses this to swap between two colour palettes.
+	Theme string `json:"theme"`
 }
 
 // Path returns the full file path to the config file (~/.greenies/config.json).

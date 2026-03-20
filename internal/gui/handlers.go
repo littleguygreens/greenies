@@ -311,8 +311,9 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 7; i++ {
 			d := weekStart.AddDate(0, 0, i)
 			week.Headers[i] = monthDayHeader{
-				DayNum:  d.Day(),
-				InMonth: d.Month() == month,
+				DayNum:        d.Day(),
+				InMonth:       d.Month() == month,
+				IsHighlighted: d.Equal(now),
 			}
 		}
 
@@ -337,11 +338,12 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 				}
 
 				row.Cells[i] = monthCell{
-					DayNum:  d.Day(),
-					Stage:   stage,
-					Label:   label,
-					Trays:   ci.Trays,
-					InMonth: d.Month() == month,
+					DayNum:        d.Day(),
+					Stage:         stage,
+					Label:         label,
+					Trays:         ci.Trays,
+					InMonth:       d.Month() == month,
+					IsHighlighted: d.Equal(now),
 				}
 
 				prevStage = stage
@@ -3971,6 +3973,7 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"Inventory": inventory,
 		"Lowercase": cfg.Lowercase,
 		"WeekStart": cfg.WeekStart,
+		"Theme":     cfg.Theme,
 		"Saved":     r.URL.Query().Get("saved") == "1",
 	})
 }
@@ -4056,6 +4059,12 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		cfg.WeekStart = "mon"
 	} else {
 		cfg.WeekStart = "sun"
+	}
+	th := r.FormValue("theme")
+	if th == "light" {
+		cfg.Theme = "light"
+	} else {
+		cfg.Theme = "dark"
 	}
 	_ = config.Save(cfg)
 

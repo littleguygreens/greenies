@@ -86,7 +86,7 @@
         });
     </script>
 </head>
-<body{{if .Lowercase}} class="lowercase"{{end}}>
+<body class="{{if .Lowercase}}lowercase {{end}}{{if eq .Theme "light"}}light{{end}}">
     <div class="app">
         <!-- ── Navigation sidebar ──────────────────────────────────────── -->
         <nav class="nav" id="nav">

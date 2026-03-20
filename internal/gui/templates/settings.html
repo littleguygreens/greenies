@@ -25,7 +25,7 @@
 
 <div id="settings-area">
     {{if .Saved}}
-        <div class="settings-success" style="background: rgba(139, 195, 74, 0.15); border: 1px solid #8bc34a; border-radius: 8px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
+        <div class="settings-success" style="background: rgba(139, 195, 74, 0.15); border: 1px solid var(--accent); border-radius: 8px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
             Settings saved.
         </div>
     {{end}}
@@ -126,7 +126,7 @@
         <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
             <input type="checkbox" name="lowercase" value="1"
                    {{if .Lowercase}}checked{{end}}
-                   style="width: 1.2rem; height: 1.2rem; accent-color: #8bc34a;">
+                   style="width: 1.2rem; height: 1.2rem; accent-color: var(--accent);">
             <span>Lowercase mode</span>
         </label>
         <p class="task-notes" style="margin-top: 0.25rem;">
@@ -150,6 +150,25 @@
             </div>
             <p class="task-notes" style="margin-top: 0.25rem;">
                 Controls which day starts the week on the calendar and snapshot views.
+            </p>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+            <label>Theme</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="theme" value="dark"
+                           {{if ne .Theme "light"}}checked{{end}}>
+                    Dark
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="theme" value="light"
+                           {{if eq .Theme "light"}}checked{{end}}>
+                    Light
+                </label>
+            </div>
+            <p class="task-notes" style="margin-top: 0.25rem;">
+                Switches the colour scheme between dark and light mode.
             </p>
         </div>
 
@@ -190,11 +209,11 @@ function addInventoryRow() {
 
 <!-- ── Inline styles for settings inputs ──────────────────────────────── -->
 <style>
-/* Input fields inside the settings tables — dark theme to match the app. */
+/* Input fields inside the settings tables — themed to match the app. */
 .settings-input {
-    background: #1a1a2e;
-    color: #e0e0e0;
-    border: 1px solid #333;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.35rem 0.5rem;
     font-size: 0.9rem;
@@ -204,14 +223,14 @@ function addInventoryRow() {
 }
 
 .settings-input:focus {
-    border-color: #8bc34a;
+    border-color: var(--accent);
     outline: none;
 }
 
 /* Small ✕ button to remove a row. */
 .btn-remove {
     background: transparent;
-    border: 1px solid #555;
+    border: 1px solid var(--text-muted);
     color: #e07070;
     border-radius: 4px;
     cursor: pointer;
@@ -222,17 +241,6 @@ function addInventoryRow() {
 .btn-remove:hover {
     background: rgba(224, 112, 112, 0.15);
     border-color: #e07070;
-}
-
-/* Secondary button style for "Add" buttons. */
-.btn-secondary {
-    background: transparent;
-    border: 1px solid #8bc34a;
-    color: #8bc34a;
-}
-
-.btn-secondary:hover {
-    background: rgba(139, 195, 74, 0.1);
 }
 </style>
 {{end}}
