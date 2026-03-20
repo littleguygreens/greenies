@@ -10,8 +10,10 @@
 package gui
 
 import (
-	"context" // for context.Background(), used when calling Google Calendar
+	"context"       // for context.Background(), used when calling Google Calendar
+	"encoding/json"  // for marshalling crop day data to JSON for the edit page
 	"fmt"
+	"html/template"  // for template.JS — marks a string as safe JavaScript
 	"math"
 	"net/http"
 	"sort"
@@ -431,6 +433,380 @@ func handleCrops(w http.ResponseWriter, r *http.Request) {
 		"Crops":    crops,
 		"HasCrops": len(crops) > 0,
 		"Count":    len(crops),
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add New Crop
+// ─────────────────────────────────────────────────────────────────────────────
+
+// handleCropNewPage renders the "Add New Crop" form at GET /crops/new.
+//
+// This is a static form page — no data needs to be loaded. The form uses
+// JavaScript to dynamically generate day rows based on the total cycle
+// days the grower enters, and htmx to submit without a full page reload.
+func handleCropNewPage(w http.ResponseWriter, r *http.Request) {
+	renderPage(w, "crop_new.html", nil)
+}
+
+// handleCropNewAction processes the POST /crops/new form submission.
+//
+// It reads the crop parameters and day-by-day tasks from the form, builds
+// a crop.Crop value, appends it to crops.csv, and optionally syncs to
+// Google Sheets. Returns an htmx fragment with a success or error message.
+func handleCropNewAction(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		renderFragment(w, "crop_new_result.html", map[string]any{
+			"Error": "Could not read form data: " + err.Error(),
+		})
+		return
+	}
+
+	// ── Read crop name ──────────────────────────────────────────────────
+	cropName := strings.TrimSpace(r.FormValue("crop_name"))
+	if cropName == "" {
+		renderFragment(w, "crop_new_result.html", map[string]any{
+			"Error": "Crop name is required.",
+		})
+		return
+	}
+	// Lowercase the name — the scheduler expects lowercase crop names.
+	cropName = strings.ToLower(cropName)
+
+	// ── Read soak settings ──────────────────────────────────────────────
+	soakType := r.FormValue("soak_type") // "none", "hours", or "overnight"
+	overnightSoak := soakType == "overnight"
+	soakHours := 0
+	if soakType == "hours" {
+		if v, err := strconv.Atoi(r.FormValue("soak_hours")); err == nil {
+			soakHours = v
+		}
+	} else if overnightSoak {
+		soakHours = 12 // sensible default for overnight soaks
+	}
+
+	// ── Read numeric parameters ─────────────────────────────────────────
+	seedGrams := 0
+	if v, err := strconv.Atoi(r.FormValue("seed_grams")); err == nil {
+		seedGrams = v
+	}
+
+	dirtLitres := 1.0
+	if v, err := strconv.ParseFloat(r.FormValue("dirt_litres"), 64); err == nil && v > 0 {
+		dirtLitres = v
+	}
+
+	yieldGrams := 0
+	if v, err := strconv.Atoi(r.FormValue("yield_grams")); err == nil {
+		yieldGrams = v
+	}
+
+	// ── Read the day rows ───────────────────────────────────────────────
+	// The form sends parallel arrays: day_num[], day_stage[], day_tasks[].
+	dayNums := r.Form["day_num[]"]
+	dayStages := r.Form["day_stage[]"]
+	dayTasks := r.Form["day_tasks[]"]
+
+	if len(dayNums) == 0 {
+		renderFragment(w, "crop_new_result.html", map[string]any{
+			"Error": "No cycle days defined — set the total cycle days first.",
+		})
+		return
+	}
+
+	// Build the CropDay list and count dark/light days along the way.
+	var days []crop.CropDay
+	darkDays := 0
+	lightDays := 0
+
+	for i := range dayNums {
+		dayNum, err := strconv.Atoi(dayNums[i])
+		if err != nil {
+			continue
+		}
+
+		stage := "dark"
+		if i < len(dayStages) {
+			stage = strings.TrimSpace(dayStages[i])
+		}
+
+		tasks := ""
+		if i < len(dayTasks) {
+			tasks = strings.TrimSpace(dayTasks[i])
+		}
+
+		days = append(days, crop.CropDay{
+			Day:   dayNum,
+			Stage: stage,
+			Tasks: tasks,
+		})
+
+		// Count stages for the dark_days and light_days fields.
+		switch stage {
+		case "dark":
+			darkDays++
+		case "light":
+			lightDays++
+		}
+	}
+
+	if len(days) < 2 {
+		renderFragment(w, "crop_new_result.html", map[string]any{
+			"Error": "A crop needs at least 2 days (sow and harvest).",
+		})
+		return
+	}
+
+	// ── Build the Crop value ────────────────────────────────────────────
+	// CycleDays is derived from the last day's number — same as the CSV
+	// loader does, so it can never get out of sync.
+	newCrop := crop.Crop{
+		Name:          cropName,
+		CycleDays:     days[len(days)-1].Day,
+		OvernightSoak: overnightSoak,
+		SoakHours:     soakHours,
+		SeedGrams:     seedGrams,
+		DirtLitres:    dirtLitres,
+		DarkDays:      darkDays,
+		LightDays:     lightDays,
+		YieldGrams:    yieldGrams,
+		Days:          days,
+	}
+
+	// ── Save to crops.csv ───────────────────────────────────────────────
+	if err := crop.AppendCrop(newCrop); err != nil {
+		renderFragment(w, "crop_new_result.html", map[string]any{
+			"Error": "Could not save crop: " + err.Error(),
+		})
+		return
+	}
+
+	// ── Sync to Google Sheets (fire-and-forget) ─────────────────────────
+	cfg, _ := config.Load()
+	if cfg.SheetsEnabled && cfg.SheetID != "" {
+		go gcal.SyncLocalToSheet(context.Background())
+	}
+
+	renderFragment(w, "crop_new_result.html", map[string]any{
+		"Success":  true,
+		"CropName": cropName,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit Crop
+// ─────────────────────────────────────────────────────────────────────────────
+
+// handleCropEditPage renders the "Edit Crop" form at GET /crops/edit?name=X.
+//
+// It loads the named crop from crops.csv and passes it to the template so
+// every field starts pre-filled. The day-by-day data is also passed as a
+// JSON array so JavaScript can build the pre-filled day rows.
+func handleCropEditPage(w http.ResponseWriter, r *http.Request) {
+	cropName := strings.TrimSpace(r.URL.Query().Get("name"))
+	if cropName == "" {
+		renderPage(w, "crops.html", map[string]any{
+			"Error":    "No crop name specified.",
+			"HasCrops": false,
+		})
+		return
+	}
+
+	// Load the crop library and find the one we want to edit.
+	source, err := crop.GetSource()
+	if err != nil {
+		renderPage(w, "crops.html", map[string]any{
+			"Error":    "Could not find crops file: " + err.Error(),
+			"HasCrops": false,
+		})
+		return
+	}
+
+	crops, err := source.LoadCrops()
+	if err != nil {
+		renderPage(w, "crops.html", map[string]any{
+			"Error":    "Could not load crop library: " + err.Error(),
+			"HasCrops": false,
+		})
+		return
+	}
+
+	// Find the crop by name (case-insensitive).
+	var found *crop.Crop
+	for i := range crops {
+		if strings.EqualFold(crops[i].Name, cropName) {
+			found = &crops[i]
+			break
+		}
+	}
+	if found == nil {
+		renderPage(w, "crops.html", map[string]any{
+			"Error":    fmt.Sprintf("Crop %q not found in your library.", cropName),
+			"HasCrops": false,
+		})
+		return
+	}
+
+	// Convert the day data to JSON so the JavaScript on the page can use it
+	// to pre-fill the day-by-day table rows. We wrap it in template.JS so
+	// that Go's html/template engine knows this is safe JavaScript and does
+	// not HTML-escape the quotes (which would break the JSON parsing).
+	daysJSON, err := json.Marshal(found.Days)
+	if err != nil {
+		daysJSON = []byte("[]")
+	}
+
+	renderPage(w, "crop_edit.html", map[string]any{
+		"Crop":     *found,
+		"DaysJSON": template.JS(daysJSON),
+		"OrigName": found.Name,
+	})
+}
+
+// handleCropEditAction processes the POST /crops/edit form submission.
+//
+// It reads the updated crop parameters and day-by-day tasks from the form,
+// builds a new crop.Crop value, and replaces the old version in crops.csv.
+// The original name is sent as a hidden field so renames work correctly.
+func handleCropEditAction(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "Could not read form data: " + err.Error(),
+		})
+		return
+	}
+
+	// ── Read the original name (hidden field) ─────────────────────────
+	originalName := strings.TrimSpace(r.FormValue("original_name"))
+	if originalName == "" {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "Missing original crop name — cannot save.",
+		})
+		return
+	}
+
+	// ── Read crop name ────────────────────────────────────────────────
+	cropName := strings.TrimSpace(r.FormValue("crop_name"))
+	if cropName == "" {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "Crop name is required.",
+		})
+		return
+	}
+	cropName = strings.ToLower(cropName)
+
+	// ── Read soak settings ────────────────────────────────────────────
+	soakType := r.FormValue("soak_type")
+	overnightSoak := soakType == "overnight"
+	soakHours := 0
+	if soakType == "hours" {
+		if v, err := strconv.Atoi(r.FormValue("soak_hours")); err == nil {
+			soakHours = v
+		}
+	} else if overnightSoak {
+		soakHours = 12
+	}
+
+	// ── Read numeric parameters ───────────────────────────────────────
+	seedGrams := 0
+	if v, err := strconv.Atoi(r.FormValue("seed_grams")); err == nil {
+		seedGrams = v
+	}
+
+	dirtLitres := 1.0
+	if v, err := strconv.ParseFloat(r.FormValue("dirt_litres"), 64); err == nil && v > 0 {
+		dirtLitres = v
+	}
+
+	yieldGrams := 0
+	if v, err := strconv.Atoi(r.FormValue("yield_grams")); err == nil {
+		yieldGrams = v
+	}
+
+	// ── Read the day rows ─────────────────────────────────────────────
+	dayNums := r.Form["day_num[]"]
+	dayStages := r.Form["day_stage[]"]
+	dayTasks := r.Form["day_tasks[]"]
+
+	if len(dayNums) == 0 {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "No cycle days defined — set the total cycle days first.",
+		})
+		return
+	}
+
+	var days []crop.CropDay
+	darkDays := 0
+	lightDays := 0
+
+	for i := range dayNums {
+		dayNum, err := strconv.Atoi(dayNums[i])
+		if err != nil {
+			continue
+		}
+
+		stage := "dark"
+		if i < len(dayStages) {
+			stage = strings.TrimSpace(dayStages[i])
+		}
+
+		tasks := ""
+		if i < len(dayTasks) {
+			tasks = strings.TrimSpace(dayTasks[i])
+		}
+
+		days = append(days, crop.CropDay{
+			Day:   dayNum,
+			Stage: stage,
+			Tasks: tasks,
+		})
+
+		switch stage {
+		case "dark":
+			darkDays++
+		case "light":
+			lightDays++
+		}
+	}
+
+	if len(days) < 2 {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "A crop needs at least 2 days (sow and harvest).",
+		})
+		return
+	}
+
+	// ── Build the updated Crop value ──────────────────────────────────
+	updatedCrop := crop.Crop{
+		Name:          cropName,
+		CycleDays:     days[len(days)-1].Day,
+		OvernightSoak: overnightSoak,
+		SoakHours:     soakHours,
+		SeedGrams:     seedGrams,
+		DirtLitres:    dirtLitres,
+		DarkDays:      darkDays,
+		LightDays:     lightDays,
+		YieldGrams:    yieldGrams,
+		Days:          days,
+	}
+
+	// ── Replace in crops.csv ──────────────────────────────────────────
+	if err := crop.ReplaceCrop(originalName, updatedCrop); err != nil {
+		renderFragment(w, "crop_edit_result.html", map[string]any{
+			"Error": "Could not save crop: " + err.Error(),
+		})
+		return
+	}
+
+	// ── Sync to Google Sheets (fire-and-forget) ───────────────────────
+	cfg, _ := config.Load()
+	if cfg.SheetsEnabled && cfg.SheetID != "" {
+		go gcal.SyncLocalToSheet(context.Background())
+	}
+
+	renderFragment(w, "crop_edit_result.html", map[string]any{
+		"Success":  true,
+		"CropName": cropName,
 	})
 }
 

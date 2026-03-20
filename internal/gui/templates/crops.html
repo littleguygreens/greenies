@@ -17,6 +17,9 @@
 {{define "crops.html"}}
 <h1>Crop Library</h1>
 
+<!-- Link to the "Add New Crop" form -->
+<p><a href="/crops/new" class="btn btn-primary btn-small">Add New Crop</a></p>
+
 {{if .Error}}
     <p class="empty">{{.Error}}</p>
 {{else if .HasCrops}}
@@ -30,6 +33,7 @@
                 <th>Cycle (days)</th>
                 <th>Seed (g/tray)</th>
                 <th>Yield (g/tray)</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -40,6 +44,7 @@
                     <td>{{.CycleDays}}</td>
                     <td>{{.SeedGrams}}</td>
                     <td>{{.YieldGrams}}</td>
+                    <td><a href="/crops/edit?name={{.Name}}" class="btn btn-secondary btn-small">Edit</a></td>
                 </tr>
             {{end}}
         </tbody>

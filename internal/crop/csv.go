@@ -558,6 +558,92 @@ func WriteCrops(path string, crops []Crop) error {
 	return w.Error()
 }
 
+// AppendCrop adds a single new crop to the end of the local crops.csv file.
+//
+// It loads all existing crops, appends the new one, and writes the whole file
+// back out in the standard sparse CSV format. This is the safe way to add a
+// crop — it preserves everything already in the file and guarantees the result
+// is a valid, round-trippable CSV.
+//
+// Returns an error if the file cannot be read or written, or if a crop with
+// the same name already exists (case-insensitive).
+func AppendCrop(newCrop Crop) error {
+	path, err := CropsFilePath()
+	if err != nil {
+		return err
+	}
+
+	// Load whatever is already in the file. If the file does not exist yet,
+	// start with an empty list — this handles first-time setup gracefully.
+	var existing []Crop
+	source := CSVSource{Path: path}
+	loaded, loadErr := source.LoadCrops()
+	if loadErr == nil {
+		existing = loaded
+	}
+
+	// Check for duplicate names — two crops with the same name would confuse
+	// the scheduler (it wouldn't know which one to use).
+	for _, c := range existing {
+		if strings.EqualFold(c.Name, newCrop.Name) {
+			return fmt.Errorf("a crop named %q already exists in your library", c.Name)
+		}
+	}
+
+	existing = append(existing, newCrop)
+	return WriteCrops(path, existing)
+}
+
+// ReplaceCrop updates an existing crop in crops.csv by replacing it with a
+// new version. The crop to replace is identified by originalName (case-
+// insensitive). This lets the grower change anything about a crop — even its
+// name — without leaving orphan data behind.
+//
+// Returns an error if the file can't be read/written or if no crop with
+// originalName exists. If the crop is being renamed (newCrop.Name differs
+// from originalName), it also checks that the new name isn't already taken.
+func ReplaceCrop(originalName string, newCrop Crop) error {
+	path, err := CropsFilePath()
+	if err != nil {
+		return err
+	}
+
+	// Load all existing crops from the file.
+	source := CSVSource{Path: path}
+	existing, err := source.LoadCrops()
+	if err != nil {
+		return fmt.Errorf("could not load crop library: %w", err)
+	}
+
+	// Find the crop we are replacing. Keep track of its position in the
+	// list so the replacement ends up in the same spot (not moved to the end).
+	found := -1
+	for i, c := range existing {
+		if strings.EqualFold(c.Name, originalName) {
+			found = i
+			break
+		}
+	}
+	if found == -1 {
+		return fmt.Errorf("crop %q not found in your library", originalName)
+	}
+
+	// If the crop is being renamed, make sure the new name isn't already
+	// taken by a different crop.
+	if !strings.EqualFold(originalName, newCrop.Name) {
+		for _, c := range existing {
+			if strings.EqualFold(c.Name, newCrop.Name) {
+				return fmt.Errorf("a crop named %q already exists in your library", newCrop.Name)
+			}
+		}
+	}
+
+	// Swap in the new version at the same position.
+	existing[found] = newCrop
+
+	return WriteCrops(path, existing)
+}
+
 // insertCSVRows inserts a slice of new rows into rows at position idx,
 // returning the extended slice. All rows from idx onwards are shifted right
 // to make room. Uses a fresh slice to avoid overlapping-copy issues.

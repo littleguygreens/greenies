@@ -1,0 +1,226 @@
+{{/*
+    crop_edit.html — form for editing an existing crop variety.
+
+    This page is almost identical to crop_new.html, but every field starts
+    pre-filled with the crop's current values. The grower can change anything
+    — name, soak type, seed weight, day-by-day tasks — and save it back.
+
+    Data passed from the handler (handleCropEditPage in handlers.go):
+      .Crop       — the crop.Crop struct being edited
+      .DaysJSON   — JSON array of {Day, Stage, Tasks} for JavaScript to load
+      .OrigName   — the crop's current name (used as the key for saving, in
+                     case the grower renames it)
+*/}}
+
+{{define "crop_edit.html"}}
+<h1>Edit Crop: {{.Crop.Name}}</h1>
+<p>Change any parameters or day tasks, then save.</p>
+
+<form hx-post="/crops/edit"
+      hx-target="#crop-edit-result"
+      hx-swap="innerHTML">
+
+    <!-- Hidden field: the original crop name, so the server knows which
+         crop to replace even if the grower renames it. -->
+    <input type="hidden" name="original_name" value="{{.OrigName}}">
+
+    <!-- ── Crop parameters ─────────────────────────────────────────────── -->
+
+    <div class="form-group">
+        <label for="crop_name">Crop name</label>
+        <input type="text" name="crop_name" id="crop_name"
+               value="{{.Crop.Name}}" required>
+    </div>
+
+    <!-- Soak type — radio buttons, pre-selected based on current values -->
+    <div class="form-group">
+        <label>Soak type</label>
+        <div class="radio-group">
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="none"
+                       {{if and (not .Crop.OvernightSoak) (eq .Crop.SoakHours 0)}}checked{{end}}
+                       onchange="document.getElementById('soak-hours-row').style.display='none'; rebuildDays();">
+                None
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="hours"
+                       {{if and (not .Crop.OvernightSoak) (gt .Crop.SoakHours 0)}}checked{{end}}
+                       onchange="document.getElementById('soak-hours-row').style.display='flex'; rebuildDays();">
+                Same-day (hours)
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="overnight"
+                       {{if .Crop.OvernightSoak}}checked{{end}}
+                       onchange="document.getElementById('soak-hours-row').style.display='none'; rebuildDays();">
+                Overnight
+            </label>
+        </div>
+    </div>
+
+    <div class="trial-form-row" id="soak-hours-row"
+         style="display:{{if and (not .Crop.OvernightSoak) (gt .Crop.SoakHours 0)}}flex{{else}}none{{end}};">
+        <div class="form-group">
+            <label for="soak_hours">Soak hours</label>
+            <input type="number" name="soak_hours" id="soak_hours"
+                   min="0" step="0.5" value="{{.Crop.SoakHours}}" style="max-width:120px;">
+        </div>
+    </div>
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="seed_grams">Seed (g/tray)</label>
+            <input type="number" name="seed_grams" id="seed_grams"
+                   min="0" step="1" value="{{.Crop.SeedGrams}}" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="dirt_litres">Dirt (L/tray)</label>
+            <input type="number" name="dirt_litres" id="dirt_litres"
+                   min="0" step="0.1" value="{{printf "%.1f" .Crop.DirtLitres}}" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="yield_grams">Expected yield (g/tray)</label>
+            <input type="number" name="yield_grams" id="yield_grams"
+                   min="0" step="1" value="{{.Crop.YieldGrams}}" style="max-width:120px;">
+        </div>
+    </div>
+
+    <!-- ── Cycle days control ──────────────────────────────────────────── -->
+
+    <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="total_days">Total cycle days (sow to harvest)</label>
+            <input type="number" name="total_days" id="total_days"
+                   min="2" max="30" value="{{.Crop.CycleDays}}" style="max-width:120px;"
+                   oninput="rebuildDays();" required>
+        </div>
+    </div>
+
+    <!-- ── Day-by-day task table ───────────────────────────────────────── -->
+
+    <div id="day-rows-container">
+        <!-- JavaScript fills this on page load, pre-populated with
+             existing day data from the crop being edited. -->
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="margin-top:1rem;">
+        Save Changes
+    </button>
+    <a href="/crops" class="btn btn-secondary" style="margin-top:1rem;">Cancel</a>
+</form>
+
+<!-- htmx swaps the result into this div -->
+<div id="crop-edit-result"></div>
+
+<script>
+// existingDays holds the crop's current day-by-day data, loaded from the
+// server as a JSON array. When the page first builds the day rows, it uses
+// these values to pre-fill the stage dropdowns and task inputs.
+var existingDays = {{.DaysJSON}};
+
+// rebuildDays generates the day-by-day table, same logic as crop_new.html
+// but with pre-filling from existingDays when available.
+function rebuildDays() {
+    var totalInput = document.getElementById('total_days');
+    var total = parseInt(totalInput.value, 10);
+    if (isNaN(total) || total < 2) {
+        document.getElementById('day-rows-container').innerHTML = '';
+        return;
+    }
+
+    // Check if overnight soak is selected
+    var soakRadios = document.getElementsByName('soak_type');
+    var hasDay0 = false;
+    for (var i = 0; i < soakRadios.length; i++) {
+        if (soakRadios[i].checked && soakRadios[i].value === 'overnight') {
+            hasDay0 = true;
+            break;
+        }
+    }
+
+    var startDay = hasDay0 ? 0 : 1;
+    var lastDay = total;
+
+    // Build a lookup map from day number → existing day data, so we can
+    // pre-fill stages and tasks for days that already have data.
+    var dayMap = {};
+    for (var d = 0; d < existingDays.length; d++) {
+        dayMap[existingDays[d].Day] = existingDays[d];
+    }
+
+    var html = '<table class="data-table crop-day-table">';
+    html += '<thead><tr>';
+    html += '<th style="width:70px;">Day</th>';
+    html += '<th style="width:120px;">Stage</th>';
+    html += '<th>Tasks</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var day = startDay; day <= lastDay; day++) {
+        // Check if we have existing data for this day number
+        var existing = dayMap[day];
+
+        // Pick the stage: use existing data if available, otherwise
+        // generate a sensible default (same logic as crop_new.html).
+        var stage;
+        if (existing) {
+            stage = existing.Stage;
+        } else {
+            stage = 'dark';
+            if (day === startDay || (hasDay0 && day <= 1)) {
+                stage = 'sow';
+            } else if (day === lastDay) {
+                stage = 'harvest';
+            } else {
+                var sowDays = hasDay0 ? 2 : 1;
+                var middleDays = lastDay - sowDays - 1;
+                var halfPoint = sowDays + Math.ceil(middleDays / 2);
+                if (day > halfPoint) {
+                    stage = 'light';
+                }
+            }
+        }
+
+        var tasks = existing ? existing.Tasks : '';
+
+        html += '<tr>';
+        html += '<td><input type="number" name="day_num[]" value="' + day + '" readonly class="day-num-input"></td>';
+        html += '<td><select name="day_stage[]" class="day-stage-select">';
+        html += '<option value="sow"'     + (stage === 'sow'     ? ' selected' : '') + '>sow</option>';
+        html += '<option value="dark"'    + (stage === 'dark'    ? ' selected' : '') + '>dark</option>';
+        html += '<option value="light"'   + (stage === 'light'   ? ' selected' : '') + '>light</option>';
+        html += '<option value="harvest"' + (stage === 'harvest' ? ' selected' : '') + '>harvest</option>';
+        html += '</select></td>';
+        // Escape HTML entities in the tasks string to prevent broken markup
+        var safeT = tasks.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html += '<td><input type="text" name="day_tasks[]" value="' + safeT + '" placeholder="e.g. bottom water, rotate stack" class="day-tasks-input"></td>';
+        html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('day-rows-container').innerHTML = html;
+}
+
+// Build the initial rows on page load, pre-filled with existing data
+rebuildDays();
+</script>
+{{end}}
+
+{{/*
+    crop_edit_result.html — htmx fragment shown after editing a crop.
+
+    Data:
+      .Success  — true if the crop was saved
+      .Error    — error message if something went wrong
+      .CropName — the name of the crop that was saved (on success)
+*/}}
+{{define "crop_edit_result.html"}}
+{{if .Error}}
+    <div class="error-box">{{.Error}}</div>
+{{else if .Success}}
+    <div class="plan-success">
+        <p>Saved changes to "{{.CropName}}".</p>
+        <a href="/crops" class="btn btn-secondary btn-small">View Crop Library</a>
+    </div>
+{{end}}
+{{end}}

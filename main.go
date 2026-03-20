@@ -95,7 +95,7 @@ Commands:
   list             Show upcoming tasks (week or month view)
   plan             Schedule a new crop cycle
   snapshot         Live farm view — slots, active cycles, conflicts
-  crops            List all crop varieties from the crop library
+  crops            List crop varieties, or add a new one
   harvest          Log a completed harvest (actual trays + grams)
   harvestlog       View full harvest history
   trial            Start, manage, or compare crop trials

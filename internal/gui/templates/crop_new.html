@@ -1,0 +1,214 @@
+{{/*
+    crop_new.html — form for adding a new crop variety to the library.
+
+    This page lets the grower define a brand-new crop by filling in the
+    growing parameters (seed weight, soak type, etc.) and then filling in
+    the day-by-day tasks for the entire cycle. The number of day rows is
+    driven by the "total cycle days" field — change the number, and the
+    rows update instantly.
+
+    Data passed from the handler (handleCropNewPage in handlers.go):
+      (none — this is a static form page)
+*/}}
+
+{{define "crop_new.html"}}
+<h1>Add New Crop</h1>
+<p>Define a new crop variety. Fill in the parameters, set the total cycle
+   days, then fill in each day's stage and tasks.</p>
+
+<form hx-post="/crops/new"
+      hx-target="#crop-new-result"
+      hx-swap="innerHTML">
+
+    <!-- ── Crop parameters ─────────────────────────────────────────────── -->
+
+    <div class="form-group">
+        <label for="crop_name">Crop name</label>
+        <input type="text" name="crop_name" id="crop_name"
+               placeholder="e.g. mustard" required>
+    </div>
+
+    <!-- Soak type — radio buttons, same pattern as the trial form -->
+    <div class="form-group">
+        <label>Soak type</label>
+        <div class="radio-group">
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="none" checked
+                       onchange="document.getElementById('soak-hours-row').style.display='none'; rebuildDays();">
+                None
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="hours"
+                       onchange="document.getElementById('soak-hours-row').style.display='flex'; rebuildDays();">
+                Same-day (hours)
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="soak_type" value="overnight"
+                       onchange="document.getElementById('soak-hours-row').style.display='none'; rebuildDays();">
+                Overnight
+            </label>
+        </div>
+    </div>
+
+    <div class="trial-form-row" id="soak-hours-row" style="display:none;">
+        <div class="form-group">
+            <label for="soak_hours">Soak hours</label>
+            <input type="number" name="soak_hours" id="soak_hours"
+                   min="0" step="0.5" placeholder="e.g. 4" style="max-width:120px;">
+        </div>
+    </div>
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="seed_grams">Seed (g/tray)</label>
+            <input type="number" name="seed_grams" id="seed_grams"
+                   min="0" step="1" placeholder="e.g. 150" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="dirt_litres">Dirt (L/tray)</label>
+            <input type="number" name="dirt_litres" id="dirt_litres"
+                   min="0" step="0.1" value="1" style="max-width:120px;">
+        </div>
+        <div class="form-group">
+            <label for="yield_grams">Expected yield (g/tray)</label>
+            <input type="number" name="yield_grams" id="yield_grams"
+                   min="0" step="1" placeholder="e.g. 500" style="max-width:120px;">
+        </div>
+    </div>
+
+    <!-- ── Cycle days control ──────────────────────────────────────────── -->
+
+    <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+    <div class="trial-form-row">
+        <div class="form-group">
+            <label for="total_days">Total cycle days (sow to harvest)</label>
+            <input type="number" name="total_days" id="total_days"
+                   min="2" max="30" value="9" style="max-width:120px;"
+                   oninput="rebuildDays();" required>
+        </div>
+    </div>
+
+    <!-- ── Day-by-day task table ───────────────────────────────────────── -->
+    <!--
+        This table is rebuilt by JavaScript every time the total cycle days
+        or soak type changes. Each row has:
+          - Day number (read-only, auto-calculated)
+          - Stage dropdown (sow / dark / light / harvest)
+          - Tasks text input (free-form)
+
+        The stage dropdowns are pre-filled with sensible defaults:
+          - Day 0 (if overnight soak) → sow
+          - Day 1 → sow
+          - Middle days → dark then light (split evenly)
+          - Last day → harvest
+    -->
+
+    <div id="day-rows-container">
+        <!-- JavaScript fills this -->
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="margin-top:1rem;">
+        Add to Crop Library
+    </button>
+</form>
+
+<!-- htmx swaps the result into this div -->
+<div id="crop-new-result"></div>
+
+<script>
+// rebuildDays generates one table row per cycle day based on the current
+// "total cycle days" value and soak type. It replaces whatever is in the
+// day-rows container.
+function rebuildDays() {
+    var totalInput = document.getElementById('total_days');
+    var total = parseInt(totalInput.value, 10);
+    if (isNaN(total) || total < 2) {
+        document.getElementById('day-rows-container').innerHTML = '';
+        return;
+    }
+
+    // Check if overnight soak is selected — if so, we start from Day 0
+    var soakRadios = document.getElementsByName('soak_type');
+    var hasDay0 = false;
+    for (var i = 0; i < soakRadios.length; i++) {
+        if (soakRadios[i].checked && soakRadios[i].value === 'overnight') {
+            hasDay0 = true;
+            break;
+        }
+    }
+
+    // startDay is 0 for overnight soak crops, 1 for everything else.
+    var startDay = hasDay0 ? 0 : 1;
+
+    // lastDay is the harvest day number. For a "9 day" crop starting at
+    // Day 1, the last day is 9. For an "8 day" crop with Day 0, the last
+    // day is 8.
+    var lastDay = hasDay0 ? total : total;
+
+    // Build the HTML table
+    var html = '<table class="data-table crop-day-table">';
+    html += '<thead><tr>';
+    html += '<th style="width:70px;">Day</th>';
+    html += '<th style="width:120px;">Stage</th>';
+    html += '<th>Tasks</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var day = startDay; day <= lastDay; day++) {
+        // Pick a sensible default stage for each day
+        var defaultStage = 'dark';
+        if (day === startDay || (hasDay0 && day <= 1)) {
+            defaultStage = 'sow';
+        } else if (day === lastDay) {
+            defaultStage = 'harvest';
+        } else {
+            // Split remaining days roughly: first half dark, second half light.
+            // The grower will adjust as needed.
+            var sowDays = hasDay0 ? 2 : 1;
+            var middleDays = lastDay - sowDays - 1; // minus harvest day
+            var halfPoint = sowDays + Math.ceil(middleDays / 2);
+            if (day > halfPoint) {
+                defaultStage = 'light';
+            }
+        }
+
+        html += '<tr>';
+        html += '<td><input type="number" name="day_num[]" value="' + day + '" readonly class="day-num-input"></td>';
+        html += '<td><select name="day_stage[]" class="day-stage-select">';
+        html += '<option value="sow"'    + (defaultStage === 'sow'     ? ' selected' : '') + '>sow</option>';
+        html += '<option value="dark"'   + (defaultStage === 'dark'    ? ' selected' : '') + '>dark</option>';
+        html += '<option value="light"'  + (defaultStage === 'light'   ? ' selected' : '') + '>light</option>';
+        html += '<option value="harvest"'+ (defaultStage === 'harvest' ? ' selected' : '') + '>harvest</option>';
+        html += '</select></td>';
+        html += '<td><input type="text" name="day_tasks[]" placeholder="e.g. bottom water, rotate stack" class="day-tasks-input"></td>';
+        html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    document.getElementById('day-rows-container').innerHTML = html;
+}
+
+// Build the initial rows on page load
+rebuildDays();
+</script>
+{{end}}
+
+{{/*
+    crop_new_result.html — htmx fragment shown after adding a new crop.
+
+    Data:
+      .Success  — true if the crop was added
+      .Error    — error message if something went wrong
+      .CropName — the name of the crop that was added (on success)
+*/}}
+{{define "crop_new_result.html"}}
+{{if .Error}}
+    <div class="error-box">{{.Error}}</div>
+{{else if .Success}}
+    <div class="plan-success">
+        <p>Added "{{.CropName}}" to your crop library.</p>
+        <a href="/crops" class="btn btn-secondary btn-small">View Crop Library</a>
+        <a href="/crops/new" class="btn btn-primary btn-small">Add Another</a>
+    </div>
+{{end}}
+{{end}}
