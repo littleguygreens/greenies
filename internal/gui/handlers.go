@@ -4463,10 +4463,17 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	// Load preferences from config.json.
 	cfg, _ := config.Load()
 
-	// Load farm-wide supplies from supplies.csv.
+	// Load farm-wide supplies from supplies.csv. If the file is empty or
+	// doesn't exist yet, start with the three default items that the
+	// profitability calculator looks up by name. This way a new grower
+	// sees the right rows already waiting to be filled in.
 	supplies, _ := supply.Load()
-	if supplies == nil {
-		supplies = []supply.Supply{}
+	if len(supplies) == 0 {
+		supplies = []supply.Supply{
+			{Name: "dirt"},
+			{Name: "containers"},
+			{Name: "labels"},
+		}
 	}
 
 	// Split environments into spaces (blackout/lit) and inventory items.
