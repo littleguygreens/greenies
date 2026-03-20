@@ -49,27 +49,74 @@
          (2000 milliseconds = 2 seconds). -->
     <script>
         setInterval(function() { fetch("/heartbeat"); }, 2000);
+
+        // ── Nav toggle ───────────────────────────────────────────────────
+        // Collapse or expand the navigation sidebar. The state is saved in
+        // localStorage (a small browser storage area that persists between
+        // page loads) so the nav stays collapsed when you navigate pages.
+
+        // toggleNav is called when the ☰ button is clicked.
+        function toggleNav() {
+            var nav = document.getElementById('nav');
+            var collapsed = nav.classList.toggle('nav-collapsed');
+            // Save the preference so it persists across page loads.
+            localStorage.setItem('navCollapsed', collapsed ? '1' : '0');
+        }
+
+        // On page load, restore the saved state so the nav doesn't flash
+        // open and then collapse. This runs before the page is visible.
+        (function() {
+            if (localStorage.getItem('navCollapsed') === '1') {
+                // Add the class immediately — before the browser paints —
+                // so there's no visible flicker.
+                document.documentElement.classList.add('nav-start-collapsed');
+            }
+        })();
+
+        // Once the page is fully loaded, move the collapsed state from the
+        // <html> element to the <nav> element itself. This lets the CSS
+        // transition animate properly when the user clicks the toggle.
+        document.addEventListener('DOMContentLoaded', function() {
+            if (localStorage.getItem('navCollapsed') === '1') {
+                document.getElementById('nav').classList.add('nav-collapsed');
+                // Remove the flash-prevention class — the nav element's own
+                // class handles it from here on.
+                document.documentElement.classList.remove('nav-start-collapsed');
+            }
+        });
     </script>
 </head>
-<body>
+<body{{if .Lowercase}} class="lowercase"{{end}}>
     <div class="app">
         <!-- ── Navigation sidebar ──────────────────────────────────────── -->
-        <nav class="nav">
-            <div class="nav-title">Greenies</div>
-            <a href="/">Dashboard</a>
-            <a href="/snapshot">Snapshot</a>
-            <a href="/list">Calendar</a>
-            <a href="/crops">Crops</a>
-            <a href="/plan">Plan</a>
-            <a href="/harvest">Harvest</a>
-            <a href="/harvestlog">Harvest Log</a>
-            <a href="/trial">Trials</a>
-            <a href="/adjust">Adjust</a>
-            <a href="/delete">Delete</a>
-            <a href="/clear">Clear All</a>
-            <a href="/sync">Sync</a>
-            <div class="nav-spacer"></div>
-            <a href="#" onclick="fetch('/terminal',{method:'POST'});return false;">Open Terminal</a>
+        <nav class="nav" id="nav">
+            <div class="nav-header">
+                <div class="nav-title">Greenies</div>
+                <!-- Toggle button — collapses/expands the nav links.
+                     The ☰ character is a "hamburger menu" icon that most
+                     people recognise as "click here for navigation". -->
+                <button class="nav-toggle" id="nav-toggle" onclick="toggleNav()"
+                        title="Toggle navigation">☰</button>
+            </div>
+            <!-- nav-links wraps all the clickable links so the toggle
+                 button can show/hide them as a single group. -->
+            <div class="nav-links" id="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/snapshot">Snapshot</a>
+                <a href="/list">Calendar</a>
+                <a href="/crops">Crops</a>
+                <a href="/plan">Plan</a>
+                <a href="/harvest">Harvest</a>
+                <a href="/harvestlog">Harvest Log</a>
+                <a href="/trial">Trials</a>
+                <a href="/adjust">Adjust</a>
+                <a href="/delete">Delete</a>
+                <a href="/clear">Clear All</a>
+                <a href="/settings">Settings</a>
+                <a href="/sync">Sync</a>
+                <div class="nav-spacer"></div>
+                <a href="#" onclick="fetch('/terminal',{method:'POST'});return false;">Open Terminal</a>
+            </div>
         </nav>
 
         <!-- ── Page content ────────────────────────────────────────────── -->

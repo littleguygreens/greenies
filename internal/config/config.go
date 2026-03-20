@@ -30,6 +30,16 @@ type Config struct {
 	//   https://docs.google.com/spreadsheets/d/<THIS PART>/edit
 	// Stored here so the program knows which spreadsheet to talk to.
 	SheetID string `json:"sheet_id"`
+
+	// Lowercase is a cosmetic preference. When true, the GUI renders all
+	// text in lowercase. Some growers prefer this aesthetic — it's purely
+	// visual and has no effect on the data or the CLI.
+	Lowercase bool `json:"lowercase"`
+
+	// WeekStart controls which day the calendar week begins on.
+	// Either "sun" (Sunday, the default) or "mon" (Monday).
+	// Used by the swim-lane calendar and the snapshot week view.
+	WeekStart string `json:"week_start"`
 }
 
 // Path returns the full file path to the config file (~/.greenies/config.json).

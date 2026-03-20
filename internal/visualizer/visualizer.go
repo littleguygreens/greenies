@@ -21,6 +21,108 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Structured snapshot data
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These types hold the same information that writeSnapshot() prints as text,
+// but in a structured form that the GUI can use to render styled HTML cards,
+// progress bars, and colour-coded stages — instead of a plain <pre> block.
+
+// SnapshotData is the top-level container returned by BuildSnapshot().
+// It holds everything the GUI needs to render a full farm snapshot page.
+type SnapshotData struct {
+	// DateLabel is a short human-readable date like "Wed 03-19".
+	DateLabel string
+
+	// Environments is one entry per physical space on the farm (blackout room,
+	// main tent, test tent, etc.) — in the same order as farm.csv.
+	// Inventory rows (grow_trays, bottom_trays) are NOT included here.
+	Environments []EnvSection
+
+	// HarvestToday lists cycles whose harvest date is exactly today.
+	// These are shown as a separate reminder section.
+	HarvestToday []CycleRow
+
+	// Upcoming lists cycles whose sow date is within the next 7 days
+	// but hasn't arrived yet — a heads-up for the grower.
+	Upcoming []CycleRow
+
+	// Inventory holds tray stock information (grow trays, bottom trays).
+	// Empty if farm.csv has no inventory rows.
+	Inventory []InventoryItem
+
+	// Conflicts is a list of human-readable conflict warnings from the
+	// conflict checker (e.g. "Main Tent over capacity on 2026-03-22").
+	Conflicts []string
+
+	// HasData is true if there was at least one environment or cycle to show.
+	// The template uses this to decide whether to show the snapshot or an
+	// "empty" message.
+	HasData bool
+}
+
+// EnvSection holds the data for one physical environment (blackout room or
+// a lit tent). Think of it as one "card" in the GUI snapshot.
+type EnvSection struct {
+	// Name is the human-readable name like "Blackout" or "Main Tent".
+	Name string
+
+	// Type is "blackout" or "lit" — used by the template to pick a colour.
+	Type string
+
+	// SlotsUsed is how many tray slots are currently occupied.
+	SlotsUsed int
+
+	// Capacity is the total number of slots this environment has.
+	Capacity int
+
+	// Cycles lists every batch of trays currently in this environment.
+	// Empty if the environment is currently unused.
+	Cycles []CycleRow
+}
+
+// CycleRow holds the display data for one active crop cycle (one batch of
+// trays). This is the structured version of what printCycleRow() prints.
+type CycleRow struct {
+	// CropName is the human-readable crop name like "Sunnies" (capitalised).
+	CropName string
+
+	// Trays is the number of grow trays in this batch.
+	Trays int
+
+	// DayNum is the current day number in the cycle (Day 1 = sow day).
+	DayNum int
+
+	// Stage is a short label: "sow", "dark", "light", or "harvest".
+	// The template uses this to pick a colour for the cycle card.
+	Stage string
+
+	// StageLabel is the full human-readable label like "Day 4 (dark)".
+	StageLabel string
+
+	// SowDate is formatted like "Mon Jan 02" for display.
+	SowDate string
+
+	// HarvestDate is formatted like "Mon Jan 02" for display.
+	HarvestDate string
+}
+
+// InventoryItem holds the stock information for one type of tray.
+type InventoryItem struct {
+	// Name is "Grow trays" or "Bottom trays".
+	Name string
+
+	// Total is how many the farm owns.
+	Total int
+
+	// InUse is how many are currently out on the farm.
+	InUse int
+
+	// Available is Total - InUse.
+	Available int
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Status constants
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -481,6 +583,240 @@ func SnapshotText(envs []farm.Environment, cycles []farm.Cycle, today time.Time)
 	var sb strings.Builder
 	writeSnapshot(&sb, envs, cycles, today)
 	return sb.String()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Structured snapshot builder (for the GUI)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// buildCycleRow converts a classified cycle into a CycleRow struct for the
+// GUI template. This is the structured equivalent of printCycleRow() — same
+// data, but returned as fields instead of printed as text.
+func buildCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) CycleRow {
+	// Day number = days since sow + 1. Day 1 is the sow date.
+	dayNum := int(today.Sub(sow).Hours()/24) + 1
+
+	// Work out the stage and build the human-readable label.
+	var stage, stageLabel string
+	if today.Equal(harvest) {
+		stage = "harvest"
+		stageLabel = fmt.Sprintf("Day %d (harvest!)", dayNum)
+	} else if today.Before(moveToLight) {
+		stage = "dark"
+		if dayNum == 1 {
+			stage = "sow"
+			stageLabel = "Day 1 (sow)"
+		} else {
+			stageLabel = fmt.Sprintf("Day %d (dark)", dayNum)
+		}
+	} else {
+		stage = "light"
+		stageLabel = fmt.Sprintf("Day %d (light)", dayNum)
+	}
+
+	return CycleRow{
+		CropName:    task.Capitalize(c.CropName),
+		Trays:       c.Trays,
+		DayNum:      dayNum,
+		Stage:       stage,
+		StageLabel:  stageLabel,
+		SowDate:     sow.Format("Mon Jan 02"),
+		HarvestDate: harvest.Format("Mon Jan 02"),
+	}
+}
+
+// BuildSnapshot computes the full farm snapshot and returns it as structured
+// data that the GUI can render with styled HTML cards, progress bars, and
+// colour-coded stage indicators.
+//
+// This does the exact same computation as writeSnapshot() — classifying
+// cycles, resolving "either" environments, counting slots, running the
+// conflict checker — but packs the results into a SnapshotData struct
+// instead of printing text.
+//
+// The CLI continues to use PrintSnapshot() and SnapshotText() for plain
+// text output. This function is for the GUI only.
+func BuildSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time) SnapshotData {
+	// Strip time-of-day so all comparisons are date-only (same as writeSnapshot).
+	t := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+
+	// ── Step 1: classify each cycle ──────────────────────────────────────
+	type classifiedCycle struct {
+		cycle       farm.Cycle
+		status      string
+		sow         time.Time
+		moveToLight time.Time
+		harvest     time.Time
+	}
+
+	var classified []classifiedCycle
+	for _, c := range cycles {
+		sow, _ := time.Parse(task.DateFormat, c.SowDate)
+		mlt, _ := time.Parse(task.DateFormat, c.MoveToLightDate)
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+
+		status := cycleStatus(t, sow, mlt, harv)
+		if status == statusCompleted || status == statusTooFar {
+			continue
+		}
+		classified = append(classified, classifiedCycle{c, status, sow, mlt, harv})
+	}
+
+	// ── Step 2: resolve "either" lit environments ────────────────────────
+	litUsage := map[string]int{}
+	for _, cc := range classified {
+		if cc.status == statusLit && cc.cycle.LitEnvironment != "either" {
+			litUsage[cc.cycle.LitEnvironment] += cc.cycle.Trays
+		}
+	}
+
+	var litEnvs []farm.Environment
+	for _, e := range envs {
+		if e.Type == "lit" {
+			litEnvs = append(litEnvs, e)
+		}
+	}
+
+	resolvedEnv := map[string]string{}
+	for _, cc := range classified {
+		if cc.status != statusLit || cc.cycle.LitEnvironment != "either" {
+			continue
+		}
+		assigned := ""
+		for _, e := range litEnvs {
+			if litUsage[e.Name]+cc.cycle.Trays <= e.Capacity {
+				assigned = e.Name
+				break
+			}
+		}
+		if assigned == "" && len(litEnvs) > 0 {
+			assigned = litEnvs[0].Name
+		}
+		resolvedEnv[cc.cycle.CycleID] = assigned
+		litUsage[assigned] += cc.cycle.Trays
+	}
+
+	effectiveEnv := func(cc classifiedCycle) string {
+		if cc.cycle.LitEnvironment == "either" {
+			return resolvedEnv[cc.cycle.CycleID]
+		}
+		return cc.cycle.LitEnvironment
+	}
+
+	// ── Step 3: build environment sections ───────────────────────────────
+	var sections []EnvSection
+	for _, env := range envs {
+		if env.Type == "inventory" {
+			continue
+		}
+
+		section := EnvSection{
+			Name:     farm.DisplayName(env.Name),
+			Type:     env.Type,
+			Capacity: env.Capacity,
+		}
+
+		// Find cycles belonging to this environment.
+		if env.Type == "blackout" {
+			for _, cc := range classified {
+				if cc.status == statusBlackout {
+					section.Cycles = append(section.Cycles, buildCycleRow(cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest))
+					section.SlotsUsed += cc.cycle.Trays
+				}
+			}
+		} else {
+			for _, cc := range classified {
+				if cc.status == statusLit && effectiveEnv(cc) == env.Name && !t.Equal(cc.harvest) {
+					section.Cycles = append(section.Cycles, buildCycleRow(cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest))
+					section.SlotsUsed += cc.cycle.Trays
+				}
+			}
+		}
+
+		sections = append(sections, section)
+	}
+
+	// ── Step 4: harvest today ────────────────────────────────────────────
+	var harvestToday []CycleRow
+	for _, cc := range classified {
+		if t.Equal(cc.harvest) {
+			harvestToday = append(harvestToday, buildCycleRow(cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest))
+		}
+	}
+
+	// ── Step 5: upcoming (next 7 days) ──────────────────────────────────
+	var upcoming []CycleRow
+	for _, cc := range classified {
+		if cc.status == statusUpcoming {
+			upcoming = append(upcoming, buildCycleRow(cc.cycle, t, cc.sow, cc.moveToLight, cc.harvest))
+		}
+	}
+
+	// ── Step 6: tray inventory ───────────────────────────────────────────
+	var inventory []InventoryItem
+	growTotal, bottomTotal := 0, 0
+	hasInventory := false
+	for _, e := range envs {
+		if e.Type == "inventory" {
+			hasInventory = true
+			switch e.Name {
+			case "grow_trays":
+				growTotal = e.Capacity
+			case "bottom_trays":
+				bottomTotal = e.Capacity
+			}
+		}
+	}
+
+	if hasInventory {
+		growInUse, bottomInUse := 0, 0
+		for _, cc := range classified {
+			isHarvestDay := t.Equal(cc.harvest)
+			if (cc.status == statusBlackout || cc.status == statusLit) && !isHarvestDay {
+				growInUse += cc.cycle.Trays
+			}
+			if cc.status == statusBlackout {
+				bottomInUse += cc.cycle.Trays
+			}
+		}
+		if growTotal > 0 {
+			inventory = append(inventory, InventoryItem{
+				Name:      "Grow trays",
+				Total:     growTotal,
+				InUse:     growInUse,
+				Available: growTotal - growInUse,
+			})
+		}
+		if bottomTotal > 0 {
+			inventory = append(inventory, InventoryItem{
+				Name:      "Bottom trays",
+				Total:     bottomTotal,
+				InUse:     bottomInUse,
+				Available: bottomTotal - bottomInUse,
+			})
+		}
+	}
+
+	// ── Step 7: conflict checker ─────────────────────────────────────────
+	var activeCycles []farm.Cycle
+	for _, c := range cycles {
+		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
+		if !harv.Before(t) {
+			activeCycles = append(activeCycles, c)
+		}
+	}
+	conflicts := checker.Check(envs, activeCycles)
+
+	// ── Assemble and return ──────────────────────────────────────────────
+	return SnapshotData{
+		DateLabel:    today.Format("Mon 01-02"),
+		Environments: sections,
+		HarvestToday: harvestToday,
+		Upcoming:     upcoming,
+		Inventory:    inventory,
+		Conflicts:    conflicts,
+		HasData:      len(classified) > 0 || len(sections) > 0,
+	}
 }
 
 // CalendarTitle returns a compact slot-usage summary for use as a Google

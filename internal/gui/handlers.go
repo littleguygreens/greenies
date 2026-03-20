@@ -49,14 +49,20 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	today := task.Today()
 	todayStr := today.Format(task.DateFormat)
 
-	// Load the farm snapshot — the same function used by "greenies sync"
-	// to build the Google Calendar description.
-	snapshotText := ""
+	// Load the farm snapshot as structured data — the GUI renders this with
+	// styled cards and progress bars instead of a plain <pre> text block.
+	var snap visualizer.SnapshotData
+	var swimWeek monthWeek
+	var dayLabels [7]string
 	envs, err := farm.LoadConfig()
 	if err == nil {
 		cycles, cycleErr := farm.LoadCycles()
 		if cycleErr == nil {
-			snapshotText = visualizer.SnapshotText(envs, cycles, today)
+			snap = visualizer.BuildSnapshot(envs, cycles, today)
+			// Build one week of swim-lane calendar data for this week,
+			// with today's column highlighted.
+			cfg, _ := config.Load()
+			swimWeek, dayLabels = buildSnapshotWeek(today, cycles, cfg.WeekStart)
 		}
 	}
 
@@ -69,12 +75,14 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Send the data to the dashboard template for rendering.
 	renderPage(w, "dashboard.html", map[string]any{
-		"Today":        today.Format("Monday, 2 January 2006"),
-		"TodayDate":    todayStr,
-		"Snapshot":     snapshotText,
-		"Tasks":        todayTasks,
-		"HasTasks":     len(todayTasks) > 0,
-		"HasSnapshot":  snapshotText != "",
+		"Today":     today.Format("Monday, 2 January 2006"),
+		"TodayDate": todayStr,
+		"Snapshot":  snap,
+		"SwimWeek":  swimWeek,
+		"DayLabels": dayLabels,
+		"HasSwim":   len(swimWeek.Rows) > 0,
+		"Tasks":     todayTasks,
+		"HasTasks":  len(todayTasks) > 0,
 	})
 }
 
@@ -103,21 +111,30 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load the farm config and cycle records — same as the CLI does.
-	snapshotText := ""
+	// Load the farm snapshot as structured data for the GUI to render
+	// with styled cards, progress bars, and colour-coded stages.
+	var snap visualizer.SnapshotData
+	var swimWeek monthWeek
+	var dayLabels [7]string
 	envs, err := farm.LoadConfig()
 	if err == nil {
 		cycles, cycleErr := farm.LoadCycles()
 		if cycleErr == nil {
-			snapshotText = visualizer.SnapshotText(envs, cycles, snapshotTime)
+			snap = visualizer.BuildSnapshot(envs, cycles, snapshotTime)
+			// Build one week of swim-lane calendar data centred on the
+			// snapshot date, with that date's column highlighted.
+			cfg, _ := config.Load()
+			swimWeek, dayLabels = buildSnapshotWeek(snapshotTime, cycles, cfg.WeekStart)
 		}
 	}
 
 	renderPage(w, "snapshot.html", map[string]any{
-		"Date":        snapshotTime.Format("Monday, 2 January 2006"),
-		"DateValue":   snapshotTime.Format(task.DateFormat),
-		"Snapshot":    snapshotText,
-		"HasSnapshot": snapshotText != "",
+		"Date":      snapshotTime.Format("Monday, 2 January 2006"),
+		"DateValue": snapshotTime.Format(task.DateFormat),
+		"Snapshot":  snap,
+		"SwimWeek":  swimWeek,
+		"DayLabels": dayLabels,
+		"HasSwim":   len(swimWeek.Rows) > 0,
 	})
 }
 
@@ -184,9 +201,9 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Week start preference ───────────────────────────────────────────
-	// The grower can choose whether weeks start on Sunday or Monday.
-	// ?weekstart=sun or ?weekstart=mon — defaults to Sunday.
-	weekStartDay := r.URL.Query().Get("weekstart")
+	// Read from config.json (set on the Settings page). Defaults to Sunday.
+	cfg, _ := config.Load()
+	weekStartDay := cfg.WeekStart
 	if weekStartDay != "mon" {
 		weekStartDay = "sun"
 	}
@@ -366,7 +383,6 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		"MonthLabel": firstOfMonth.Format("January 2006"),
 		"Weeks":      weeks,
 		"DayLabels":  dayLabels,
-		"WeekStart":  weekStartDay,
 		"Year":       year,
 		"Month":      int(month),
 		"PrevYear":   prevMonth.Year(),
@@ -3689,6 +3705,161 @@ func handleGoogleSignIn(w http.ResponseWriter, r *http.Request) {
 // Month calendar with swim lanes
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Snapshot swim-lane helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+// buildSnapshotWeek builds one week of swim-lane calendar data containing the
+// given date. The highlighted date's column gets IsHighlighted = true so the
+// template can visually mark it.
+//
+// This is used by the snapshot and dashboard pages to show a mini calendar
+// view at the top — the same swim-lane style as the full month calendar,
+// but just one week.
+//
+// The weekStartPref parameter controls which day the week starts on:
+// "mon" for Monday–Sunday, anything else (including "") for Sunday–Saturday.
+// This matches the setting from the Settings page.
+func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref string) (monthWeek, [7]string) {
+	// Pick the day labels and first-weekday based on the preference.
+	var dayLabels [7]string
+	var firstWeekday time.Weekday
+	if weekStartPref == "mon" {
+		dayLabels = [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+		firstWeekday = time.Monday
+	} else {
+		dayLabels = [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+		firstWeekday = time.Sunday
+	}
+
+	// Find the start of the calendar week containing the focus date.
+	weekStart := focusDate
+	for weekStart.Weekday() != firstWeekday {
+		weekStart = weekStart.AddDate(0, 0, -1)
+	}
+
+	// Load the crop library so we can check soak settings.
+	cropMap := map[string]crop.Crop{}
+	if cropsSource, err := crop.GetSource(); err == nil {
+		if allCrops, err := cropsSource.LoadCrops(); err == nil {
+			for _, cr := range allCrops {
+				cropMap[cr.Name] = cr
+			}
+		}
+	}
+
+	// Sort cycles oldest-first (same order as the full calendar).
+	sort.Slice(cycles, func(i, j int) bool {
+		if cycles[i].SowDate != cycles[j].SowDate {
+			return cycles[i].SowDate < cycles[j].SowDate
+		}
+		return cycles[i].CropName < cycles[j].CropName
+	})
+
+	// Pre-compute each cycle's daily stage map — same logic as handleCalendar.
+	type cycleInfo struct {
+		CropName string
+		Trays    int
+		DayStage map[string]string
+	}
+
+	var allCycleInfo []cycleInfo
+	for _, c := range cycles {
+		sowDate, err1 := time.Parse(task.DateFormat, c.SowDate)
+		harvestDate, err2 := time.Parse(task.DateFormat, c.HarvestDate)
+		mtlDate, err3 := time.Parse(task.DateFormat, c.MoveToLightDate)
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+
+		stages := map[string]string{}
+		cr, hasCrop := cropMap[c.CropName]
+
+		// Soak day(s).
+		if hasCrop && cr.OvernightSoak {
+			soakDay := sowDate.AddDate(0, 0, -1)
+			stages[soakDay.Format(task.DateFormat)] = "soak"
+		} else if hasCrop && cr.SoakHours > 0 {
+			stages[sowDate.Format(task.DateFormat)] = "soak"
+		}
+
+		// Walk sow → harvest assigning stages.
+		for d := sowDate; !d.After(harvestDate); d = d.AddDate(0, 0, 1) {
+			ds := d.Format(task.DateFormat)
+			if _, already := stages[ds]; already {
+				continue
+			}
+			if d.Equal(harvestDate) {
+				stages[ds] = "harvest"
+			} else if d.Before(mtlDate) {
+				stages[ds] = "dark"
+			} else {
+				stages[ds] = "light"
+			}
+		}
+
+		allCycleInfo = append(allCycleInfo, cycleInfo{
+			CropName: c.CropName,
+			Trays:    c.Trays,
+			DayStage: stages,
+		})
+	}
+
+	// Build the single week.
+	week := monthWeek{}
+
+	// Fill in the 7 column headers.
+	for i := 0; i < 7; i++ {
+		d := weekStart.AddDate(0, 0, i)
+		week.Headers[i] = monthDayHeader{
+			DayNum:        d.Day(),
+			InMonth:       true, // always "in month" for snapshot view
+			IsHighlighted: d.Equal(focusDate),
+		}
+	}
+
+	// Build a swim-lane row for each cycle that has activity this week.
+	for _, ci := range allCycleInfo {
+		row := monthCycleRow{
+			CropName: ci.CropName,
+			Trays:    ci.Trays,
+		}
+		hasActivity := false
+		prevStage := ""
+
+		for i := 0; i < 7; i++ {
+			d := weekStart.AddDate(0, 0, i)
+			ds := d.Format(task.DateFormat)
+			stage := ci.DayStage[ds]
+
+			label := ""
+			if stage != "" && stage != prevStage {
+				label = fmt.Sprintf("%s %dx", ci.CropName, ci.Trays)
+			}
+
+			row.Cells[i] = monthCell{
+				DayNum:        d.Day(),
+				Stage:         stage,
+				Label:         label,
+				Trays:         ci.Trays,
+				InMonth:       true,
+				IsHighlighted: d.Equal(focusDate),
+			}
+
+			prevStage = stage
+			if stage != "" {
+				hasActivity = true
+			}
+		}
+
+		if hasActivity {
+			week.Rows = append(week.Rows, row)
+		}
+	}
+
+	return week, dayLabels
+}
+
 // monthCell holds the display info for one day-cell in the month calendar grid.
 // Each cell belongs to a specific cycle on a specific day. The template uses
 // the Stage field to pick the background colour.
@@ -3714,6 +3885,10 @@ type monthCell struct {
 	// False for padding cells at the start/end of the grid. The template
 	// dims or hides these cells so they don't distract.
 	InMonth bool
+
+	// IsHighlighted is true if this cell is the "focus" day — used on the
+	// snapshot page to highlight which day the grower is looking at.
+	IsHighlighted bool
 }
 
 // monthCycleRow is one swim-lane row in a week section. It represents one
@@ -3738,6 +3913,10 @@ type monthDayHeader struct {
 
 	// InMonth is true if this day falls within the displayed month.
 	InMonth bool
+
+	// IsHighlighted is true if this column is the "focus" day — used
+	// on the snapshot page to highlight the snapshot date's column.
+	IsHighlighted bool
 }
 
 // monthWeek groups all the cycle rows that have activity in one calendar week.
@@ -3749,5 +3928,176 @@ type monthWeek struct {
 	// Rows holds one swim-lane row per cycle that has activity this week.
 	// Sorted oldest cycle first (by sow date).
 	Rows []monthCycleRow
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings
+// ─────────────────────────────────────────────────────────────────────────────
+
+// handleSettingsPage renders the farm settings page at "/settings".
+//
+// It loads the farm layout from farm.csv and splits it into two groups:
+//   - Spaces — environments with type "blackout" or "lit" (physical areas)
+//   - Inventory — environments with type "inventory" (countable items)
+//
+// The template shows editable forms for both groups so the grower can
+// change capacities, add new spaces, or remove items — all without
+// touching a CSV file by hand.
+func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	envs, err := farm.LoadConfig()
+	if err != nil {
+		renderPage(w, "settings.html", map[string]any{
+			"Spaces":    []farm.Environment{},
+			"Inventory": []farm.Environment{},
+		})
+		return
+	}
+
+	// Load preferences from config.json.
+	cfg, _ := config.Load()
+
+	// Split environments into spaces (blackout/lit) and inventory items.
+	var spaces, inventory []farm.Environment
+	for _, env := range envs {
+		if env.Type == "inventory" {
+			inventory = append(inventory, env)
+		} else {
+			spaces = append(spaces, env)
+		}
+	}
+
+	renderPage(w, "settings.html", map[string]any{
+		"Spaces":    spaces,
+		"Inventory": inventory,
+		"Lowercase": cfg.Lowercase,
+		"WeekStart": cfg.WeekStart,
+		"Saved":     r.URL.Query().Get("saved") == "1",
+	})
+}
+
+// handleSettingsUpdate processes the settings form submission (POST /settings).
+//
+// It reads the form data — space names, types, and capacities plus inventory
+// names and counts — rebuilds the full environment list, and saves it to
+// farm.csv. Then it pushes the updated layout to Google Sheets (if enabled).
+//
+// Blank-name rows are silently skipped — this is how "remove" works: the
+// grower deletes the name or clicks the ✕ button, and the row disappears
+// on the next save.
+func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		renderPage(w, "settings.html", map[string]any{
+			"Spaces":    []farm.Environment{},
+			"Inventory": []farm.Environment{},
+			"Error":     "Could not read form data.",
+		})
+		return
+	}
+
+	// Read the space rows from the form. Each row has three parallel
+	// arrays: space_name[], space_type[], space_capacity[].
+	spaceNames := r.Form["space_name"]
+	spaceTypes := r.Form["space_type"]
+	spaceCaps := r.Form["space_capacity"]
+
+	var envs []farm.Environment
+
+	for i := range spaceNames {
+		name := strings.TrimSpace(spaceNames[i])
+		if name == "" {
+			continue // skip blank rows (removed by the grower)
+		}
+
+		// Default to "lit" if type is missing somehow.
+		envType := "lit"
+		if i < len(spaceTypes) {
+			envType = strings.TrimSpace(spaceTypes[i])
+		}
+
+		capacity := 0
+		if i < len(spaceCaps) {
+			capacity, _ = strconv.Atoi(strings.TrimSpace(spaceCaps[i]))
+		}
+
+		envs = append(envs, farm.Environment{
+			Name:     name,
+			Type:     envType,
+			Capacity: capacity,
+		})
+	}
+
+	// Read the inventory rows: inv_name[] and inv_capacity[].
+	invNames := r.Form["inv_name"]
+	invCaps := r.Form["inv_capacity"]
+
+	for i := range invNames {
+		name := strings.TrimSpace(invNames[i])
+		if name == "" {
+			continue
+		}
+
+		capacity := 0
+		if i < len(invCaps) {
+			capacity, _ = strconv.Atoi(strings.TrimSpace(invCaps[i]))
+		}
+
+		envs = append(envs, farm.Environment{
+			Name:     name,
+			Type:     "inventory",
+			Capacity: capacity,
+		})
+	}
+
+	// Save preferences to config.json.
+	cfg, _ := config.Load()
+	cfg.Lowercase = r.FormValue("lowercase") == "1"
+	ws := r.FormValue("week_start")
+	if ws == "mon" {
+		cfg.WeekStart = "mon"
+	} else {
+		cfg.WeekStart = "sun"
+	}
+	_ = config.Save(cfg)
+
+	// Save to farm.csv.
+	path, err := farm.FarmConfigPath()
+	if err != nil {
+		renderPage(w, "settings.html", map[string]any{
+			"Spaces":    []farm.Environment{},
+			"Inventory": []farm.Environment{},
+			"Error":     "Could not find farm config path: " + err.Error(),
+		})
+		return
+	}
+
+	if err := farm.WriteConfig(path, envs); err != nil {
+		renderPage(w, "settings.html", map[string]any{
+			"Spaces":    []farm.Environment{},
+			"Inventory": []farm.Environment{},
+			"Error":     "Could not save settings: " + err.Error(),
+		})
+		return
+	}
+
+	// Push the updated layout to Google Sheets (fire-and-forget).
+	go gcal.SyncLocalToSheet(context.Background())
+
+	// Re-split the saved data and re-render with a success banner.
+	var spaces, inventory []farm.Environment
+	for _, env := range envs {
+		if env.Type == "inventory" {
+			inventory = append(inventory, env)
+		} else {
+			spaces = append(spaces, env)
+		}
+	}
+
+	renderPage(w, "settings.html", map[string]any{
+		"Spaces":    spaces,
+		"Inventory": inventory,
+		"Lowercase": cfg.Lowercase,
+		"WeekStart": cfg.WeekStart,
+		"Saved":     true,
+	})
 }
 

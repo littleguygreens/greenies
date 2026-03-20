@@ -21,18 +21,11 @@
 {{define "list.html"}}
 <h1>{{.MonthLabel}}</h1>
 
-<!-- Navigation: month prev/next + week-start toggle -->
+<!-- Navigation: month prev/next -->
 <div class="toggle-bar">
-    <a href="/list?year={{.PrevYear}}&month={{.PrevMonth}}&weekstart={{.WeekStart}}" class="btn btn-secondary">← Previous</a>
-    <a href="/list?weekstart={{.WeekStart}}" class="btn btn-active">This Month</a>
-    <a href="/list?year={{.NextYear}}&month={{.NextMonth}}&weekstart={{.WeekStart}}" class="btn btn-secondary">Next →</a>
-</div>
-
-<!-- Week-start toggle: Sunday or Monday -->
-<div class="toggle-bar" style="margin-top:0.25rem;">
-    <span style="color:#999999; font-size:0.85rem; margin-right:0.5rem;">Week starts:</span>
-    <a href="/list?year={{.Year}}&month={{.Month}}&weekstart=sun" class="btn {{if eq .WeekStart "sun"}}btn-active{{else}}btn-secondary{{end}}">Sun</a>
-    <a href="/list?year={{.Year}}&month={{.Month}}&weekstart=mon" class="btn {{if eq .WeekStart "mon"}}btn-active{{else}}btn-secondary{{end}}">Mon</a>
+    <a href="/list?year={{.PrevYear}}&month={{.PrevMonth}}" class="btn btn-secondary">← Previous</a>
+    <a href="/list" class="btn btn-active">This Month</a>
+    <a href="/list?year={{.NextYear}}&month={{.NextMonth}}" class="btn btn-secondary">Next →</a>
 </div>
 
 <!-- ── Swim-lane month grid ─────────────────────────────────────────── -->

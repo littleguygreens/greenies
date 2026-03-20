@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"  // for sync.Mutex — a lock that prevents two things from reading/writing at the same time
 	"time"
+
+	"github.com/littleguygreens/greenies/internal/config"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +69,23 @@ var funcMap = template.FuncMap{
 	// "join" turns a list of strings into one string with a separator.
 	// Example in a template: {{join .Tasks ", "}}
 	"join": strings.Join,
+
+	// Math helpers for templates. Go templates can't do arithmetic, but we
+	// need it to calculate progress bar widths (e.g. "48 out of 64 = 75%").
+	//
+	// "itof" converts an integer to a floating-point number so we can do
+	// division without losing the decimal part (12 / 64 = 0.1875, not 0).
+	"itof": func(i int) float64 { return float64(i) },
+	// "mulf" multiplies two floating-point numbers (e.g. 0.75 * 100 = 75).
+	"mulf": func(a, b float64) float64 { return a * b },
+	// "divf" divides two floating-point numbers (e.g. 48.0 / 64.0 = 0.75).
+	// Returns 0 if the divisor is zero to avoid a crash.
+	"divf": func(a, b float64) float64 {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	},
 }
 
 // loadTemplates parses every HTML file in the templates/ directory and stores
@@ -108,8 +127,14 @@ func renderPage(w http.ResponseWriter, name string, data any) {
 	// Step 2: Pass the rendered content into the layout template.
 	// template.HTML tells Go "this is safe HTML, don't escape it" — without
 	// this, the HTML tags would show as literal text on the page.
+	//
+	// We also load the user's config to pass cosmetic preferences (like
+	// the lowercase toggle) to the layout so they apply on every page.
+	cfg, _ := config.Load()
+
 	err = templates.ExecuteTemplate(w, "layout.html", map[string]any{
-		"Content": template.HTML(buf.String()),
+		"Content":   template.HTML(buf.String()),
+		"Lowercase": cfg.Lowercase,
 	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Layout error: %v", err), http.StatusInternalServerError)
@@ -276,6 +301,9 @@ func StartServer(port int) error {
 	mux.HandleFunc("GET /adjust", handleAdjustPage)
 	mux.HandleFunc("POST /adjust/preview", handleAdjustPreview)
 	mux.HandleFunc("POST /adjust/confirm", handleAdjustConfirm)
+
+	mux.HandleFunc("GET /settings", handleSettingsPage)
+	mux.HandleFunc("POST /settings", handleSettingsUpdate)
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync", handleSyncAction)

@@ -42,6 +42,17 @@ body {
     min-height: 100vh;
 }
 
+/* ── Lowercase mode ───────────────────────────────────────────────────────
+   When enabled in Settings, all text in the GUI is rendered lowercase.
+   Purely cosmetic — the actual data is unchanged. */
+body.lowercase,
+body.lowercase button,
+body.lowercase input,
+body.lowercase select,
+body.lowercase a {
+    text-transform: lowercase;
+}
+
 /* ── Layout ────────────────────────────────────────────────────────────────
    The page is split into a nav bar on the left and content on the right.
    On small screens (phones), the nav moves to the top. */
@@ -51,7 +62,8 @@ body {
 }
 
 /* ── Navigation ────────────────────────────────────────────────────────────
-   The sidebar with links to every page. Always visible. */
+   The sidebar with links to every page. Can be collapsed with the ☰ button.
+   The collapse state is saved in localStorage so it persists between pages. */
 .nav {
     width: 200px;
     background: #242424;
@@ -60,15 +72,53 @@ body {
     border-right: 1px solid #333333;
     display: flex;
     flex-direction: column;
+    /* Smooth slide when collapsing/expanding. "transition" animates the
+       width change over 0.2 seconds so it doesn't just snap. */
+    transition: width 0.2s ease, padding 0.2s ease;
+}
+
+/* The header row holds the "Greenies" title and the ☰ toggle button
+   side by side, so the toggle is always visible even when collapsed. */
+.nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
 }
 
 .nav-title {
     color: #8bc34a;
     font-size: 1.2rem;
     font-weight: 700;
-    margin-bottom: 1.5rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid #333333;
+    flex-grow: 1;
+}
+
+/* The ☰ hamburger button. Styled to match the dark theme — no background,
+   just a subtle icon that lights up green on hover. */
+.nav-toggle {
+    background: transparent;
+    border: none;
+    color: #999;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+}
+
+.nav-toggle:hover {
+    color: #8bc34a;
+    background: #333;
+}
+
+/* The links wrapper — shown by default, hidden when collapsed. */
+.nav-links {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
 }
 
 .nav a {
@@ -93,6 +143,59 @@ body {
    between the last nav link and the terminal link at the bottom. */
 .nav-spacer {
     flex-grow: 1;
+}
+
+/* ── Collapsed nav state ──────────────────────────────────────────────────
+   When the nav-collapsed class is added (by clicking the ☰ button), the
+   sidebar shrinks to just the toggle button width and the links disappear. */
+.nav-collapsed {
+    width: 48px;
+    padding: 0.75rem 0.5rem;
+    overflow: hidden;
+}
+
+/* Hide the title text when collapsed — just show the ☰ button. */
+.nav-collapsed .nav-title {
+    display: none;
+}
+
+/* Centre the ☰ button when the title is gone. */
+.nav-collapsed .nav-header {
+    justify-content: center;
+}
+
+.nav-collapsed .nav-toggle {
+    margin-left: 0;
+}
+
+/* Hide all the links when collapsed. */
+.nav-collapsed .nav-links {
+    display: none;
+}
+
+/* Prevent a flash of expanded nav on page load when the user previously
+   collapsed it. This class is added to <html> by inline JS before the
+   browser paints, so the nav starts collapsed with no visible flicker. */
+.nav-start-collapsed .nav {
+    width: 48px;
+    padding: 0.75rem 0.5rem;
+    overflow: hidden;
+}
+
+.nav-start-collapsed .nav .nav-title {
+    display: none;
+}
+
+.nav-start-collapsed .nav .nav-header {
+    justify-content: center;
+}
+
+.nav-start-collapsed .nav .nav-toggle {
+    margin-left: 0;
+}
+
+.nav-start-collapsed .nav .nav-links {
+    display: none;
 }
 
 /* ── Main content area ─────────────────────────────────────────────────── */
@@ -887,21 +990,41 @@ input:focus, select:focus, textarea:focus {
 
     /* Nav becomes a horizontal bar at the top of the screen. */
     .nav {
-        width: 100%;
+        width: 100% !important;
         border-right: none;
         border-bottom: 1px solid #333333;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.25rem;
-        padding: 0.5rem 0.75rem;
+        padding: 0.5rem 0.75rem !important;
+        transition: none;
     }
+
+    .nav-header {
+        width: 100%;
+    }
+
     .nav-title {
         margin-bottom: 0;
         border-bottom: none;
         padding-bottom: 0;
         margin-right: 1rem;
+        display: block !important;
     }
+
+    /* On mobile, the links flow horizontally and wrap to new lines. */
+    .nav-links {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+    /* When collapsed on mobile, hide the links. */
+    .nav-collapsed .nav-links,
+    .nav-start-collapsed .nav .nav-links {
+        display: none;
+    }
+
     /* On mobile the nav is a horizontal strip — the spacer would push
        the terminal link off-screen, so hide it. */
     .nav-spacer {
@@ -1017,6 +1140,17 @@ input:focus, select:focus, textarea:focus {
     .toggle-bar .btn {
         font-size: 0.8rem;
         padding: 0.4rem 0.75rem;
+    }
+
+    /* Snapshot cards: tighter padding on mobile. */
+    .snap-env-card {
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* Cycle dates: stack vertically on narrow screens. */
+    .snap-cycle-dates {
+        flex-direction: column;
+        gap: 0;
     }
 }
 
@@ -1165,7 +1299,269 @@ input:focus, select:focus, textarea:focus {
     opacity: 0.3;
 }
 
+/* Highlighted column — marks the "focus" day on the snapshot page.
+   The header gets a green accent; cells get a subtle bright border
+   so the column stands out even when the cell is already coloured. */
+.mcal-day-header.mcal-highlight {
+    background: #333333;
+    color: #8bc34a;
+    border-bottom: 2px solid #8bc34a;
+}
+
+.mcal-day-header.mcal-highlight .mcal-date-num {
+    color: #8bc34a;
+}
+
+.mcal-cell.mcal-highlight {
+    box-shadow: inset 0 0 0 2px #8bc34a;
+}
+
 /* Swim lane rows — subtle bottom border between cycles */
 .mcal-row td {
     border-bottom: 1px solid #2a2a2a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Structured Snapshot — cards, progress bars, and colour-coded stages
+   ═══════════════════════════════════════════════════════════════════════════
+   These styles render the farm snapshot as styled HTML cards instead of a
+   plain <pre> text block. Each physical environment gets a card, each crop
+   cycle gets a mini-card inside it, and progress bars show slot usage. */
+
+/* ── Environment cards ──────────────────────────────────────────────────── */
+
+/* Each environment (Blackout, Main Tent, etc.) is a card with a header,
+   an optional progress bar, and a list of cycle cards inside. */
+.snap-env-card {
+    background: #242424;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+
+/* The header row: environment name on the left, slot count on the right. */
+.snap-env-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.snap-env-name {
+    color: #8bc34a;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.snap-env-slots {
+    color: #999999;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.snap-env-empty {
+    color: #666666;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* ── Progress bars ──────────────────────────────────────────────────────── */
+/* A thin bar that fills from left to right to show how full a space is.
+   The track is the grey background; the fill is the coloured portion. */
+
+.snap-progress-track {
+    background: #333333;
+    border-radius: 3px;
+    height: 6px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.snap-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+/* Blackout progress bar — dark green to match the blackout stage. */
+.snap-progress-blackout {
+    background: #558b2f;
+}
+
+/* Lit environment progress bar — bright leaf green. */
+.snap-progress-lit {
+    background: #8bc34a;
+}
+
+/* Inventory progress bar — same leaf green as the rest of the palette. */
+.snap-progress-inventory {
+    background: #8bc34a;
+}
+
+/* ── Cycle cards ────────────────────────────────────────────────────────── */
+/* Each batch of trays inside an environment is a mini-card with the crop
+   name, tray count, current stage, and key dates. */
+
+.snap-cycle-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+/* Header row: crop name + tray count on the left, stage badge on right. */
+.snap-cycle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.snap-cycle-name {
+    color: #f0f0f0;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Date line below the header — smaller, muted text. */
+.snap-cycle-dates {
+    color: #999999;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+    display: flex;
+    gap: 1.25rem;
+}
+
+/* ── Stage badges ───────────────────────────────────────────────────────── */
+/* Small coloured labels that show what phase a cycle is in. Each stage
+   gets its own colour to match the swim-lane calendar view. */
+
+.snap-stage {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Sow day — blue (matches mcal-soak on the calendar) */
+.snap-stage-sow {
+    background: #1565c0;
+    color: #bbdefb;
+}
+
+/* Dark / blackout — deep green */
+.snap-stage-dark {
+    background: #558b2f;
+    color: #c5e1a5;
+}
+
+/* Light — bright green */
+.snap-stage-light {
+    background: #689f38;
+    color: #f0f0f0;
+}
+
+/* Harvest day — golden yellow */
+.snap-stage-harvest {
+    background: #f9a825;
+    color: #1a1a1a;
+}
+
+/* ── Section headings ───────────────────────────────────────────────────── */
+/* Used for "Due for harvest today", "Upcoming", and "Tray inventory". */
+
+.snap-section {
+    margin-top: 1.25rem;
+}
+
+.snap-section-title {
+    color: #999999;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #333333;
+}
+
+/* Harvest title gets a golden accent to grab attention. */
+.snap-harvest-title {
+    color: #f9a825;
+}
+
+/* Harvest card gets a subtle golden left border as extra emphasis. */
+.snap-harvest-card {
+    border-left: 3px solid #f9a825;
+}
+
+/* ── Inventory cards ────────────────────────────────────────────────────── */
+
+.snap-inventory-card {
+    background: #242424;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.snap-inventory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
+}
+
+.snap-inventory-name {
+    color: #f0f0f0;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.snap-inventory-count {
+    color: #999999;
+    font-size: 0.85rem;
+}
+
+.snap-inventory-available {
+    color: #8bc34a;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+}
+
+/* ── Conflict warnings ──────────────────────────────────────────────────── */
+/* Red-bordered box at the bottom of the snapshot, same style as the plan
+   page conflict warnings but red instead of yellow since these are active. */
+
+.snap-conflicts {
+    background: #242424;
+    border: 1px solid #e74c3c;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 1.25rem;
+    color: #e74c3c;
+}
+
+.snap-conflicts strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.snap-conflicts ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0.25rem 0;
+}
+
+.snap-conflicts li {
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+}
+
+.snap-conflicts p {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #999999;
 }

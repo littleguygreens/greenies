@@ -1,0 +1,239 @@
+{{/*
+    settings.html — farm settings page.
+
+    Lets the grower view and edit their farm layout and inventory without
+    having to open farm.csv in a spreadsheet. This is also the first thing
+    a new user sees if they click "Settings" — they can set up their farm
+    right here in the GUI.
+
+    The page is split into two sections:
+      1. Spaces — the physical environments where trays live (blackout room,
+         lit tents). Each space has a name, a type (blackout or lit), and a
+         slot capacity.
+      2. Inventory — countable items the farm owns (grow trays, bottom trays).
+         Each item has a name and a total count.
+
+    Data passed from the handler (handleSettingsPage in handlers.go):
+      .Spaces    — environments with type "blackout" or "lit"
+      .Inventory — environments with type "inventory"
+      .Lowercase — true if the lowercase cosmetic preference is on
+      .Saved     — true if the page was just saved (show success message)
+*/}}
+
+{{define "settings.html"}}
+<h1>Farm Settings</h1>
+
+<div id="settings-area">
+    {{if .Saved}}
+        <div class="settings-success" style="background: rgba(139, 195, 74, 0.15); border: 1px solid #8bc34a; border-radius: 8px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;">
+            Settings saved.
+        </div>
+    {{end}}
+
+    <form method="POST" action="/settings">
+
+        <!-- ── Spaces section ──────────────────────────────────────────── -->
+        <h2 style="margin-top: 0;">Spaces</h2>
+        <p class="task-notes">
+            The physical areas where trays live. Each space has a type — "blackout"
+            for the dark germination room, or "lit" for tents with lights — and a
+            capacity (how many tray slots it has).
+        </p>
+
+        <table class="data-table" id="spaces-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Capacity</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $i, $s := .Spaces}}
+                <tr>
+                    <td>
+                        <input type="text" name="space_name" value="{{$s.Name}}"
+                               class="settings-input" placeholder="e.g. main_tent">
+                    </td>
+                    <td>
+                        <select name="space_type" class="settings-input">
+                            <option value="blackout" {{if eq $s.Type "blackout"}}selected{{end}}>Blackout</option>
+                            <option value="lit" {{if eq $s.Type "lit"}}selected{{end}}>Lit</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="number" name="space_capacity" value="{{$s.Capacity}}"
+                               class="settings-input" min="0" style="width: 5rem;">
+                    </td>
+                    <td>
+                        <button type="button" class="btn-remove" onclick="this.closest('tr').remove()"
+                                title="Remove this space">✕</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <button type="button" class="btn btn-secondary" onclick="addSpaceRow()"
+                style="margin-top: 0.5rem;">
+            + Add space
+        </button>
+
+        <!-- ── Inventory section ───────────────────────────────────────── -->
+        <h2>Inventory</h2>
+        <p class="task-notes">
+            Countable items the farm owns. The snapshot uses these numbers to
+            show how many are available vs in use.
+        </p>
+
+        <table class="data-table" id="inventory-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Total owned</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $i, $inv := .Inventory}}
+                <tr>
+                    <td>
+                        <input type="text" name="inv_name" value="{{$inv.Name}}"
+                               class="settings-input" placeholder="e.g. grow_trays">
+                    </td>
+                    <td>
+                        <input type="number" name="inv_capacity" value="{{$inv.Capacity}}"
+                               class="settings-input" min="0" style="width: 5rem;">
+                    </td>
+                    <td>
+                        <button type="button" class="btn-remove" onclick="this.closest('tr').remove()"
+                                title="Remove this item">✕</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <button type="button" class="btn btn-secondary" onclick="addInventoryRow()"
+                style="margin-top: 0.5rem;">
+            + Add item
+        </button>
+
+        <!-- ── Preferences ─────────────────────────────────────────────── -->
+        <h2>Preferences</h2>
+
+        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+            <input type="checkbox" name="lowercase" value="1"
+                   {{if .Lowercase}}checked{{end}}
+                   style="width: 1.2rem; height: 1.2rem; accent-color: #8bc34a;">
+            <span>Lowercase mode</span>
+        </label>
+        <p class="task-notes" style="margin-top: 0.25rem;">
+            Renders all text in the GUI in lowercase. Purely cosmetic —
+            your data is not changed.
+        </p>
+
+        <div class="form-group" style="margin-top: 1rem;">
+            <label>Week starts on</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="week_start" value="sun"
+                           {{if ne .WeekStart "mon"}}checked{{end}}>
+                    Sunday
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="week_start" value="mon"
+                           {{if eq .WeekStart "mon"}}checked{{end}}>
+                    Monday
+                </label>
+            </div>
+            <p class="task-notes" style="margin-top: 0.25rem;">
+                Controls which day starts the week on the calendar and snapshot views.
+            </p>
+        </div>
+
+        <!-- ── Save button ─────────────────────────────────────────────── -->
+        <div style="margin-top: 2rem;">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+
+    </form>
+</div>
+
+<!-- ── JavaScript for adding rows ──────────────────────────────────────── -->
+<script>
+// addSpaceRow creates a new empty row in the Spaces table.
+// The row has the same input fields as the template-generated rows above.
+function addSpaceRow() {
+    var tbody = document.querySelector('#spaces-table tbody');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+        '<td><input type="text" name="space_name" value="" class="settings-input" placeholder="e.g. side_tent"></td>' +
+        '<td><select name="space_type" class="settings-input"><option value="blackout">Blackout</option><option value="lit" selected>Lit</option></select></td>' +
+        '<td><input type="number" name="space_capacity" value="0" class="settings-input" min="0" style="width: 5rem;"></td>' +
+        '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this space">✕</button></td>';
+    tbody.appendChild(tr);
+}
+
+// addInventoryRow creates a new empty row in the Inventory table.
+function addInventoryRow() {
+    var tbody = document.querySelector('#inventory-table tbody');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+        '<td><input type="text" name="inv_name" value="" class="settings-input" placeholder="e.g. containers"></td>' +
+        '<td><input type="number" name="inv_capacity" value="0" class="settings-input" min="0" style="width: 5rem;"></td>' +
+        '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this item">✕</button></td>';
+    tbody.appendChild(tr);
+}
+</script>
+
+<!-- ── Inline styles for settings inputs ──────────────────────────────── -->
+<style>
+/* Input fields inside the settings tables — dark theme to match the app. */
+.settings-input {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-input:focus {
+    border-color: #8bc34a;
+    outline: none;
+}
+
+/* Small ✕ button to remove a row. */
+.btn-remove {
+    background: transparent;
+    border: 1px solid #555;
+    color: #e07070;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.9rem;
+}
+
+.btn-remove:hover {
+    background: rgba(224, 112, 112, 0.15);
+    border-color: #e07070;
+}
+
+/* Secondary button style for "Add" buttons. */
+.btn-secondary {
+    background: transparent;
+    border: 1px solid #8bc34a;
+    color: #8bc34a;
+}
+
+.btn-secondary:hover {
+    background: rgba(139, 195, 74, 0.1);
+}
+</style>
+{{end}}
+

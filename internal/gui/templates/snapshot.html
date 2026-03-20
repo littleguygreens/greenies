@@ -1,27 +1,28 @@
 {{/*
-    snapshot.html — the farm snapshot page.
+    snapshot.html — the farm snapshot page (structured GUI version).
 
-    Shows the same text snapshot as "greenies snapshot" in the terminal,
-    wrapped in a <pre> block to preserve the spacing and dashes.
+    Instead of dumping the plain-text snapshot into a <pre> block, this
+    template renders the structured data from BuildSnapshot() as styled
+    HTML cards with progress bars and colour-coded cycle stages.
 
-    A date picker at the top lets the grower look at past or future
-    snapshots without typing a date — just click the calendar icon,
-    pick a date, and the page reloads with that day's farm view.
+    At the top, a one-week swim-lane calendar shows all crop cycles for
+    the week containing the snapshot date, with that date's column
+    highlighted so the grower can see exactly where they are.
 
     Data passed from the handler (handleSnapshot in handlers.go):
-      .Date        — human-readable date like "Sunday, 15 March 2026"
-      .DateValue   — machine-readable date like "2026-03-15" (for the picker)
-      .Snapshot    — the farm snapshot as plain text
-      .HasSnapshot — true if the snapshot loaded successfully
+      .Date      — human-readable date like "Sunday, 15 March 2026"
+      .DateValue — machine-readable date like "2026-03-15" (for the picker)
+      .Snapshot  — a visualizer.SnapshotData struct with all the farm data
+      .SwimWeek  — a monthWeek struct with one week of swim-lane data
+      .DayLabels — [7]string of day abbreviations ("Mon", "Tue", etc.)
+      .HasSwim   — true if there are any active cycles this week
 */}}
 
 {{define "snapshot.html"}}
 <h1>Farm Snapshot</h1>
 
 <!-- Date picker form. When the grower picks a date and clicks "Go",
-     the browser reloads the page with ?date=YYYY-MM-DD in the URL.
-     The handler reads that parameter and renders the snapshot for
-     that specific day. -->
+     the browser reloads the page with ?date=YYYY-MM-DD in the URL. -->
 <form method="GET" action="/snapshot" class="form-row">
     <div class="form-group">
         <label for="date">Date</label>
@@ -32,8 +33,165 @@
 
 <h2>{{.Date}}</h2>
 
-{{if .HasSnapshot}}
-    <pre>{{.Snapshot}}</pre>
+<!-- ── Swim-lane week calendar ────────────────────────────────────────── -->
+<!-- A one-week mini calendar showing all crop cycles as coloured bars.
+     The snapshot date's column is highlighted so the grower can see
+     where today sits in the context of the week's activity. -->
+{{if .HasSwim}}
+<div class="mcal-legend">
+    <span class="legend-item">
+        <span class="legend-swatch" style="background:#1565c0;"></span> Soak
+    </span>
+    <span class="legend-item">
+        <span class="legend-swatch" style="background:#558b2f;"></span> Blackout
+    </span>
+    <span class="legend-item">
+        <span class="legend-swatch" style="background:#8bc34a;"></span> Light
+    </span>
+    <span class="legend-item">
+        <span class="legend-swatch" style="background:#f9a825;"></span> Harvest
+    </span>
+</div>
+
+{{$dayLabels := .DayLabels}}
+<div class="mcal-week">
+    <table class="mcal-table">
+        <thead>
+            <tr>
+                <th class="mcal-crop-header"></th>
+                {{range $i, $h := .SwimWeek.Headers}}
+                    <th class="mcal-day-header{{if $h.IsHighlighted}} mcal-highlight{{end}}">
+                        {{index $dayLabels $i}}
+                        <span class="mcal-date-num">{{$h.DayNum}}</span>
+                    </th>
+                {{end}}
+            </tr>
+        </thead>
+        <tbody>
+            {{range .SwimWeek.Rows}}
+            <tr class="mcal-row">
+                <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
+                {{range .Cells}}
+                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}">
+                        {{if .Label}}<span class="mcal-label">{{.Label}}</span>{{end}}
+                    </td>
+                {{end}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+{{if .Snapshot.HasData}}
+
+    <!-- ── Environment cards ─────────────────────────────────────────── -->
+    <!-- One card per physical space on the farm (blackout room, each lit
+         tent). Each card shows a progress bar for slot usage and lists
+         every batch of trays currently in that space. -->
+    {{range .Snapshot.Environments}}
+    <div class="snap-env-card">
+        <div class="snap-env-header">
+            <span class="snap-env-name">{{.Name}}</span>
+            {{if .Cycles}}
+                <span class="snap-env-slots">{{.SlotsUsed}} / {{.Capacity}} slots</span>
+            {{else}}
+                <span class="snap-env-empty">empty</span>
+            {{end}}
+        </div>
+
+        {{if .Cycles}}
+            <!-- Progress bar showing how full this environment is.
+                 The width is set as an inline style because it depends on
+                 the actual slot numbers, which change every day. -->
+            <div class="snap-progress-track">
+                <div class="snap-progress-fill snap-progress-{{.Type}}" style="width: {{if .Capacity}}{{printf "%.0f" (divf (mulf (itof .SlotsUsed) 100.0) (itof .Capacity))}}%{{else}}0%{{end}}"></div>
+            </div>
+
+            <!-- List of cycle cards inside this environment -->
+            {{range .Cycles}}
+            <div class="snap-cycle-card">
+                <div class="snap-cycle-header">
+                    <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                    <span class="snap-stage snap-stage-{{.Stage}}">{{.StageLabel}}</span>
+                </div>
+                <div class="snap-cycle-dates">
+                    <span>sown {{.SowDate}}</span>
+                    <span>harvest {{.HarvestDate}}</span>
+                </div>
+            </div>
+            {{end}}
+        {{end}}
+    </div>
+    {{end}}
+
+    <!-- ── Harvest today ─────────────────────────────────────────────── -->
+    {{if .Snapshot.HarvestToday}}
+    <div class="snap-section">
+        <h3 class="snap-section-title snap-harvest-title">Due for harvest today</h3>
+        {{range .Snapshot.HarvestToday}}
+        <div class="snap-cycle-card snap-harvest-card">
+            <div class="snap-cycle-header">
+                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                <span class="snap-stage snap-stage-harvest">{{.StageLabel}}</span>
+            </div>
+            <div class="snap-cycle-dates">
+                <span>harvest {{.HarvestDate}}</span>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    <!-- ── Upcoming ──────────────────────────────────────────────────── -->
+    {{if .Snapshot.Upcoming}}
+    <div class="snap-section">
+        <h3 class="snap-section-title">Upcoming (next 7 days)</h3>
+        {{range .Snapshot.Upcoming}}
+        <div class="snap-cycle-card">
+            <div class="snap-cycle-header">
+                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+            </div>
+            <div class="snap-cycle-dates">
+                <span>sow {{.SowDate}}</span>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    <!-- ── Tray inventory ────────────────────────────────────────────── -->
+    {{if .Snapshot.Inventory}}
+    <div class="snap-section">
+        <h3 class="snap-section-title">Tray inventory</h3>
+        {{range .Snapshot.Inventory}}
+        <div class="snap-inventory-card">
+            <div class="snap-inventory-header">
+                <span class="snap-inventory-name">{{.Name}}</span>
+                <span class="snap-inventory-count">{{.InUse}} / {{.Total}}</span>
+            </div>
+            <div class="snap-progress-track">
+                <div class="snap-progress-fill snap-progress-inventory" style="width: {{if .Total}}{{printf "%.0f" (divf (mulf (itof .InUse) 100.0) (itof .Total))}}%{{else}}0%{{end}}"></div>
+            </div>
+            <div class="snap-inventory-available">{{.Available}} available</div>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    <!-- ── Conflicts ─────────────────────────────────────────────────── -->
+    {{if .Snapshot.Conflicts}}
+    <div class="snap-conflicts">
+        <strong>Conflicts detected</strong>
+        <ul>
+            {{range .Snapshot.Conflicts}}
+            <li>{{.}}</li>
+            {{end}}
+        </ul>
+        <p>Use the Plan page to adjust tray counts or dates.</p>
+    </div>
+    {{end}}
+
 {{else}}
     <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
 {{end}}
