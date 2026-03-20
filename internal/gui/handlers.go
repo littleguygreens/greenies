@@ -568,6 +568,10 @@ func handleCropNewAction(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
 		seedPurchaseWeight = v
 	}
+	// If the grower chose "kg" in the dropdown, convert to grams for storage.
+	if r.FormValue("seed_weight_unit") == "kg" {
+		seedPurchaseWeight *= 1000
+	}
 
 	unitWeight := 100 // default: 100 g per sellable unit
 	if v, err := strconv.Atoi(r.FormValue("unit_weight")); err == nil && v > 0 {
@@ -814,6 +818,10 @@ func handleCropEditAction(w http.ResponseWriter, r *http.Request) {
 	seedPurchaseWeight := 0
 	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
 		seedPurchaseWeight = v
+	}
+	// If the grower chose "kg" in the dropdown, convert to grams for storage.
+	if r.FormValue("seed_weight_unit") == "kg" {
+		seedPurchaseWeight *= 1000
 	}
 
 	unitWeight := 100 // default: 100 g per sellable unit
@@ -4447,12 +4455,19 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		renderPage(w, "settings.html", map[string]any{
 			"Spaces":    []farm.Environment{},
 			"Inventory": []farm.Environment{},
+			"Supplies":  []supply.Supply{},
 		})
 		return
 	}
 
 	// Load preferences from config.json.
 	cfg, _ := config.Load()
+
+	// Load farm-wide supplies from supplies.csv.
+	supplies, _ := supply.Load()
+	if supplies == nil {
+		supplies = []supply.Supply{}
+	}
 
 	// Split environments into spaces (blackout/lit) and inventory items.
 	var spaces, inventory []farm.Environment
@@ -4467,6 +4482,7 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	renderPage(w, "settings.html", map[string]any{
 		"Spaces":    spaces,
 		"Inventory": inventory,
+		"Supplies":  supplies,
 		"Lowercase": cfg.Lowercase,
 		"WeekStart": cfg.WeekStart,
 		"Theme":     cfg.Theme,
@@ -4547,6 +4563,46 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Read the supply rows: supply_name[], supply_cost[], supply_units[].
+	supplyNames := r.Form["supply_name"]
+	supplyCosts := r.Form["supply_cost"]
+	supplyUnits := r.Form["supply_units"]
+
+	var supplies []supply.Supply
+	for i := range supplyNames {
+		name := strings.TrimSpace(supplyNames[i])
+		if name == "" {
+			continue // skip blank rows
+		}
+
+		costVal := 0.0
+		if i < len(supplyCosts) {
+			costVal, _ = strconv.ParseFloat(strings.TrimSpace(supplyCosts[i]), 64)
+		}
+
+		unitsVal := 0.0
+		if i < len(supplyUnits) {
+			unitsVal, _ = strconv.ParseFloat(strings.TrimSpace(supplyUnits[i]), 64)
+		}
+
+		supplies = append(supplies, supply.Supply{
+			Name:         name,
+			CostPerCase:  costVal,
+			UnitsPerCase: unitsVal,
+		})
+	}
+
+	// Save supplies to supplies.csv.
+	if err := supply.Save(supplies); err != nil {
+		renderPage(w, "settings.html", map[string]any{
+			"Spaces":    []farm.Environment{},
+			"Inventory": []farm.Environment{},
+			"Supplies":  []supply.Supply{},
+			"Error":     "Could not save supplies: " + err.Error(),
+		})
+		return
+	}
+
 	// Save preferences to config.json.
 	cfg, _ := config.Load()
 	cfg.Lowercase = r.FormValue("lowercase") == "1"
@@ -4600,8 +4656,10 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	renderPage(w, "settings.html", map[string]any{
 		"Spaces":    spaces,
 		"Inventory": inventory,
+		"Supplies":  supplies,
 		"Lowercase": cfg.Lowercase,
 		"WeekStart": cfg.WeekStart,
+		"Theme":     cfg.Theme,
 		"Saved":     true,
 	})
 }

@@ -86,6 +86,22 @@ var funcMap = template.FuncMap{
 		}
 		return a / b
 	},
+	// "div" divides two integers (e.g. 2000 / 1000 = 2).
+	// Returns 0 if the divisor is zero.
+	"div": func(a, b int) int {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	},
+	// "mod" returns the remainder of dividing two integers (e.g. 2000 % 1000 = 0).
+	// Useful for checking if a number is evenly divisible.
+	"mod": func(a, b int) int {
+		if b == 0 {
+			return 0
+		}
+		return a % b
+	},
 }
 
 // loadTemplates parses every HTML file in the templates/ directory and stores

@@ -1,22 +1,23 @@
 {{/*
     settings.html — farm settings page.
 
-    Lets the grower view and edit their farm layout and inventory without
-    having to open farm.csv in a spreadsheet. This is also the first thing
-    a new user sees if they click "Settings" — they can set up their farm
-    right here in the GUI.
+    Lets the grower view and edit their farm layout, inventory, and supply
+    costs without having to open CSV files in a spreadsheet.
 
-    The page is split into two sections:
-      1. Spaces — the physical environments where trays live (blackout room,
-         lit tents). Each space has a name, a type (blackout or lit), and a
-         slot capacity.
-      2. Inventory — countable items the farm owns (grow trays, bottom trays).
-         Each item has a name and a total count.
+    The page is split into four sections:
+      1. Spaces — physical environments where trays live (blackout/lit)
+      2. Inventory — countable items the farm owns (grow trays, bottom trays)
+      3. Supplies — farm-wide consumables bought in bulk (dirt, containers,
+         labels). Used to calculate per-tray costs on the crop library page.
+      4. Preferences — cosmetic settings (lowercase, week start, theme)
 
     Data passed from the handler (handleSettingsPage in handlers.go):
       .Spaces    — environments with type "blackout" or "lit"
       .Inventory — environments with type "inventory"
+      .Supplies  — supply.Supply slice from supplies.csv
       .Lowercase — true if the lowercase cosmetic preference is on
+      .WeekStart — "sun" or "mon"
+      .Theme     — "dark" or "light"
       .Saved     — true if the page was just saved (show success message)
 */}}
 
@@ -120,6 +121,52 @@
             + Add item
         </button>
 
+        <!-- ── Supplies section ────────────────────────────────────────── -->
+        <h2>Supplies</h2>
+        <p class="task-notes">
+            Farm-wide consumables you buy in bulk — dirt, containers, labels, etc.
+            Enter what you pay per case/bag and how many units come in it. The
+            program uses these to calculate per-tray costs on the crop library page.
+        </p>
+
+        <table class="data-table" id="supplies-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Cost per case/bag ($)</th>
+                    <th>Units per case/bag</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $i, $s := .Supplies}}
+                <tr>
+                    <td>
+                        <input type="text" name="supply_name" value="{{$s.Name}}"
+                               class="settings-input" placeholder="e.g. dirt">
+                    </td>
+                    <td>
+                        <input type="number" name="supply_cost" value="{{printf "%.2f" $s.CostPerCase}}"
+                               class="settings-input" min="0" step="0.01" style="width: 7rem;">
+                    </td>
+                    <td>
+                        <input type="number" name="supply_units" value="{{printf "%.0f" $s.UnitsPerCase}}"
+                               class="settings-input" min="0" step="1" style="width: 7rem;">
+                    </td>
+                    <td>
+                        <button type="button" class="btn-remove" onclick="this.closest('tr').remove()"
+                                title="Remove this supply">✕</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <button type="button" class="btn btn-secondary" onclick="addSupplyRow()"
+                style="margin-top: 0.5rem;">
+            + Add supply
+        </button>
+
         <!-- ── Preferences ─────────────────────────────────────────────── -->
         <h2>Preferences</h2>
 
@@ -203,6 +250,18 @@ function addInventoryRow() {
         '<td><input type="text" name="inv_name" value="" class="settings-input" placeholder="e.g. containers"></td>' +
         '<td><input type="number" name="inv_capacity" value="0" class="settings-input" min="0" style="width: 5rem;"></td>' +
         '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this item">✕</button></td>';
+    tbody.appendChild(tr);
+}
+
+// addSupplyRow creates a new empty row in the Supplies table.
+function addSupplyRow() {
+    var tbody = document.querySelector('#supplies-table tbody');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+        '<td><input type="text" name="supply_name" value="" class="settings-input" placeholder="e.g. labels"></td>' +
+        '<td><input type="number" name="supply_cost" value="0" class="settings-input" min="0" step="0.01" style="width: 7rem;"></td>' +
+        '<td><input type="number" name="supply_units" value="0" class="settings-input" min="0" step="1" style="width: 7rem;"></td>' +
+        '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this supply">✕</button></td>';
     tbody.appendChild(tr);
 }
 </script>

@@ -161,7 +161,14 @@ func runCrops() {
 	fmt.Println()
 	fmt.Println("Costing (optional — press Enter to skip):")
 	seedCost := askFloat("  Seed bag cost in $ (e.g. 15.00) [0]: ", 0)
-	seedPurchaseWeight := askInt("  Seed bag weight in grams (e.g. 500) [0]: ", 0)
+	seedPurchaseWeight := askInt("  Seed bag weight (e.g. 500) [0]: ", 0)
+	// Ask what unit the weight is in — convert kg to grams for storage.
+	if seedPurchaseWeight > 0 {
+		unit := strings.ToLower(ask("  Weight unit — (g)rams or (k)g [g]: "))
+		if unit == "k" || unit == "kg" {
+			seedPurchaseWeight *= 1000
+		}
+	}
 	unitWeight := askInt("  Grams per sellable unit (e.g. 100) [100]: ", 100)
 	unitSellPrice := askFloat("  Sell price per unit in $ (e.g. 4.50) [0]: ", 0)
 	fmt.Println()
@@ -395,7 +402,20 @@ func editCropCLI(
 	fmt.Println()
 	fmt.Println("Costing (press Enter to keep current values):")
 	picked.SeedCost = askFloat(fmt.Sprintf("  Seed bag cost in $ [%.2f]: ", picked.SeedCost), picked.SeedCost)
-	picked.SeedPurchaseWeight = askInt(fmt.Sprintf("  Seed bag weight in grams [%d]: ", picked.SeedPurchaseWeight), picked.SeedPurchaseWeight)
+
+	// Show seed bag weight in a friendly unit (kg if ≥1000 and even).
+	currentWeightDisplay := fmt.Sprintf("%dg", picked.SeedPurchaseWeight)
+	if picked.SeedPurchaseWeight >= 1000 && picked.SeedPurchaseWeight%1000 == 0 {
+		currentWeightDisplay = fmt.Sprintf("%dkg", picked.SeedPurchaseWeight/1000)
+	}
+	picked.SeedPurchaseWeight = askInt(fmt.Sprintf("  Seed bag weight [%s]: ", currentWeightDisplay), picked.SeedPurchaseWeight)
+	// Ask what unit — only if the grower typed a new value (not just Enter).
+	// We detect this by checking if the value changed from before.
+	unit := strings.ToLower(ask("  Weight unit — (g)rams or (k)g [g]: "))
+	if unit == "k" || unit == "kg" {
+		picked.SeedPurchaseWeight *= 1000
+	}
+
 	picked.UnitWeight = askInt(fmt.Sprintf("  Grams per sellable unit [%d]: ", picked.UnitWeight), picked.UnitWeight)
 	picked.UnitSellPrice = askFloat(fmt.Sprintf("  Sell price per unit in $ [%.2f]: ", picked.UnitSellPrice), picked.UnitSellPrice)
 	fmt.Println()
