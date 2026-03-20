@@ -135,6 +135,22 @@ var harvestsHeaders = []interface{}{
 	"notes",
 }
 
+// sheetRange formats a tab name (and optional cell suffix like "!A1") into a
+// range string that the Google Sheets API can parse. Tab names that contain
+// spaces must be wrapped in single quotes — e.g. 'Schedule Tasks' instead of
+// Schedule Tasks — otherwise the API returns a "Unable to parse range" error.
+// Tab names without spaces are returned unchanged.
+func sheetRange(tab string, suffix ...string) string {
+	name := tab
+	if strings.Contains(tab, " ") {
+		name = "'" + tab + "'"
+	}
+	if len(suffix) > 0 {
+		return name + suffix[0]
+	}
+	return name
+}
+
 // ─── SheetsClient ───────────────────────────────────────────────────────────
 
 // SheetsClient wraps the Google Sheets API service with helper methods
@@ -174,6 +190,41 @@ func NewSheetsClient(ctx context.Context, sheetID string) (*SheetsClient, error)
 		service: svc,
 		sheetID: sheetID,
 	}, nil
+}
+
+// ensureTab checks that a tab with the given name exists on the spreadsheet.
+// If it doesn't, it creates the tab automatically. This handles the case where
+// the user's sheet was created before newer tabs (like Schedule Tasks) were
+// added — instead of crashing with "Unable to parse range", the program
+// quietly adds the missing tab and carries on.
+func (sc *SheetsClient) ensureTab(tabName string) error {
+	// Fetch the spreadsheet metadata to see which tabs already exist.
+	spreadsheet, err := sc.service.Spreadsheets.Get(sc.sheetID).Do()
+	if err != nil {
+		return fmt.Errorf("could not read spreadsheet metadata: %w", err)
+	}
+
+	// Check if the tab already exists — if so, nothing to do.
+	for _, s := range spreadsheet.Sheets {
+		if s.Properties.Title == tabName {
+			return nil
+		}
+	}
+
+	// Tab doesn't exist — create it.
+	_, err = sc.service.Spreadsheets.BatchUpdate(sc.sheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: []*sheets.Request{
+			{AddSheet: &sheets.AddSheetRequest{
+				Properties: &sheets.SheetProperties{Title: tabName},
+			}},
+		},
+	}).Do()
+	if err != nil {
+		return fmt.Errorf("could not create tab %q: %w", tabName, err)
+	}
+
+	time.Sleep(apiPause)
+	return nil
 }
 
 // ─── Sheet creation ─────────────────────────────────────────────────────────
@@ -747,6 +798,12 @@ func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
 // a chronological list. "No tasks today" placeholder tasks are excluded —
 // they exist only for slot tracking and would clutter the view.
 func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
+	// Make sure the tab exists — it may be missing if the user's sheet
+	// was created before this tab was added.
+	if err := sc.ensureTab(scheduleTab); err != nil {
+		return err
+	}
+
 	// Build the rows: header + one row per task.
 	rows := [][]interface{}{scheduleHeaders}
 
@@ -767,7 +824,7 @@ func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
 
 	// Clear the tab and rewrite from scratch.
 	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, scheduleTab, &sheets.ClearValuesRequest{},
+		sc.sheetID, sheetRange(scheduleTab), &sheets.ClearValuesRequest{},
 	).Do()
 	if err != nil {
 		return fmt.Errorf("could not clear Schedule tab: %w", err)
@@ -776,7 +833,7 @@ func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
 	time.Sleep(apiPause)
 
 	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, scheduleTab+"!A1", &sheets.ValueRange{Values: rows},
+		sc.sheetID, sheetRange(scheduleTab, "!A1"), &sheets.ValueRange{Values: rows},
 	).ValueInputOption("RAW").Do()
 	if err != nil {
 		return fmt.Errorf("could not write Schedule tab: %w", err)
@@ -791,6 +848,12 @@ func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
 // — the program never reads cycle records back from the Sheet. The tab exists
 // so the grower can see all their planned batches on any device.
 func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
+	// Make sure the tab exists — it may be missing if the user's sheet
+	// was created before this tab was added.
+	if err := sc.ensureTab(batchesTab); err != nil {
+		return err
+	}
+
 	// Build the rows: header + one row per cycle.
 	rows := [][]interface{}{batchesHeaders}
 
@@ -815,7 +878,7 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 
 	// Clear the tab and rewrite from scratch.
 	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, batchesTab, &sheets.ClearValuesRequest{},
+		sc.sheetID, sheetRange(batchesTab), &sheets.ClearValuesRequest{},
 	).Do()
 	if err != nil {
 		return fmt.Errorf("could not clear Batches tab: %w", err)
@@ -824,7 +887,7 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 	time.Sleep(apiPause)
 
 	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, batchesTab+"!A1", &sheets.ValueRange{Values: rows},
+		sc.sheetID, sheetRange(batchesTab, "!A1"), &sheets.ValueRange{Values: rows},
 	).ValueInputOption("RAW").Do()
 	if err != nil {
 		return fmt.Errorf("could not write Batches tab: %w", err)
@@ -839,6 +902,12 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 // the program never reads harvest records back from the Sheet. The tab
 // exists so the grower can review their harvest history on any device.
 func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
+	// Make sure the tab exists — it may be missing if the user's sheet
+	// was created before this tab was added.
+	if err := sc.ensureTab(harvestsTab); err != nil {
+		return err
+	}
+
 	// Build the rows: header + one row per harvest record.
 	rows := [][]interface{}{harvestsHeaders}
 
@@ -862,7 +931,7 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 
 	// Clear the tab and rewrite from scratch.
 	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, harvestsTab, &sheets.ClearValuesRequest{},
+		sc.sheetID, sheetRange(harvestsTab), &sheets.ClearValuesRequest{},
 	).Do()
 	if err != nil {
 		return fmt.Errorf("could not clear Harvests tab: %w", err)
@@ -871,7 +940,7 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 	time.Sleep(apiPause)
 
 	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, harvestsTab+"!A1", &sheets.ValueRange{Values: rows},
+		sc.sheetID, sheetRange(harvestsTab, "!A1"), &sheets.ValueRange{Values: rows},
 	).ValueInputOption("RAW").Do()
 	if err != nil {
 		return fmt.Errorf("could not write Harvests tab: %w", err)

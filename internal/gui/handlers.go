@@ -314,6 +314,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 				DayNum:        d.Day(),
 				InMonth:       d.Month() == month,
 				IsHighlighted: d.Equal(now),
+				DateStr:       d.Format(task.DateFormat),
 			}
 		}
 
@@ -344,6 +345,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 					Trays:         ci.Trays,
 					InMonth:       d.Month() == month,
 					IsHighlighted: d.Equal(now),
+					DateStr:       ds,
 				}
 
 				prevStage = stage
@@ -3817,6 +3819,7 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 			DayNum:        d.Day(),
 			InMonth:       true, // always "in month" for snapshot view
 			IsHighlighted: d.Equal(focusDate),
+			DateStr:       d.Format(task.DateFormat),
 		}
 	}
 
@@ -3846,6 +3849,7 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 				Trays:         ci.Trays,
 				InMonth:       true,
 				IsHighlighted: d.Equal(focusDate),
+				DateStr:       ds,
 			}
 
 			prevStage = stage
@@ -3891,6 +3895,11 @@ type monthCell struct {
 	// IsHighlighted is true if this cell is the "focus" day — used on the
 	// snapshot page to highlight which day the grower is looking at.
 	IsHighlighted bool
+
+	// DateStr is the full date in YYYY-MM-DD format (e.g. "2026-03-19").
+	// Used to build a clickable link so tapping a cell takes the grower
+	// to the snapshot for that day.
+	DateStr string
 }
 
 // monthCycleRow is one swim-lane row in a week section. It represents one
@@ -3919,6 +3928,10 @@ type monthDayHeader struct {
 	// IsHighlighted is true if this column is the "focus" day — used
 	// on the snapshot page to highlight the snapshot date's column.
 	IsHighlighted bool
+
+	// DateStr is the full date in YYYY-MM-DD format (e.g. "2026-03-19").
+	// Used to build a clickable link from the header to the snapshot page.
+	DateStr string
 }
 
 // monthWeek groups all the cycle rows that have activity in one calendar week.

@@ -1253,11 +1253,17 @@ input:focus, select:focus, textarea:focus {
     background: var(--surface);
     color: var(--text);
     text-align: center;
-    padding: 0.25rem 0.15rem;
+    padding: 0;
     border: 1px solid var(--border);
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.3;
+}
+
+/* Padding lives on the link inside the header so the entire clickable
+   area extends to the edges of the cell */
+.mcal-day-header .mcal-link {
+    padding: 0.25rem 0.15rem;
 }
 
 /* The date number (e.g. "12") shown below the day name */
@@ -1278,6 +1284,28 @@ input:focus, select:focus, textarea:focus {
     height: 28px;
     position: relative;
     overflow: visible;
+    padding: 0;
+}
+
+/* Clickable link that fills an entire header or cell so the grower can
+   tap anywhere on a day to jump to that day's snapshot. The link covers
+   the full area of the cell and inherits the text colour so it looks
+   like a normal cell until hovered. */
+.mcal-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Column hover highlight — when the grower hovers anywhere in a day's
+   column, JavaScript adds this class to every cell sharing that date.
+   The semi-transparent overlay works on both coloured stage cells and
+   plain empty cells, in both dark and light themes. */
+.mcal-col-hover {
+    box-shadow: inset 0 0 0 100px rgba(139, 195, 74, 0.15);
 }
 
 /* Label text on the first cell of each stage run — floats on top of
@@ -1293,7 +1321,6 @@ input:focus, select:focus, textarea:focus {
     font-weight: 600;
     color: #f0f0f0;
     text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-    pointer-events: none;
     z-index: 1;
 }
 

@@ -83,6 +83,38 @@
                 // class handles it from here on.
                 document.documentElement.classList.remove('nav-start-collapsed');
             }
+
+            // ── Column hover highlight ─────────────────────────────────
+            // When the grower hovers over any cell in the swim-lane calendar,
+            // highlight the entire column (all cells sharing the same date).
+            // This makes it easy to see which day you're about to click.
+            //
+            // How it works: every <th> and <td> in the swim-lane tables has
+            // a data-date attribute (e.g. data-date="2026-03-19"). When the
+            // mouse enters a cell, we find ALL elements with the same date
+            // and add the "mcal-col-hover" CSS class. When the mouse leaves,
+            // we remove it. Using one listener on the whole page ("event
+            // delegation") is efficient — no per-cell listeners needed.
+            var hovered = [];
+            document.addEventListener('mouseover', function(e) {
+                // Walk up from the hovered element to find the nearest
+                // cell with a data-date attribute (could be the <td>/<th>
+                // itself, or a child like the <a> or <span> inside it).
+                var cell = e.target.closest('[data-date]');
+                if (!cell) return;
+                var date = cell.getAttribute('data-date');
+                if (!date) return;
+                // Find all cells sharing this date on the page.
+                hovered = document.querySelectorAll('[data-date="' + date + '"]');
+                hovered.forEach(function(el) { el.classList.add('mcal-col-hover'); });
+            });
+            document.addEventListener('mouseout', function(e) {
+                var cell = e.target.closest('[data-date]');
+                if (!cell) return;
+                // Remove the highlight from all previously hovered cells.
+                hovered.forEach(function(el) { el.classList.remove('mcal-col-hover'); });
+                hovered = [];
+            });
         });
     </script>
 </head>

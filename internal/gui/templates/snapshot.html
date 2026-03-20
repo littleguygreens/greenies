@@ -60,9 +60,11 @@
             <tr>
                 <th class="mcal-crop-header"></th>
                 {{range $i, $h := .SwimWeek.Headers}}
-                    <th class="mcal-day-header{{if $h.IsHighlighted}} mcal-highlight{{end}}">
-                        {{index $dayLabels $i}}
-                        <span class="mcal-date-num">{{$h.DayNum}}</span>
+                    <th class="mcal-day-header{{if $h.IsHighlighted}} mcal-highlight{{end}}" data-date="{{$h.DateStr}}">
+                        <a href="/snapshot?date={{$h.DateStr}}" class="mcal-link">
+                            {{index $dayLabels $i}}
+                            <span class="mcal-date-num">{{$h.DayNum}}</span>
+                        </a>
                     </th>
                 {{end}}
             </tr>
@@ -72,8 +74,10 @@
             <tr class="mcal-row">
                 <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
                 {{range .Cells}}
-                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}">
-                        {{if .Label}}<span class="mcal-label">{{.Label}}</span>{{end}}
+                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}" data-date="{{.DateStr}}">
+                        <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
+                            {{if .Label}}<span class="mcal-label">{{.Label}}</span>{{else}}&nbsp;{{end}}
+                        </a>
                     </td>
                 {{end}}
             </tr>
