@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/checker"
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/scheduler"
@@ -163,8 +164,10 @@ func runPlan() {
 			os.Exit(1)
 		}
 
-		yieldStr := ask(fmt.Sprintf("Desired yield in grams? (%s yields ~%dg per tray): ",
-			task.Capitalize(found.Name), found.YieldGrams))
+		pcfg, _ := config.Load()
+		pwl := pcfg.WeightLabel()
+		yieldStr := ask(fmt.Sprintf("Desired yield in %s? (%s yields ~%d%s per tray): ",
+			pwl, task.Capitalize(found.Name), found.YieldGrams, pwl))
 		desiredYield, err := strconv.Atoi(yieldStr)
 		if err != nil || desiredYield < 1 {
 			fmt.Println("Please enter a whole number greater than zero (e.g. 500).")
@@ -181,8 +184,8 @@ func runPlan() {
 		if trays != 1 {
 			trayWord = "trays"
 		}
-		fmt.Printf("→ %d %s needed to yield ~%dg (target: %dg)\n",
-			trays, trayWord, trays*found.YieldGrams, desiredYield)
+		fmt.Printf("→ %d %s needed to yield ~%d%s (target: %d%s)\n",
+			trays, trayWord, trays*found.YieldGrams, pwl, desiredYield, pwl)
 
 	default:
 		// "t", "tray", blank, or anything unrecognised — default to tray count.
@@ -537,6 +540,10 @@ func runBatchPlan(
 	litEnvs []farm.Environment,
 	crops []crop.Crop,
 ) {
+	// Load unit label for yield prompts.
+	pcfg2, _ := config.Load()
+	pwl := pcfg2.WeightLabel()
+
 	// --- Step 1: harvest date ---
 	// Every crop in the batch counts backward from this single date.
 	harvestDate, err := parseDate(ask("Harvest date for this batch (MM-DD or YYYY-MM-DD): "))
@@ -623,8 +630,8 @@ func runBatchPlan(
 				fmt.Println("Add a yield_grams value to crops.csv, or plan by tray count instead.")
 				continue
 			}
-			yieldStr := ask(fmt.Sprintf("Desired yield in grams? (%s yields ~%dg per tray): ",
-				task.Capitalize(found.Name), found.YieldGrams))
+			yieldStr := ask(fmt.Sprintf("Desired yield in %s? (%s yields ~%d%s per tray): ",
+				pwl, task.Capitalize(found.Name), found.YieldGrams, pwl))
 			desiredYield, convErr := strconv.Atoi(yieldStr)
 			if convErr != nil || desiredYield < 1 {
 				fmt.Println("Please enter a whole number greater than zero (e.g. 500).")
@@ -635,8 +642,8 @@ func runBatchPlan(
 			if trays != 1 {
 				trayWord = "trays"
 			}
-			fmt.Printf("→ %d %s needed to yield ~%dg (target: %dg)\n",
-				trays, trayWord, trays*found.YieldGrams, desiredYield)
+			fmt.Printf("→ %d %s needed to yield ~%d%s (target: %d%s)\n",
+				trays, trayWord, trays*found.YieldGrams, pwl, desiredYield, pwl)
 		default:
 			traysStr := ask("How many trays? ")
 			n, convErr := strconv.Atoi(traysStr)

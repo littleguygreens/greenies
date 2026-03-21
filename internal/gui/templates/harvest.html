@@ -37,7 +37,7 @@
                     <div class="task-notes">
                         Harvest date: {{.HarvestDate}}
                         {{if .HasExpected}}
-                            — expected: {{.ExpectedGrams}}g
+                            — expected: {{.ExpectedGrams}}{{weightUnit}}
                         {{end}}
                     </div>
                 </div>
@@ -67,7 +67,7 @@
                                value="{{.Trays}}" min="0" step="1">
                     </div>
                     <div class="form-group">
-                        <label>Actual grams</label>
+                        <label>Actual {{weightUnit}}</label>
                         <input type="number" name="actual_grams"
                                {{if .HasExpected}}value="{{.ExpectedGrams}}"{{end}}
                                min="0" step="1"
@@ -109,7 +109,7 @@
 */}}
 {{define "harvest_success.html"}}
 <div class="harvest-logged">
-    Logged: {{.CropName}} — {{.ActualTrays}} trays, {{.ActualGrams}}g.
+    Logged: {{.CropName}} — {{.ActualTrays}} trays, {{.ActualGrams}}{{weightUnit}}.
     <a href="/harvestlog">View harvest log</a>
 </div>
 {{end}}

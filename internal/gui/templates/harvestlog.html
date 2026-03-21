@@ -38,9 +38,9 @@
                     <td>{{.ActualTrays}}/{{.ExpectedTrays}}</td>
                     <!-- Show actual grams, with expected in parentheses if known -->
                     <td>
-                        {{.ActualGrams}}g
+                        {{.ActualGrams}}{{weightUnit}}
                         {{if .HasExpected}}
-                            <span class="expected-note">/ {{.ExpectedGrams}}g expected</span>
+                            <span class="expected-note">/ {{.ExpectedGrams}}{{weightUnit}} expected</span>
                         {{end}}
                     </td>
                     <td>{{.Notes}}</td>

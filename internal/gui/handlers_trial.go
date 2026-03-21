@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -896,16 +897,17 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 		soak = fmt.Sprintf("%.0f hours", tr.SoakHours)
 	}
 
-	// Format seed grams.
+	// Format seed weight and dirt volume using the grower's unit system.
+	cfg, _ := config.Load()
 	seedGrams := "—"
 	if tr.SeedGrams > 0 {
-		seedGrams = fmt.Sprintf("%.0fg", tr.SeedGrams)
+		seedGrams = fmt.Sprintf("%.0f%s", tr.SeedGrams, cfg.WeightLabel())
 	}
 
 	// Format dirt.
 	dirtLitres := "—"
 	if tr.DirtLitres > 0 {
-		dirtLitres = fmt.Sprintf("%.1fL", tr.DirtLitres)
+		dirtLitres = fmt.Sprintf("%.1f%s", tr.DirtLitres, cfg.VolumeLabel())
 	}
 
 	// Format milestone days.
@@ -921,7 +923,7 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 	// Format yield.
 	actualYield := "not recorded"
 	if tr.ActualYieldGrams > 0 {
-		actualYield = fmt.Sprintf("%dg", tr.ActualYieldGrams)
+		actualYield = fmt.Sprintf("%d%s", tr.ActualYieldGrams, cfg.WeightLabel())
 	}
 
 	// Confirmed days.

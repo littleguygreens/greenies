@@ -586,7 +586,7 @@ func WriteCrops(path string, crops []Crop) error {
 				row[col["soak_hours"]] = strconv.Itoa(c.SoakHours)
 				row[col["seed_grams"]] = strconv.Itoa(c.SeedGrams)
 
-				row[col["dirt_litres"]] = formatFloat(c.DirtLitres)
+				row[col["dirt_litres"]] = FormatFloat(c.DirtLitres)
 
 				row[col["dark_days"]] = strconv.Itoa(c.DarkDays)
 				row[col["light_days"]] = strconv.Itoa(c.LightDays)
@@ -594,10 +594,10 @@ func WriteCrops(path string, crops []Crop) error {
 
 				// Business / costing fields.
 				// Format money as clean decimals: "15" not "15.00", "4.5" stays "4.5".
-				row[col["seed_cost"]] = formatFloat(c.SeedCost)
+				row[col["seed_cost"]] = FormatFloat(c.SeedCost)
 				row[col["seed_purchase_weight"]] = strconv.Itoa(c.SeedPurchaseWeight)
 				row[col["unit_weight"]] = strconv.Itoa(c.UnitWeight)
-				row[col["unit_sell_price"]] = formatFloat(c.UnitSellPrice)
+				row[col["unit_sell_price"]] = FormatFloat(c.UnitSellPrice)
 			}
 
 			// Subsequent rows: name and parameter columns stay empty (sparse).
@@ -697,11 +697,14 @@ func ReplaceCrop(originalName string, newCrop Crop) error {
 	return WriteCrops(path, existing)
 }
 
-// formatFloat formats a float64 for CSV output. Whole numbers are written
+// FormatFloat formats a float64 for CSV output. Whole numbers are written
 // without a decimal point ("15" not "15.000000"), while fractional values
 // keep their natural precision ("4.5", "1.25"). This keeps the CSV clean
 // and readable in a spreadsheet.
-func formatFloat(f float64) string {
+//
+// Exported so the supply package (and any future CSV writer) can reuse the
+// same formatting logic without duplicating code.
+func FormatFloat(f float64) string {
 	if f == float64(int(f)) {
 		return strconv.Itoa(int(f))
 	}

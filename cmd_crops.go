@@ -88,10 +88,14 @@ func runCrops() {
 	fmt.Printf("Crop library (%d varieties)\n", len(crops))
 	fmt.Println(strings.Repeat("─", 60))
 
+	// Load the grower's unit preference so we show the right labels.
+	cfg, _ := config.Load()
+	wl := cfg.WeightLabel() // "g" or "oz"
+
 	for i, c := range crops {
 		// Show a numbered list so the grower can pick one to edit.
-		fmt.Printf("  %d. %-12s  %d days   seed: %dg/tray   yield: %dg/tray\n",
-			i+1, c.Name, c.CycleDays, c.SeedGrams, c.YieldGrams)
+		fmt.Printf("  %d. %-12s  %d days   seed: %d%s/tray   yield: %d%s/tray\n",
+			i+1, c.Name, c.CycleDays, c.SeedGrams, wl, c.YieldGrams, wl)
 	}
 	fmt.Println()
 
@@ -149,9 +153,9 @@ func runCrops() {
 
 	// ── Numeric parameters ──────────────────────────────────────────────
 
-	seedGrams := askInt("Seed grams per tray (e.g. 150) [0]: ", 0)
-	dirtLitres := askFloat("Dirt litres per tray [1]: ", 1.0)
-	yieldGrams := askInt("Expected yield grams per tray (e.g. 500) [0]: ", 0)
+	seedGrams := askInt(fmt.Sprintf("Seed %s per tray (e.g. 150) [0]: ", wl), 0)
+	dirtLitres := askFloat(fmt.Sprintf("Dirt %s per tray [1]: ", cfg.VolumeLabel()), 1.0)
+	yieldGrams := askInt(fmt.Sprintf("Expected yield %s per tray (e.g. 500) [0]: ", wl), 0)
 
 	// ── Costing parameters (optional) ───────────────────────────────────
 	//
@@ -162,14 +166,15 @@ func runCrops() {
 	fmt.Println("Costing (optional — press Enter to skip):")
 	seedCost := askFloat("  Seed bag cost in $ (e.g. 15.00) [0]: ", 0)
 	seedPurchaseWeight := askInt("  Seed bag weight (e.g. 500) [0]: ", 0)
-	// Ask what unit the weight is in — convert kg to grams for storage.
+	// Ask what unit the weight is in — convert to the small unit for storage.
 	if seedPurchaseWeight > 0 {
-		unit := strings.ToLower(ask("  Weight unit — (g)rams or (k)g [g]: "))
-		if unit == "k" || unit == "kg" {
-			seedPurchaseWeight *= 1000
+		lgLabel := cfg.LargeWeightLabel() // "kg" or "lb"
+		unit := strings.ToLower(ask(fmt.Sprintf("  Weight unit — (%s) or (%s) [%s]: ", wl, lgLabel, wl)))
+		if unit == lgLabel || unit == string(lgLabel[0]) {
+			seedPurchaseWeight *= cfg.LargeWeightMultiplier()
 		}
 	}
-	unitWeight := askInt("  Grams per sellable unit (e.g. 100) [100]: ", 100)
+	unitWeight := askInt(fmt.Sprintf("  %s per sellable unit (e.g. 100) [100]: ", cfg.WeightLabel()), 100)
 	unitSellPrice := askFloat("  Sell price per unit in $ (e.g. 4.50) [0]: ", 0)
 	fmt.Println()
 
@@ -312,7 +317,7 @@ func runCrops() {
 
 	// Sync to Google Sheets if enabled (fire-and-forget — don't block the
 	// terminal waiting for a network request).
-	cfg, _ := config.Load()
+	cfg, _ = config.Load()
 	if cfg.SheetsEnabled && cfg.SheetID != "" {
 		fmt.Println("Syncing to Google Sheets...")
 		gcal.SyncLocalToSheet(context.Background())
@@ -393,9 +398,14 @@ func editCropCLI(
 
 	// ── Numeric parameters ──────────────────────────────────────────────
 
-	picked.SeedGrams = askInt(fmt.Sprintf("Seed grams per tray [%d]: ", picked.SeedGrams), picked.SeedGrams)
-	picked.DirtLitres = askFloat(fmt.Sprintf("Dirt litres per tray [%.1f]: ", picked.DirtLitres), picked.DirtLitres)
-	picked.YieldGrams = askInt(fmt.Sprintf("Expected yield grams per tray [%d]: ", picked.YieldGrams), picked.YieldGrams)
+	// Load unit labels for display.
+	ecfg, _ := config.Load()
+	ewl := ecfg.WeightLabel()  // "g" or "oz"
+	evl := ecfg.VolumeLabel()  // "L" or "gal"
+
+	picked.SeedGrams = askInt(fmt.Sprintf("Seed %s per tray [%d]: ", ewl, picked.SeedGrams), picked.SeedGrams)
+	picked.DirtLitres = askFloat(fmt.Sprintf("Dirt %s per tray [%.1f]: ", evl, picked.DirtLitres), picked.DirtLitres)
+	picked.YieldGrams = askInt(fmt.Sprintf("Expected yield %s per tray [%d]: ", ewl, picked.YieldGrams), picked.YieldGrams)
 
 	// ── Costing parameters (optional) ───────────────────────────────────
 
@@ -403,20 +413,21 @@ func editCropCLI(
 	fmt.Println("Costing (press Enter to keep current values):")
 	picked.SeedCost = askFloat(fmt.Sprintf("  Seed bag cost in $ [%.2f]: ", picked.SeedCost), picked.SeedCost)
 
-	// Show seed bag weight in a friendly unit (kg if ≥1000 and even).
-	currentWeightDisplay := fmt.Sprintf("%dg", picked.SeedPurchaseWeight)
-	if picked.SeedPurchaseWeight >= 1000 && picked.SeedPurchaseWeight%1000 == 0 {
-		currentWeightDisplay = fmt.Sprintf("%dkg", picked.SeedPurchaseWeight/1000)
+	// Show seed bag weight in a friendly unit (large unit if evenly divisible).
+	lgLabel := ecfg.LargeWeightLabel() // "kg" or "lb"
+	mult := ecfg.LargeWeightMultiplier()
+	currentWeightDisplay := fmt.Sprintf("%d%s", picked.SeedPurchaseWeight, ewl)
+	if picked.SeedPurchaseWeight >= mult && picked.SeedPurchaseWeight%mult == 0 {
+		currentWeightDisplay = fmt.Sprintf("%d%s", picked.SeedPurchaseWeight/mult, lgLabel)
 	}
 	picked.SeedPurchaseWeight = askInt(fmt.Sprintf("  Seed bag weight [%s]: ", currentWeightDisplay), picked.SeedPurchaseWeight)
 	// Ask what unit — only if the grower typed a new value (not just Enter).
-	// We detect this by checking if the value changed from before.
-	unit := strings.ToLower(ask("  Weight unit — (g)rams or (k)g [g]: "))
-	if unit == "k" || unit == "kg" {
-		picked.SeedPurchaseWeight *= 1000
+	unit := strings.ToLower(ask(fmt.Sprintf("  Weight unit — (%s) or (%s) [%s]: ", ewl, lgLabel, ewl)))
+	if unit == lgLabel || unit == string(lgLabel[0]) {
+		picked.SeedPurchaseWeight *= mult
 	}
 
-	picked.UnitWeight = askInt(fmt.Sprintf("  Grams per sellable unit [%d]: ", picked.UnitWeight), picked.UnitWeight)
+	picked.UnitWeight = askInt(fmt.Sprintf("  %s per sellable unit [%d]: ", ewl, picked.UnitWeight), picked.UnitWeight)
 	picked.UnitSellPrice = askFloat(fmt.Sprintf("  Sell price per unit in $ [%.2f]: ", picked.UnitSellPrice), picked.UnitSellPrice)
 	fmt.Println()
 

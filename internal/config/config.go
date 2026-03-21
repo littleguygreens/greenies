@@ -44,6 +44,63 @@ type Config struct {
 	// Theme controls the GUI colour scheme. Either "dark" (the default) or
 	// "light". The CSS uses this to swap between two colour palettes.
 	Theme string `json:"theme"`
+
+	// Units controls whether the program displays measurements in metric
+	// (grams, litres — the default) or imperial (ounces, gallons).
+	//
+	// IMPORTANT: this setting only changes the *labels* shown next to
+	// numbers. It does NOT convert any values. When a grower switches
+	// from metric to imperial, they need to manually update their crop
+	// numbers (seed weight, yield, dirt volume, etc.) to match the new
+	// unit system. The program shows a warning about this on the
+	// settings page.
+	//
+	// Valid values: "metric" (default) or "imperial".
+	Units string `json:"units"`
+}
+
+// IsImperial returns true when the grower has chosen the imperial unit
+// system. Use this instead of comparing cfg.Units == "imperial" directly
+// — it keeps the check in one place and handles the default (empty string
+// = metric) automatically.
+func (c Config) IsImperial() bool {
+	return c.Units == "imperial"
+}
+
+// WeightLabel returns the small-weight unit label: "g" for metric, "oz"
+// for imperial. Used everywhere seed weight and yield are displayed.
+func (c Config) WeightLabel() string {
+	if c.IsImperial() {
+		return "oz"
+	}
+	return "g"
+}
+
+// LargeWeightLabel returns the large-weight unit label: "kg" for metric,
+// "lb" for imperial. Used in the seed bag weight dropdown.
+func (c Config) LargeWeightLabel() string {
+	if c.IsImperial() {
+		return "lb"
+	}
+	return "kg"
+}
+
+// VolumeLabel returns the volume unit label: "L" for metric (litres),
+// "gal" for imperial (gallons). Used for dirt/growing medium amounts.
+func (c Config) VolumeLabel() string {
+	if c.IsImperial() {
+		return "gal"
+	}
+	return "L"
+}
+
+// LargeWeightMultiplier returns how many small units make one large unit.
+// Metric: 1 kg = 1000 g. Imperial: 1 lb = 16 oz.
+func (c Config) LargeWeightMultiplier() int {
+	if c.IsImperial() {
+		return 16
+	}
+	return 1000
 }
 
 // Path returns the full file path to the config file (~/.greenies/config.json).

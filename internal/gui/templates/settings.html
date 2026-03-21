@@ -201,6 +201,27 @@
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">
+            <label>Units</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="units" value="metric"
+                           {{if ne .Units "imperial"}}checked{{end}}>
+                    Metric (g, kg, L)
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="units" value="imperial"
+                           {{if eq .Units "imperial"}}checked{{end}}>
+                    Imperial (oz, lb, gal)
+                </label>
+            </div>
+            <p class="task-notes" style="margin-top: 0.25rem; color: #e07070;">
+                Changing units only swaps the labels — it does NOT convert
+                any numbers. You will need to update your crop values
+                (seed weight, yield, dirt, etc.) manually after switching.
+            </p>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
             <label>Theme</label>
             <div class="radio-group">
                 <label class="radio-label">

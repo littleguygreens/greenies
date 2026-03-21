@@ -60,17 +60,17 @@
 
     <div class="trial-form-row">
         <div class="form-group">
-            <label for="seed_grams">Seed (g/tray)</label>
+            <label for="seed_grams">Seed ({{weightUnit}}/tray)</label>
             <input type="number" name="seed_grams" id="seed_grams"
                    min="0" step="1" placeholder="e.g. 150" style="max-width:120px;">
         </div>
         <div class="form-group">
-            <label for="dirt_litres">Dirt (L/tray)</label>
+            <label for="dirt_litres">Dirt ({{volUnit}}/tray)</label>
             <input type="number" name="dirt_litres" id="dirt_litres"
                    min="0" step="0.1" value="1" style="max-width:120px;">
         </div>
         <div class="form-group">
-            <label for="yield_grams">Expected yield (g/tray)</label>
+            <label for="yield_grams">Expected yield ({{weightUnit}}/tray)</label>
             <input type="number" name="yield_grams" id="yield_grams"
                    min="0" step="1" placeholder="e.g. 500" style="max-width:120px;">
         </div>
@@ -99,8 +99,8 @@
                 <input type="number" name="seed_purchase_weight" id="seed_purchase_weight"
                        min="0" step="1" placeholder="e.g. 500" style="max-width:100px;">
                 <select name="seed_weight_unit" style="max-width:65px;">
-                    <option value="g" selected>g</option>
-                    <option value="kg">kg</option>
+                    <option value="g" selected>{{weightUnit}}</option>
+                    <option value="kg">{{lgWeightUnit}}</option>
                 </select>
             </div>
         </div>
@@ -108,7 +108,7 @@
 
     <div class="trial-form-row">
         <div class="form-group">
-            <label for="unit_weight">Unit weight (g)</label>
+            <label for="unit_weight">Unit weight ({{weightUnit}})</label>
             <input type="number" name="unit_weight" id="unit_weight"
                    min="1" step="1" value="100" style="max-width:120px;">
         </div>

@@ -74,6 +74,7 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"Lowercase": cfg.Lowercase,
 		"WeekStart": cfg.WeekStart,
 		"Theme":     cfg.Theme,
+		"Units":     cfg.Units,
 		"Saved":     r.URL.Query().Get("saved") == "1",
 	})
 }
@@ -206,6 +207,12 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cfg.Theme = "dark"
 	}
+	un := r.FormValue("units")
+	if un == "imperial" {
+		cfg.Units = "imperial"
+	} else {
+		cfg.Units = "metric"
+	}
 	_ = config.Save(cfg)
 
 	// Save to farm.csv.
@@ -248,6 +255,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		"Lowercase": cfg.Lowercase,
 		"WeekStart": cfg.WeekStart,
 		"Theme":     cfg.Theme,
+		"Units":     cfg.Units,
 		"Saved":     true,
 	})
 }

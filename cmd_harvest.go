@@ -9,6 +9,7 @@ import (
 	"strings" // for string utilities used throughout
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/task"
 )
@@ -74,6 +75,10 @@ func runHarvest() {
 		return eligible[i].HarvestDate > eligible[j].HarvestDate
 	})
 
+	// Load unit labels for display.
+	hcfg, _ := config.Load()
+	hwl := hcfg.WeightLabel() // "g" or "oz"
+
 	fmt.Println("Recent harvests ready to log:")
 	fmt.Println()
 	for i, c := range eligible {
@@ -82,10 +87,10 @@ func runHarvest() {
 		if c.Trays != 1 {
 			trayWord = "trays"
 		}
-		// Show the expected grams if we have them; skip if unknown (older cycles).
+		// Show the expected weight if we have it; skip if unknown (older cycles).
 		expectedLabel := ""
 		if c.ExpectedGrams > 0 {
-			expectedLabel = fmt.Sprintf("   expected: %dg", c.ExpectedGrams)
+			expectedLabel = fmt.Sprintf("   expected: %d%s", c.ExpectedGrams, hwl)
 		}
 		fmt.Printf("  %d.  %-12s  %d %s   harvest %s%s\n",
 			i+1, task.Capitalize(c.CropName), c.Trays, trayWord,
@@ -145,9 +150,9 @@ func runHarvest() {
 	var gramsPrompt string
 	defaultGrams := chosen.ExpectedGrams
 	if defaultGrams > 0 {
-		gramsPrompt = fmt.Sprintf("Actual grams harvested [%d]: ", defaultGrams)
+		gramsPrompt = fmt.Sprintf("Actual %s harvested [%d]: ", hwl, defaultGrams)
 	} else {
-		gramsPrompt = "Actual grams harvested: "
+		gramsPrompt = fmt.Sprintf("Actual %s harvested: ", hwl)
 	}
 	actualGramsStr := ask(gramsPrompt)
 
@@ -156,13 +161,13 @@ func runHarvest() {
 	if actualGramsStr != "" {
 		g, err := strconv.Atoi(actualGramsStr)
 		if err != nil || g < 0 {
-			fmt.Println("Please enter a whole number in grams (e.g. 1400).")
+			fmt.Printf("Please enter a whole number in %s (e.g. 1400).\n", hwl)
 			os.Exit(1)
 		}
 		actualGrams = g
 	} else if defaultGrams == 0 {
 		// No default and user pressed Enter — we need a number.
-		fmt.Println("Please enter the actual grams harvested (e.g. 1400).")
+		fmt.Printf("Please enter the actual %s harvested (e.g. 1400).\n", hwl)
 		os.Exit(1)
 	}
 
@@ -187,8 +192,8 @@ func runHarvest() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("\nHarvest logged — %s, %d trays, %dg.\n",
-		task.Capitalize(chosen.CropName), actualTrays, actualGrams)
+	fmt.Printf("\nHarvest logged — %s, %d trays, %d%s.\n",
+		task.Capitalize(chosen.CropName), actualTrays, actualGrams, hwl)
 	fmt.Println("Run \"greenies harvestlog\" to see your full history.")
 }
 
@@ -227,13 +232,15 @@ func runHarvestLog() {
 		// This immediately shows whether any trays were lost.
 		trayCol := fmt.Sprintf("%d/%d trays", h.ActualTrays, h.ExpectedTrays)
 
-		// Gram column: show actual alongside expected (if we have expected data).
+		// Weight column: show actual alongside expected (if we have expected data).
 		// Old cycles logged before ExpectedGrams was added will show just actual.
+		lcfg, _ := config.Load()
+		lwl := lcfg.WeightLabel()
 		var gramCol string
 		if h.ExpectedGrams > 0 {
-			gramCol = fmt.Sprintf("%dg / %dg expected", h.ActualGrams, h.ExpectedGrams)
+			gramCol = fmt.Sprintf("%d%s / %d%s expected", h.ActualGrams, lwl, h.ExpectedGrams, lwl)
 		} else {
-			gramCol = fmt.Sprintf("%dg", h.ActualGrams)
+			gramCol = fmt.Sprintf("%d%s", h.ActualGrams, lwl)
 		}
 
 		fmt.Printf("  %s   %-12s  %-10s  %s\n",

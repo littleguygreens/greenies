@@ -10,6 +10,7 @@ import (
 	"strings" // for string utilities used throughout
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -180,7 +181,8 @@ func startNewTrial(ask func(string) string, trials []trial.TrialRecord) {
 			case trial.StatusHarvested:
 				statusLine = "harvested"
 				if pt.ActualYieldGrams > 0 {
-					statusLine += fmt.Sprintf(" (%dg yield)", pt.ActualYieldGrams)
+					tcfg, _ := config.Load()
+					statusLine += fmt.Sprintf(" (%d%s yield)", pt.ActualYieldGrams, tcfg.WeightLabel())
 				}
 			case trial.StatusPromoted:
 				statusLine = "promoted to crops.csv"
@@ -582,7 +584,8 @@ func trialHarvest(ask func(string) string, tr *trial.TrialRecord, trials []trial
 
 	fmt.Println("Trial marked as harvested.")
 	if tr.ActualYieldGrams > 0 {
-		fmt.Printf("Yield recorded: %dg\n", tr.ActualYieldGrams)
+		tcfg2, _ := config.Load()
+		fmt.Printf("Yield recorded: %d%s\n", tr.ActualYieldGrams, tcfg2.WeightLabel())
 	}
 	fmt.Println("Run \"greenies trial\" to view past trial history.")
 }
@@ -892,23 +895,28 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		}
 		return fmt.Sprintf("Day %d", n)
 	}
+	// Load unit labels for display.
+	vcfg, _ := config.Load()
+	vwl := vcfg.WeightLabel()  // "g" or "oz"
+	vvl := vcfg.VolumeLabel()  // "L" or "gal"
+
 	fmtYieldGrams := func(n int) string {
 		if n == 0 {
 			return "not recorded"
 		}
-		return fmt.Sprintf("%dg", n)
+		return fmt.Sprintf("%d%s", n, vwl)
 	}
 	fmtSeedGrams := func(f float64) string {
 		if f == 0 {
 			return "—"
 		}
-		return fmt.Sprintf("%.0fg", f)
+		return fmt.Sprintf("%.0f%s", f, vwl)
 	}
 	fmtDirt := func(f float64) string {
 		if f == 0 {
 			return "—"
 		}
-		return fmt.Sprintf("%.1fL", f)
+		return fmt.Sprintf("%.1f%s", f, vvl)
 	}
 	// fmtSoak describes the soak setting for a trial: overnight, a number of
 	// hours, or "—" if no soak was recorded.
@@ -984,8 +992,8 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		printRow("Sown", fmtDate(tr.SowDate))
 		printRow("Trays", strconv.Itoa(tr.Trays))
 		printRow("Overnight soak", fmtSoak(tr))
-		printRow("Seed g/tray", fmtSeedGrams(tr.SeedGrams))
-		printRow("Dirt l/tray", fmtDirt(tr.DirtLitres))
+		printRow(fmt.Sprintf("Seed %s/tray", vwl), fmtSeedGrams(tr.SeedGrams))
+		printRow(fmt.Sprintf("Dirt %s/tray", vvl), fmtDirt(tr.DirtLitres))
 		printRow("Move-to-light day", fmtIntDay(tr.MoveToLightDay))
 		printRow("Expected harvest", fmtIntDay(tr.HarvestDay))
 		printRow("Actual yield", fmtYieldGrams(tr.ActualYieldGrams))
@@ -996,8 +1004,8 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		printRow("Sown", fmtDate(a.SowDate), fmtDate(b.SowDate))
 		printRow("Trays", strconv.Itoa(a.Trays), strconv.Itoa(b.Trays))
 		printRow("Overnight soak", fmtSoak(a), fmtSoak(b))
-		printRow("Seed g/tray", fmtSeedGrams(a.SeedGrams), fmtSeedGrams(b.SeedGrams))
-		printRow("Dirt l/tray", fmtDirt(a.DirtLitres), fmtDirt(b.DirtLitres))
+		printRow(fmt.Sprintf("Seed %s/tray", vwl), fmtSeedGrams(a.SeedGrams), fmtSeedGrams(b.SeedGrams))
+		printRow(fmt.Sprintf("Dirt %s/tray", vvl), fmtDirt(a.DirtLitres), fmtDirt(b.DirtLitres))
 		printRow("Move-to-light day", fmtIntDay(a.MoveToLightDay), fmtIntDay(b.MoveToLightDay))
 		printRow("Expected harvest", fmtIntDay(a.HarvestDay), fmtIntDay(b.HarvestDay))
 		printRow("Actual yield", fmtYieldGrams(a.ActualYieldGrams), fmtYieldGrams(b.ActualYieldGrams))

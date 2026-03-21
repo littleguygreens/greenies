@@ -7,7 +7,6 @@ package gui
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"time"
 
@@ -120,67 +119,11 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		gridEnd = gridEnd.AddDate(0, 0, 1)
 	}
 
-	// ── Sort cycles oldest-first ─────────────────────────────────────────
-	sort.Slice(cycles, func(i, j int) bool {
-		if cycles[i].SowDate != cycles[j].SowDate {
-			return cycles[i].SowDate < cycles[j].SowDate
-		}
-		return cycles[i].CropName < cycles[j].CropName
-	})
-
 	// ── Pre-compute each cycle's daily stage map ─────────────────────────
-	// For each cycle, build a map from date string → stage name. This makes
-	// it fast to look up "what stage is this cycle in on March 12th?"
-	type cycleInfo struct {
-		CycleID  string
-		CropName string
-		Trays    int
-		DayStage map[string]string // date → "soak"/"dark"/"light"/"harvest"
-	}
-
-	var allCycleInfo []cycleInfo
-
-	for _, c := range cycles {
-		sowDate, err1 := time.Parse(task.DateFormat, c.SowDate)
-		harvestDate, err2 := time.Parse(task.DateFormat, c.HarvestDate)
-		mtlDate, err3 := time.Parse(task.DateFormat, c.MoveToLightDate)
-		if err1 != nil || err2 != nil || err3 != nil {
-			continue
-		}
-
-		stages := map[string]string{}
-		cr, hasCrop := cropMap[c.CropName]
-
-		// Soak day(s) — before the blackout bar starts.
-		if hasCrop && cr.OvernightSoak {
-			soakDay := sowDate.AddDate(0, 0, -1)
-			stages[soakDay.Format(task.DateFormat)] = "soak"
-		} else if hasCrop && cr.SoakHours > 0 {
-			stages[sowDate.Format(task.DateFormat)] = "soak"
-		}
-
-		// Walk from sow date to harvest date, assigning stages.
-		for d := sowDate; !d.After(harvestDate); d = d.AddDate(0, 0, 1) {
-			ds := d.Format(task.DateFormat)
-			if _, already := stages[ds]; already {
-				continue // soak day already set
-			}
-			if d.Equal(harvestDate) {
-				stages[ds] = "harvest"
-			} else if d.Before(mtlDate) {
-				stages[ds] = "dark"
-			} else {
-				stages[ds] = "light"
-			}
-		}
-
-		allCycleInfo = append(allCycleInfo, cycleInfo{
-			CycleID:  c.CycleID,
-			CropName: c.CropName,
-			Trays:    c.Trays,
-			DayStage: stages,
-		})
-	}
+	// buildCycleStages (in handlers_swimlane.go) sorts the cycles and builds
+	// a date → stage lookup map for each one. Used by both the full-month
+	// calendar here and the snapshot-week mini calendar.
+	allCycleInfo := buildCycleStages(cycles, cropMap)
 
 	// ── Build the swim-lane week sections ────────────────────────────────
 	var weeks []monthWeek

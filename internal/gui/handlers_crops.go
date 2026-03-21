@@ -149,9 +149,11 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
 		seedPurchaseWeight = v
 	}
-	// If the grower chose "kg" in the dropdown, convert to grams for storage.
+	// If the grower chose the large unit (kg or lb) in the dropdown,
+	// convert to the small unit (g or oz) for storage.
 	if r.FormValue("seed_weight_unit") == "kg" {
-		seedPurchaseWeight *= 1000
+		cfg, _ := config.Load()
+		seedPurchaseWeight *= cfg.LargeWeightMultiplier()
 	}
 
 	unitWeight := 100 // default: 100 g per sellable unit

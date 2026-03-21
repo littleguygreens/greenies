@@ -110,6 +110,37 @@ var funcMap = template.FuncMap{
 		}
 		return fmt.Sprintf("$%.2f", v)
 	},
+
+	// ── Unit-system helpers ──────────────────────────────────────────────
+	// These let templates display the correct unit label (g vs oz, L vs gal)
+	// based on the grower's preference in config.json. Instead of hardcoding
+	// "g" or "L" in the HTML, templates use {{weightUnit}}, {{volUnit}}, etc.
+
+	// "weightUnit" returns "g" (metric) or "oz" (imperial).
+	"weightUnit": func() string {
+		cfg, _ := config.Load()
+		return cfg.WeightLabel()
+	},
+	// "lgWeightUnit" returns "kg" (metric) or "lb" (imperial).
+	"lgWeightUnit": func() string {
+		cfg, _ := config.Load()
+		return cfg.LargeWeightLabel()
+	},
+	// "volUnit" returns "L" (metric) or "gal" (imperial).
+	"volUnit": func() string {
+		cfg, _ := config.Load()
+		return cfg.VolumeLabel()
+	},
+	// "lgWeightMult" returns 1000 (metric: g→kg) or 16 (imperial: oz→lb).
+	"lgWeightMult": func() int {
+		cfg, _ := config.Load()
+		return cfg.LargeWeightMultiplier()
+	},
+	// "isImperial" returns true when imperial units are active.
+	"isImperial": func() bool {
+		cfg, _ := config.Load()
+		return cfg.IsImperial()
+	},
 }
 
 // loadTemplates parses every HTML file in the templates/ directory and stores

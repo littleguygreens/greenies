@@ -58,7 +58,7 @@
                 <label class="radio-label">
                     <input type="radio" name="plan_mode" value="yield"
                            onclick="document.getElementById('tray-field').style.display='none'; document.getElementById('yield-field').style.display='block';">
-                    Yield target (grams)
+                    Yield target ({{weightUnit}})
                 </label>
             </div>
         </div>
@@ -71,7 +71,7 @@
 
         <!-- Yield target field (hidden by default) -->
         <div class="form-group" id="yield-field" style="display:none;">
-            <label for="yield_grams">Desired yield (grams)</label>
+            <label for="yield_grams">Desired yield ({{weightUnit}})</label>
             <input type="number" name="yield_grams" id="yield_grams" min="1" placeholder="e.g. 500" style="max-width:160px;">
         </div>
 

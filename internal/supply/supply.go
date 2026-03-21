@@ -167,8 +167,8 @@ func Save(supplies []Supply) error {
 	for _, s := range supplies {
 		row := make([]string, len(header))
 		row[col["name"]] = s.Name
-		row[col["cost_per_case"]] = formatFloat(s.CostPerCase)
-		row[col["units_per_case"]] = formatFloat(s.UnitsPerCase)
+		row[col["cost_per_case"]] = crop.FormatFloat(s.CostPerCase)
+		row[col["units_per_case"]] = crop.FormatFloat(s.UnitsPerCase)
 
 		if err := w.Write(row); err != nil {
 			return fmt.Errorf("could not write row for %s: %w", s.Name, err)
@@ -179,14 +179,6 @@ func Save(supplies []Supply) error {
 	return w.Error()
 }
 
-// formatFloat formats a float64 for CSV output. Whole numbers get no decimal
-// point ("12" not "12.0"), fractional values keep their precision ("4.5").
-func formatFloat(f float64) string {
-	if f == float64(int(f)) {
-		return strconv.Itoa(int(f))
-	}
-	return strconv.FormatFloat(f, 'f', -1, 64)
-}
 
 // ─── Lookup helper ──────────────────────────────────────────────────────────
 

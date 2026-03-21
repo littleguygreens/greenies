@@ -16,8 +16,80 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Month calendar with swim lanes
+// Shared cycle-stage computation
 // ─────────────────────────────────────────────────────────────────────────────
+
+// swimCycleInfo holds one cycle's daily stage map — a lookup from calendar
+// date to stage name ("soak", "dark", "light", "harvest", or ""). This is
+// pre-computed once and then used by both the full-month calendar and the
+// snapshot-week mini calendar so the stage-assignment logic lives in one place.
+type swimCycleInfo struct {
+	CropName string
+	Trays    int
+	DayStage map[string]string // date (YYYY-MM-DD) → stage name
+}
+
+// buildCycleStages takes a list of farm cycles and a crop lookup map, sorts
+// the cycles oldest-first, and returns a pre-computed stage map for each one.
+//
+// Both the full-month calendar (handleCalendar) and the snapshot-week helper
+// (buildSnapshotWeek) call this so the date-walking and stage-assignment
+// logic is never duplicated.
+func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimCycleInfo {
+	// Sort cycles oldest-first so swim-lane rows appear in a stable,
+	// predictable order (earliest sow date at the top).
+	sort.Slice(cycles, func(i, j int) bool {
+		if cycles[i].SowDate != cycles[j].SowDate {
+			return cycles[i].SowDate < cycles[j].SowDate
+		}
+		return cycles[i].CropName < cycles[j].CropName
+	})
+
+	var result []swimCycleInfo
+
+	for _, c := range cycles {
+		sowDate, err1 := time.Parse(task.DateFormat, c.SowDate)
+		harvestDate, err2 := time.Parse(task.DateFormat, c.HarvestDate)
+		mtlDate, err3 := time.Parse(task.DateFormat, c.MoveToLightDate)
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+
+		stages := map[string]string{}
+		cr, hasCrop := cropMap[c.CropName]
+
+		// Soak day(s) — before the blackout bar starts.
+		if hasCrop && cr.OvernightSoak {
+			soakDay := sowDate.AddDate(0, 0, -1)
+			stages[soakDay.Format(task.DateFormat)] = "soak"
+		} else if hasCrop && cr.SoakHours > 0 {
+			stages[sowDate.Format(task.DateFormat)] = "soak"
+		}
+
+		// Walk from sow date to harvest date, assigning stages.
+		for d := sowDate; !d.After(harvestDate); d = d.AddDate(0, 0, 1) {
+			ds := d.Format(task.DateFormat)
+			if _, already := stages[ds]; already {
+				continue // soak day already set
+			}
+			if d.Equal(harvestDate) {
+				stages[ds] = "harvest"
+			} else if d.Before(mtlDate) {
+				stages[ds] = "dark"
+			} else {
+				stages[ds] = "light"
+			}
+		}
+
+		result = append(result, swimCycleInfo{
+			CropName: c.CropName,
+			Trays:    c.Trays,
+			DayStage: stages,
+		})
+	}
+
+	return result
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Snapshot swim-lane helper
@@ -52,7 +124,8 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 		weekStart = weekStart.AddDate(0, 0, -1)
 	}
 
-	// Load the crop library so we can check soak settings.
+	// Load the crop library so we can check soak settings, then build the
+	// pre-computed stage map for each cycle using the shared helper.
 	cropMap := map[string]crop.Crop{}
 	if cropsSource, err := crop.GetSource(); err == nil {
 		if allCrops, err := cropsSource.LoadCrops(); err == nil {
@@ -62,62 +135,7 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 		}
 	}
 
-	// Sort cycles oldest-first (same order as the full calendar).
-	sort.Slice(cycles, func(i, j int) bool {
-		if cycles[i].SowDate != cycles[j].SowDate {
-			return cycles[i].SowDate < cycles[j].SowDate
-		}
-		return cycles[i].CropName < cycles[j].CropName
-	})
-
-	// Pre-compute each cycle's daily stage map — same logic as handleCalendar.
-	type cycleInfo struct {
-		CropName string
-		Trays    int
-		DayStage map[string]string
-	}
-
-	var allCycleInfo []cycleInfo
-	for _, c := range cycles {
-		sowDate, err1 := time.Parse(task.DateFormat, c.SowDate)
-		harvestDate, err2 := time.Parse(task.DateFormat, c.HarvestDate)
-		mtlDate, err3 := time.Parse(task.DateFormat, c.MoveToLightDate)
-		if err1 != nil || err2 != nil || err3 != nil {
-			continue
-		}
-
-		stages := map[string]string{}
-		cr, hasCrop := cropMap[c.CropName]
-
-		// Soak day(s).
-		if hasCrop && cr.OvernightSoak {
-			soakDay := sowDate.AddDate(0, 0, -1)
-			stages[soakDay.Format(task.DateFormat)] = "soak"
-		} else if hasCrop && cr.SoakHours > 0 {
-			stages[sowDate.Format(task.DateFormat)] = "soak"
-		}
-
-		// Walk sow → harvest assigning stages.
-		for d := sowDate; !d.After(harvestDate); d = d.AddDate(0, 0, 1) {
-			ds := d.Format(task.DateFormat)
-			if _, already := stages[ds]; already {
-				continue
-			}
-			if d.Equal(harvestDate) {
-				stages[ds] = "harvest"
-			} else if d.Before(mtlDate) {
-				stages[ds] = "dark"
-			} else {
-				stages[ds] = "light"
-			}
-		}
-
-		allCycleInfo = append(allCycleInfo, cycleInfo{
-			CropName: c.CropName,
-			Trays:    c.Trays,
-			DayStage: stages,
-		})
-	}
+	allCycleInfo := buildCycleStages(cycles, cropMap)
 
 	// Build the single week.
 	week := monthWeek{}
