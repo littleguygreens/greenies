@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AndroidManifest.xml — the "ID card" for the Greenies Android app.
+
+    Every Android app must have one of these. It tells the operating system:
+      - What the app is called (package name — like a unique address)
+      - What permissions it needs (we only need INTERNET for localhost)
+      - What happens when the user taps the app icon (launch MainActivity)
+
+    This is a thin wrapper — the real app is the Go binary running a web
+    server. This Java shell just starts that server and shows a WebView
+    (a built-in browser window) pointed at localhost.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.littleguygreens.greenies">
+
+    <!-- INTERNET permission: even though we're only connecting to localhost
+         (the phone talking to itself), Android still requires this permission
+         for any network connection — including WebView loading http://127.0.0.1 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:extractNativeLibs="true">
+        <!--
+            extractNativeLibs="true" is critical for our approach.
+
+            Normally, Android keeps .so files compressed inside the APK. But
+            we need our Go binary to be extracted to disk with execute
+            permission so we can run it as a process. This flag tells Android:
+            "please extract the .so files to the app's nativeLibraryDir."
+
+            This is the same trick that Termux (a popular terminal app) uses
+            to run executables on Android.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize"
+            android:theme="@android:style/Theme.NoTitleBar">
+            <!--
+                configChanges="orientation|screenSize" tells Android: "when the
+                user rotates the phone, don't restart the activity — just resize
+                it." Without this, rotating the phone would kill the WebView
+                and reload the page from scratch, losing any form data.
+
+                Theme.NoTitleBar removes the default Android title bar — our
+                web GUI has its own nav bar, so we don't need both.
+            -->
+            <intent-filter>
+                <!-- MAIN + LAUNCHER = "this is the app icon on the home screen" -->
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

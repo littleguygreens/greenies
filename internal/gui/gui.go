@@ -21,6 +21,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -411,7 +412,15 @@ func StartServer(port int) error {
 	// patiently until the browser sends its first ping (no timeout
 	// until then), then start monitoring. If the browser stops pinging,
 	// it calls server.Shutdown().
-	go watchHeartbeat(server)
+	//
+	// On Android, the Java wrapper manages the server's lifecycle — it
+	// starts the server when the app opens and kills it when the app
+	// closes. The heartbeat auto-shutdown would interfere with that,
+	// so we skip it when the GREENIES_NO_HEARTBEAT environment variable
+	// is set. The Java launcher sets this automatically.
+	if os.Getenv("GREENIES_NO_HEARTBEAT") == "" {
+		go watchHeartbeat(server)
+	}
 
 	// ListenAndServe blocks (waits) until the server is shut down.
 	// When server.Shutdown() is called (by the heartbeat watcher or

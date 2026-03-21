@@ -1,6 +1,9 @@
-# The compiled greenies binary.
+# The compiled greenies binary (at the project root only).
 # We distribute source code, not binaries — each user builds their own.
-greenies
+# The leading / means "only match at the root of the repo" — without it,
+# Git would also ignore any folder named "greenies" deeper in the tree
+# (like desktop/android/java/com/littleguygreens/greenies).
+/greenies
 
 # Go build artefacts
 *.exe
@@ -13,3 +16,11 @@ vendor/
 # The .vscode/ folder holds things like keyboard shortcuts and build tasks
 # that vary from person to person and don't belong in the shared codebase.
 .vscode/
+
+# Android build artifacts — the build/ folder contains intermediate files
+# and the final .apk is generated fresh each time you run build.sh.
+# The debug.keystore is your personal signing key — it should stay on
+# your machine, not in the shared codebase.
+desktop/android/build/
+desktop/android/greenies.apk
+desktop/android/debug.keystore

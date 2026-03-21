@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings.xml — text values used by the Android app.
+     Keeping text in this file (instead of hardcoded in Java) is an Android
+     convention that makes it easy to translate the app into other languages
+     later. For now, we just need the app name. -->
+<resources>
+    <string name="app_name">Greenies</string>
+</resources>
