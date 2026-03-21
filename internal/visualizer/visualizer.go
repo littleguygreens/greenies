@@ -55,9 +55,32 @@ type SnapshotData struct {
 	// conflict checker (e.g. "Main Tent over capacity on 2026-03-22").
 	Conflicts []string
 
+	// Financial holds the aggregated cost/revenue/profit for all active cycles
+	// that have costing data. Filled in by the GUI handler after BuildSnapshot
+	// returns — the visualizer itself stays independent of crop/supply packages.
+	Financial FinancialSummary
+
 	// HasData is true if there was at least one environment or cycle to show.
 	// The template uses this to decide whether to show the snapshot or an
 	// "empty" message.
+	HasData bool
+}
+
+// FinancialSummary holds aggregated profitability numbers across all active
+// crop cycles. The GUI handler populates this after calling BuildSnapshot()
+// by looping through cycles, looking up each crop's costing data, and
+// multiplying per-tray numbers by the tray count.
+type FinancialSummary struct {
+	// TotalCost is the sum of (cost per tray × trays) for all cycles with data.
+	TotalCost float64
+
+	// TotalRevenue is the sum of (revenue per tray × trays) for all cycles.
+	TotalRevenue float64
+
+	// TotalProfit is TotalRevenue minus TotalCost.
+	TotalProfit float64
+
+	// HasData is true if at least one active cycle had costing data.
 	HasData bool
 }
 
@@ -105,6 +128,18 @@ type CycleRow struct {
 
 	// HarvestDate is formatted like "Mon Jan 02" for display.
 	HarvestDate string
+
+	// CostPerTray is the all-in cost to grow one tray (filled by caller).
+	CostPerTray float64
+
+	// RevenuePerTray is the total revenue from selling one tray's harvest.
+	RevenuePerTray float64
+
+	// ProfitPerTray is revenue minus cost for one tray.
+	ProfitPerTray float64
+
+	// HasProfit is true if the crop had enough costing data to calculate.
+	HasProfit bool
 }
 
 // InventoryItem holds the stock information for one type of tray.

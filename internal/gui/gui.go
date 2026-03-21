@@ -102,6 +102,14 @@ var funcMap = template.FuncMap{
 		}
 		return a % b
 	},
+	// "fmtDollar" formats a float64 as a dollar amount with 2 decimal places.
+	// Example: 12.5 → "$12.50", -3.0 → "-$3.00"
+	"fmtDollar": func(v float64) string {
+		if v < 0 {
+			return fmt.Sprintf("-$%.2f", -v)
+		}
+		return fmt.Sprintf("$%.2f", v)
+	},
 }
 
 // loadTemplates parses every HTML file in the templates/ directory and stores

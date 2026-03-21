@@ -1624,3 +1624,52 @@ input:focus, select:focus, textarea:focus {
     font-size: 0.85rem;
     color: var(--text-secondary);
 }
+
+/* ── Financial snapshot ───────────────────────────────────────────────── */
+/* Shows expected cost, revenue, and profit for all active cycles that
+   have costing data entered. Appears between tray inventory and conflicts. */
+
+.snap-cycle-profit {
+    color: var(--accent);
+    font-weight: 600;
+    margin-left: auto;
+}
+
+.snap-financial-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+}
+
+.snap-financial-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.snap-financial-total {
+    border-top: 1px solid var(--border);
+    margin-top: 0.25rem;
+    padding-top: 0.4rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.snap-financial-label {
+    /* inherits from row */
+}
+
+.snap-financial-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.snap-profit-positive {
+    color: #27ae60;
+}
+
+.snap-profit-negative {
+    color: #e74c3c;
+}

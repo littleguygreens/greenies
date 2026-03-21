@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/littleguygreens/greenies/internal/crop"
 )
 
 // Supply represents one line item in the supplies file — a consumable that
@@ -198,4 +200,27 @@ func Find(supplies []Supply, name string) *Supply {
 		}
 	}
 	return nil
+}
+
+// LoadSupplyCosts is a convenience function that loads the supplies CSV and
+// builds a crop.SupplyCosts struct in one step. It looks up the three
+// farm-wide consumables (dirt, containers, labels) and calculates their
+// per-unit costs.
+//
+// If the supplies file doesn't exist or can't be read, the returned struct
+// has all zeroes — the profitability calculations still work, they just
+// won't include supply costs.
+func LoadSupplyCosts() crop.SupplyCosts {
+	supplies, _ := Load()
+	sc := crop.SupplyCosts{}
+	if s := Find(supplies, "dirt"); s != nil {
+		sc.DirtPerLitre = s.CostPerUnit()
+	}
+	if s := Find(supplies, "containers"); s != nil {
+		sc.ContainerEach = s.CostPerUnit()
+	}
+	if s := Find(supplies, "labels"); s != nil {
+		sc.LabelEach = s.CostPerUnit()
+	}
+	return sc
 }

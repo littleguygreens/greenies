@@ -122,6 +122,7 @@
                 <div class="snap-cycle-dates">
                     <span>sown {{.SowDate}}</span>
                     <span>harvest {{.HarvestDate}}</span>
+                    {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray</span>{{end}}
                 </div>
             </div>
             {{end}}
@@ -180,6 +181,27 @@
             <div class="snap-inventory-available">{{.Available}} available</div>
         </div>
         {{end}}
+    </div>
+    {{end}}
+
+    <!-- ── Financials ────────────────────────────────────────────────── -->
+    {{if .Snapshot.Financial.HasData}}
+    <div class="snap-section">
+        <h3 class="snap-section-title">Financials (active cycles)</h3>
+        <div class="snap-financial-card">
+            <div class="snap-financial-row">
+                <span class="snap-financial-label">Expected cost</span>
+                <span class="snap-financial-value">{{fmtDollar .Snapshot.Financial.TotalCost}}</span>
+            </div>
+            <div class="snap-financial-row">
+                <span class="snap-financial-label">Expected revenue</span>
+                <span class="snap-financial-value">{{fmtDollar .Snapshot.Financial.TotalRevenue}}</span>
+            </div>
+            <div class="snap-financial-row snap-financial-total">
+                <span class="snap-financial-label">Expected profit</span>
+                <span class="snap-financial-value {{if gt .Snapshot.Financial.TotalProfit 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}">{{fmtDollar .Snapshot.Financial.TotalProfit}}</span>
+            </div>
+        </div>
     </div>
     {{end}}
 
