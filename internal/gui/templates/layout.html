@@ -18,8 +18,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- The viewport tag makes the page scale properly on phones -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The viewport tag makes the page scale properly on phones.
+         viewport-fit=cover tells the browser to extend the page into the
+         full screen (including behind notches). We handle the safe areas
+         in CSS with env(safe-area-inset-*) padding on the body. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Greenies</title>
     <!-- Web app manifest — tells the browser to treat this like a standalone
          app when opened with the --app flag. No address bar, no tabs, just

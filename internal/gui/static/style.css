@@ -72,6 +72,15 @@ body {
     color: var(--text);
     line-height: 1.6;
     min-height: 100vh;
+    /* On phones with notches or rounded corners, the browser/WebView tells
+       CSS where the "safe area" is — the region not blocked by hardware.
+       env(safe-area-inset-*) adds padding so content doesn't hide behind
+       the notch or slide under the system navigation bar. On desktop
+       browsers these values are just zero, so this changes nothing there. */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ── Lowercase mode ───────────────────────────────────────────────────────

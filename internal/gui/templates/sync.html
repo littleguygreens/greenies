@@ -1,12 +1,14 @@
 {{/*
     sync.html — the Google sync page.
 
-    This page handles four states, shown as a natural progression:
+    This page handles three states, shown as a natural progression:
 
-      1. No credentials.json — setup instructions (one-time manual step)
-      2. Has credentials but not signed in — "Sign in with Google" button
-      3. Signed in but Sheets not linked — "Link Google Sheets" button
-      4. Everything linked — "Sync Now" button (full sync)
+      1. Not signed in — "Sign in with Google" button
+      2. Signed in but Sheets not linked — "Link Google Sheets" button
+      3. Everything linked — "Sync Now" button (full sync)
+
+    OAuth credentials are embedded in the binary, so no manual setup is
+    needed. The user just clicks "Sign in with Google" and goes.
 
     The sync can take a minute or two because it makes many individual API
     calls to Google (deleting old entries, creating new ones). While it's
@@ -14,7 +16,6 @@
     frozen.
 
     Data passed from the handler (handleSyncPage in handlers.go):
-      .CredentialsExist — whether credentials.json is set up in ~/.greenies/
       .TokenExists      — whether the user has signed in (token.json exists)
       .SheetsEnabled    — whether the Google Sheet has been created and linked
       .SheetID          — the Google-assigned spreadsheet ID (for building URL)
@@ -24,78 +25,17 @@
 <h1>Sync with Google</h1>
 
 <div id="sync-area">
-    {{if not .CredentialsExist}}
-        <!-- ── State 1: No credentials.json ──────────────────────────────
-             This is a one-time manual step. The user downloads a file from
-             Google Cloud Console and places it in ~/.greenies/. We can't
-             automate this part because it requires a Google Cloud account.
-             The walkthrough guides a complete beginner through the process. -->
-        <h2 style="margin-top: 0;">Connect to Google</h2>
-        <p>
-            To sync with Google Calendar and Sheets, you need a credentials file from
-            Google. This is a one-time setup that takes about 5 minutes.
-        </p>
-
-        <div style="background: #1a1a2e; border-radius: 8px; padding: 1.25rem 1.5rem; margin: 1.5rem 0; line-height: 1.8;">
-            <p><strong>Step 1:</strong> Go to
-                <a href="https://console.cloud.google.com/" target="_blank" style="color: #8bc34a;">
-                    Google Cloud Console</a>.
-                Sign in with the Google account you want greenies to use.
-            </p>
-
-            <p style="margin-top: 1rem;"><strong>Step 2:</strong> Create a new project.
-                Click the project dropdown at the top of the page, then "New Project".
-                Name it anything — "greenies" works fine.
-            </p>
-
-            <p style="margin-top: 1rem;"><strong>Step 3:</strong> Enable three APIs.
-                Go to <strong>APIs &amp; Services → Library</strong> and search for each
-                of these, then click "Enable":
-            </p>
-            <ul style="margin: 0.25rem 0 0 1.5rem;">
-                <li>Google Calendar API</li>
-                <li>Google Tasks API</li>
-                <li>Google Sheets API</li>
-            </ul>
-
-            <p style="margin-top: 1rem;"><strong>Step 4:</strong> Set up the consent screen.
-                Go to <strong>APIs &amp; Services → OAuth consent screen</strong>.
-                Choose "External", fill in the app name ("greenies") and your email, then save.
-                Under "Test users", add yourself.
-            </p>
-
-            <p style="margin-top: 1rem;"><strong>Step 5:</strong> Create credentials.
-                Go to <strong>APIs &amp; Services → Credentials</strong>,
-                click <strong>+ Create Credentials → OAuth client ID</strong>.
-                Application type: "Desktop app". Name: "greenies".
-                Click "Create", then <strong>"Download JSON"</strong>.
-            </p>
-
-            <p style="margin-top: 1rem;"><strong>Step 6:</strong> Move the downloaded file to:
-            </p>
-            <code style="display: block; margin: 0.25rem 0 0 1.5rem; color: #8bc34a;">~/.greenies/credentials.json</code>
-            <p class="task-notes" style="margin-top: 0.25rem; margin-left: 1.5rem;">
-                The download will have a long name — rename it to <code>credentials.json</code>.
-            </p>
-
-            <p style="margin-top: 1rem;"><strong>Step 7:</strong> Come back here and reload this page.
-                You'll see a "Sign in with Google" button.
-            </p>
-        </div>
-
-        <p class="task-notes">After this one-time setup, syncing is just one click.</p>
-
-    {{else if not .TokenExists}}
-        <!-- ── State 2: Has credentials but not signed in ────────────────
-             The credentials.json file is in place, but the user hasn't
-             completed the Google sign-in yet. A button triggers the OAuth
-             browser flow — Google opens in a new tab, the user approves,
-             and the token is saved. -->
+    {{if not .TokenExists}}
+        <!-- ── State 1: Not signed in ─────────────────────────────────────
+             The user hasn't completed the Google sign-in yet. A button
+             triggers the OAuth browser flow — Google opens in a new tab,
+             the user approves, and the token is saved. No setup needed —
+             credentials are built into the app. -->
         <div id="signin-area">
             <h2 style="margin-top: 0;">Sign in with Google</h2>
             <p>
-                Your credentials file is set up. The next step is to sign in with
-                your Google account so greenies can access your calendar and sheets.
+                Sign in with your Google account so greenies can sync your
+                schedule to Google Calendar, Tasks, and Sheets.
             </p>
             <p class="task-notes">
                 Clicking below will open Google in your browser.

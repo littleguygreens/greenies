@@ -110,6 +110,13 @@ mkdir -p "$OUT/classes"
 # GOOS=android tells Go the target operating system.
 # GOARCH=arm64 tells Go the target processor (almost all modern phones).
 #
+# Why arm64 only? Go requires CGO (a bridge to C code) for android/arm,
+# android/x86, and android/x86_64 — which means installing the Android NDK
+# (a ~1GB C/C++ toolchain). Only android/arm64 works with pure Go. Since
+# arm64 covers ~95% of real Android phones (everything since roughly 2017),
+# this is a reasonable tradeoff. Multi-arch support can be added later by
+# installing the NDK.
+#
 # The output goes into lib/arm64-v8a/ and is named libgreenies.so because
 # Android only extracts and gives execute permission to .so files in the
 # lib/ folder. It's not really a shared library — it's our full Go program.

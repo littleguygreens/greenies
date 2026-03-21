@@ -34,43 +34,6 @@ import (
 // Only tasks from today forward are synced. Past tasks are history and don't
 // need to appear in Google.
 func runSync() {
-	if !gcal.CredentialsExist() {
-		fmt.Println("Google sync is not set up yet.")
-		fmt.Println()
-		fmt.Println("To connect greenies to your Google account, you need a credentials")
-		fmt.Println("file from Google. This is a one-time setup that takes about 5 minutes:")
-		fmt.Println()
-		fmt.Println("  1. Go to https://console.cloud.google.com/")
-		fmt.Println("     Sign in with the Google account you want greenies to use.")
-		fmt.Println()
-		fmt.Println("  2. Create a new project (click the project dropdown at the top,")
-		fmt.Println("     then \"New Project\"). Name it anything — \"greenies\" works.")
-		fmt.Println()
-		fmt.Println("  3. Enable three APIs for your project. Go to \"APIs & Services\" →")
-		fmt.Println("     \"Library\" and search for each of these, then click \"Enable\":")
-		fmt.Println("       • Google Calendar API")
-		fmt.Println("       • Google Tasks API")
-		fmt.Println("       • Google Sheets API")
-		fmt.Println()
-		fmt.Println("  4. Set up the consent screen. Go to \"APIs & Services\" →")
-		fmt.Println("     \"OAuth consent screen\". Choose \"External\", fill in the app")
-		fmt.Println("     name (\"greenies\"), your email, and save. Add yourself as a")
-		fmt.Println("     test user under \"Test users\".")
-		fmt.Println()
-		fmt.Println("  5. Create credentials. Go to \"APIs & Services\" → \"Credentials\",")
-		fmt.Println("     click \"+ Create Credentials\" → \"OAuth client ID\".")
-		fmt.Println("     Application type: \"Desktop app\". Name: \"greenies\".")
-		fmt.Println("     Click \"Create\", then \"Download JSON\".")
-		fmt.Println()
-		fmt.Println("  6. Move the downloaded file to ~/.greenies/credentials.json")
-		fmt.Println("     (you may need to rename it — the download has a long name).")
-		fmt.Println()
-		fmt.Println("  7. Run \"greenies sync\" again. You'll be asked to sign in once.")
-		fmt.Println()
-		fmt.Println("After this one-time setup, syncing is just one click.")
-		return
-	}
-
 	// context.Background() means "no deadline, no cancellation" — fine for
 	// a short interactive command that the user is actively waiting on.
 	ctx := context.Background()

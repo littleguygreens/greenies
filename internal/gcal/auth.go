@@ -36,8 +36,37 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// credentialsPath returns the full path to credentials.json — the file
-// downloaded from Google Cloud Console that identifies this program to Google.
+// ─────────────────────────────────────────────────────────────────────────────
+// Embedded OAuth credentials
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These are the OAuth client ID and secret for the Greenies Google Cloud
+// project. They're embedded directly in the binary so users don't need to
+// create their own Google Cloud project or download a credentials.json file —
+// the app just works out of the box.
+//
+// "But aren't secrets supposed to be kept secret?" — Good instinct, but
+// Google explicitly treats OAuth client secrets for "installed applications"
+// (desktop apps, mobile apps, CLI tools) as NON-CONFIDENTIAL. The reason
+// is simple: the secret is baked into the binary, and anyone with the binary
+// could extract it anyway. Google knows this and designs the security model
+// around it — the real security comes from the user's own Google sign-in,
+// not from the client secret.
+//
+// This is standard practice for open-source tools. For example, rclone (a
+// popular file sync tool with millions of users) embeds its Google OAuth
+// credentials in its public source code.
+//
+// If a user wants to use their own Google Cloud project (for example, to get
+// their own API quota), they can place a credentials.json file in ~/.greenies/
+// and it will override these embedded values.
+
+const embeddedClientID = "817302381223-g81vtlpcd4l883fvah7et6hnq04i8ftq.apps.googleusercontent.com"
+const embeddedClientSecret = "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"
+
+// credentialsPath returns the full path to credentials.json — an optional
+// override file. If a user places their own credentials.json here, it takes
+// priority over the embedded credentials. Most users will never need this.
 func credentialsPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -56,17 +85,15 @@ func tokenPath() (string, error) {
 	return filepath.Join(home, ".greenies", "token.json"), nil
 }
 
-// CredentialsExist returns true if credentials.json has been placed in
-// ~/.greenies/. Used by main.go to decide whether to activate the Google
-// Calendar exporter — if the file isn't there, the exporter is silently
-// skipped rather than erroring out.
+// CredentialsExist always returns true now that OAuth credentials are
+// embedded in the binary. Google features are always available — no setup
+// file required.
+//
+// (Previously, this checked for a credentials.json file and returned false
+// if it was missing. Now that credentials are embedded, every user has them
+// automatically.)
 func CredentialsExist() bool {
-	path, err := credentialsPath()
-	if err != nil {
-		return false
-	}
-	_, err = os.Stat(path)
-	return err == nil
+	return true
 }
 
 // TokenExists returns true if the user has already completed the Google
@@ -83,24 +110,37 @@ func TokenExists() bool {
 	return err == nil
 }
 
-// loadConfig reads credentials.json and builds an OAuth2 configuration.
-// The configuration tells the library which Google account the program
-// belongs to (client ID and secret) and what permissions it needs (in this
-// case, write access to Google Calendar).
+// loadConfig builds an OAuth2 configuration — the settings that tell Google
+// which app is asking for permission and what permissions it needs.
+//
+// By default, this uses the credentials embedded in the binary (see the
+// constants above). If the user has placed their own credentials.json file
+// in ~/.greenies/, that file takes priority — this lets power users use
+// their own Google Cloud project with its own API quota.
 func loadConfig() (*oauth2.Config, error) {
+	// Check for a local credentials.json override file first.
 	credPath, err := credentialsPath()
-	if err != nil {
-		return nil, err
+	if err == nil {
+		if b, readErr := os.ReadFile(credPath); readErr == nil {
+			// The user has their own credentials file — use it.
+			config, parseErr := google.ConfigFromJSON(b,
+				"https://www.googleapis.com/auth/calendar",
+				"https://www.googleapis.com/auth/tasks",
+				"https://www.googleapis.com/auth/spreadsheets",
+			)
+			if parseErr == nil {
+				return config, nil
+			}
+			// If the file exists but can't be parsed, fall through to
+			// embedded credentials rather than failing completely.
+			fmt.Printf("Warning: could not parse credentials.json, using built-in credentials instead\n")
+		}
 	}
 
-	b, err := os.ReadFile(credPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read credentials.json at %s: %w", credPath, err)
-	}
-
-	// google.ConfigFromJSON reads the credentials file format that Google
-	// Cloud Console produces. The extra arguments are "scopes" — the specific
-	// permissions we are requesting. We need three:
+	// Use the embedded credentials. We build the OAuth2 config directly
+	// instead of parsing a JSON file — same result, no file needed.
+	//
+	// The scopes are the specific permissions we request:
 	//   - calendar:     read and write Google Calendar events
 	//   - tasks:        read and write Google Tasks (for daily task entries)
 	//   - spreadsheets: read and write Google Sheets (for the crop library)
@@ -109,17 +149,17 @@ func loadConfig() (*oauth2.Config, error) {
 	// and run "greenies sync" again. The browser login must be repeated any time
 	// the list of permissions changes, because the saved token only covers the
 	// scopes that were active when it was created.
-	//
-	// NOTE (Phase 8.5): The spreadsheets scope was added for Google Sheets
-	// crop library sync. Users upgrading from an earlier version must delete
-	// their token.json once and re-authorise to pick up this new permission.
-	config, err := google.ConfigFromJSON(b,
-		"https://www.googleapis.com/auth/calendar",
-		"https://www.googleapis.com/auth/tasks",
-		"https://www.googleapis.com/auth/spreadsheets",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse credentials.json: %w", err)
+	config := &oauth2.Config{
+		ClientID:     embeddedClientID,
+		ClientSecret: embeddedClientSecret,
+		Endpoint:     google.Endpoint,
+		Scopes: []string{
+			"https://www.googleapis.com/auth/calendar",
+			"https://www.googleapis.com/auth/tasks",
+			"https://www.googleapis.com/auth/spreadsheets",
+		},
+		// RedirectURL is set dynamically in runBrowserAuthFlow when the
+		// temporary localhost server picks an available port.
 	}
 
 	return config, nil
