@@ -131,8 +131,10 @@ var scheduleHeaders = []interface{}{
 const batchesTab = "Schedule Cycles"
 
 // batchesHeaders are the column headings for the Schedule Cycles tab.
+// cycle_id links each batch back to its calendar tasks — without it,
+// a new device pulling this data wouldn't know which tasks belong together.
 var batchesHeaders = []interface{}{
-	"crop", "trays", "sow_date", "harvest_date",
+	"cycle_id", "crop", "trays", "sow_date", "harvest_date",
 	"move_to_light_date", "lit_environment", "expected_grams",
 }
 
@@ -141,8 +143,10 @@ var batchesHeaders = []interface{}{
 const harvestsTab = "Harvests"
 
 // harvestsHeaders are the column headings for the Harvests tab.
+// cycle_id links each harvest back to its batch — so a new device can
+// match harvests to cycles and prevent double-logging.
 var harvestsHeaders = []interface{}{
-	"crop", "harvest_date",
+	"cycle_id", "crop", "harvest_date",
 	"expected_trays", "actual_trays",
 	"expected_grams", "actual_grams",
 	"notes",
@@ -1076,6 +1080,7 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 		}
 
 		rows = append(rows, []interface{}{
+			c.CycleID,
 			c.CropName,
 			c.Trays,
 			c.SowDate,
@@ -1129,6 +1134,7 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 		}
 
 		rows = append(rows, []interface{}{
+			h.CycleID,
 			h.CropName,
 			h.HarvestDate,
 			h.ExpectedTrays,
@@ -1157,6 +1163,329 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 	}
 
 	return nil
+}
+
+// ─── Pull: Schedule Tasks (tasks.json) ──────────────────────────────────────
+
+// PullSchedule reads the "Schedule Tasks" tab from the Google Sheet and
+// returns the data as []task.Task. This is used when linking an existing
+// Sheet on a new device — the Sheet already has the full schedule pushed
+// from the desktop, so we pull it down to populate the empty local files.
+//
+// Each pulled task gets a fresh unique ID (since IDs are local-only and
+// never stored in the Sheet). The CycleID is preserved so tasks stay
+// grouped by the crop cycle they belong to.
+//
+// "No tasks today" placeholders are filtered out during push, so they
+// won't exist after pull — this is harmless, they're cosmetic.
+func (sc *SheetsClient) PullSchedule() ([]task.Task, error) {
+	// Make sure the tab exists — it may be missing on very old Sheets.
+	if err := sc.ensureTab(scheduleTab); err != nil {
+		return nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, sheetRange(scheduleTab),
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Schedule Tasks tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	col := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	var tasks []task.Task
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue // blank row
+		}
+
+		title := strings.TrimSpace(cellString(row, col["title"]))
+		if title == "" {
+			continue // skip rows with no title
+		}
+
+		date := strings.TrimSpace(cellString(row, col["date"]))
+		notes := strings.TrimSpace(cellString(row, col["notes"]))
+		cycleID := strings.TrimSpace(cellString(row, col["cycle_id"]))
+
+		// Generate a fresh unique ID for each pulled task. Task IDs are
+		// local identifiers — they were never stored in the Sheet, so
+		// every device gets its own set.
+		id, idErr := task.GenerateID()
+		if idErr != nil {
+			continue // extremely unlikely — skip this row if it happens
+		}
+
+		tasks = append(tasks, task.Task{
+			ID:      id,
+			CycleID: cycleID,
+			Title:   title,
+			Date:    date,
+			Notes:   notes,
+		})
+	}
+
+	return tasks, nil
+}
+
+// ─── Pull: Schedule Cycles (cycles.json) ────────────────────────────────────
+
+// PullBatches reads the "Schedule Cycles" tab from the Google Sheet and
+// returns the data as []farm.Cycle. Used when linking an existing Sheet
+// on a new device to populate local cycles.json.
+//
+// Requires the cycle_id column to be present in the Sheet — older Sheets
+// that were pushed before cycle_id was added will have this column added
+// automatically on the next push.
+func (sc *SheetsClient) PullBatches() ([]farm.Cycle, error) {
+	// Make sure the tab exists.
+	if err := sc.ensureTab(batchesTab); err != nil {
+		return nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, sheetRange(batchesTab),
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Schedule Cycles tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	col := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	var cycles []farm.Cycle
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue // blank row
+		}
+
+		cropName := strings.TrimSpace(cellString(row, col["crop"]))
+		if cropName == "" {
+			continue
+		}
+
+		cycles = append(cycles, farm.Cycle{
+			CycleID:         strings.TrimSpace(cellString(row, col["cycle_id"])),
+			CropName:        cropName,
+			Trays:           parseIntCell(row, col["trays"]),
+			SowDate:         strings.TrimSpace(cellString(row, col["sow_date"])),
+			HarvestDate:     strings.TrimSpace(cellString(row, col["harvest_date"])),
+			MoveToLightDate: strings.TrimSpace(cellString(row, col["move_to_light_date"])),
+			LitEnvironment:  strings.TrimSpace(cellString(row, col["lit_environment"])),
+			ExpectedGrams:   parseIntCell(row, col["expected_grams"]),
+		})
+	}
+
+	return cycles, nil
+}
+
+// ─── Pull: Harvests (harvests.json) ─────────────────────────────────────────
+
+// PullHarvests reads the "Harvests" tab from the Google Sheet and returns
+// the data as []farm.HarvestRecord. Used when linking an existing Sheet
+// on a new device to populate local harvests.json.
+func (sc *SheetsClient) PullHarvests() ([]farm.HarvestRecord, error) {
+	// Make sure the tab exists.
+	if err := sc.ensureTab(harvestsTab); err != nil {
+		return nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, sheetRange(harvestsTab),
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Harvests tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	col := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	var records []farm.HarvestRecord
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue // blank row
+		}
+
+		cropName := strings.TrimSpace(cellString(row, col["crop"]))
+		if cropName == "" {
+			continue
+		}
+
+		records = append(records, farm.HarvestRecord{
+			CycleID:       strings.TrimSpace(cellString(row, col["cycle_id"])),
+			CropName:      cropName,
+			HarvestDate:   strings.TrimSpace(cellString(row, col["harvest_date"])),
+			ExpectedTrays: parseIntCell(row, col["expected_trays"]),
+			ActualTrays:   parseIntCell(row, col["actual_trays"]),
+			ExpectedGrams: parseIntCell(row, col["expected_grams"]),
+			ActualGrams:   parseIntCell(row, col["actual_grams"]),
+			Notes:         strings.TrimSpace(cellString(row, col["notes"])),
+		})
+	}
+
+	return records, nil
+}
+
+// ─── Pull: Trials (trials.json) ─────────────────────────────────────────────
+
+// PullTrials reads the "Trials" tab from the Google Sheet and returns
+// the data as []trial.TrialRecord. Used when linking an existing Sheet
+// on a new device.
+//
+// Known limitations:
+//   - Observations (free-text daily notes) are not stored in the Sheet,
+//     so they won't transfer between devices.
+//   - Tray count is not in the Sheet — defaults to 1.
+//   - Tentative task IDs are local-only and won't transfer.
+//
+// The round-trip is lossy but gives the new device enough to display
+// trial status and confirmed parameters.
+func (sc *SheetsClient) PullTrials() ([]trial.TrialRecord, error) {
+	// Make sure the tab exists.
+	if err := sc.ensureTab(trialsTab); err != nil {
+		return nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, sheetRange(trialsTab),
+	).Do()
+	if err != nil {
+		return nil, fmt.Errorf("could not read Trials tab: %w", err)
+	}
+
+	// Build a header lookup so columns are found by name, not position.
+	col := make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	// Trials in the Sheet are stored as blocks of rows — each row is one
+	// confirmed day. All rows in the same block share the same crop name,
+	// trial variable, status, and sow date. Parameters (soak, seed, dirt,
+	// etc.) only appear on the first row of each block.
+	//
+	// We group consecutive rows with the same (name + sow_date) into one
+	// TrialRecord. If a new combination appears, we start a new record.
+
+	type trialKey struct {
+		name    string
+		sowDate string
+	}
+
+	// trialMap preserves insertion order via keyOrder slice.
+	trialMap := make(map[trialKey]*trial.TrialRecord)
+	var keyOrder []trialKey
+
+	for i, row := range resp.Values {
+		if i == 0 {
+			continue // skip header row
+		}
+		if len(row) == 0 {
+			continue // blank row
+		}
+
+		name := strings.TrimSpace(cellString(row, col["name"]))
+		if name == "" {
+			continue
+		}
+
+		sowDate := strings.TrimSpace(cellString(row, col["sow_date"]))
+		key := trialKey{name: name, sowDate: sowDate}
+
+		// If this is a new trial block, create the record.
+		if _, exists := trialMap[key]; !exists {
+			// Generate a fresh unique ID for each pulled trial.
+			id, idErr := task.GenerateID()
+			if idErr != nil {
+				continue
+			}
+
+			trialMap[key] = &trial.TrialRecord{
+				ID:            id,
+				CropName:      name,
+				TrialVariable: strings.TrimSpace(cellString(row, col["trial_variable"])),
+				SowDate:       sowDate,
+				Status:        strings.TrimSpace(cellString(row, col["status"])),
+				Trays:         1, // tray count not stored in Sheet — default to 1
+				OvernightSoak: parseBoolCell(row, col["overnight_soak"]),
+				SoakHours:     parseFloatCell(row, col["soak_hours"]),
+				SeedGrams:     parseFloatCell(row, col["seed_grams"]),
+				DirtLitres:    parseFloatCell(row, col["dirt_litres"]),
+			}
+
+			// Default dirt to 1 litre if the cell was empty or zero.
+			if trialMap[key].DirtLitres == 0 {
+				trialMap[key].DirtLitres = 1.0
+			}
+
+			// Read actual yield from the first row if present.
+			yieldStr := strings.TrimSpace(cellString(row, col["yield_grams"]))
+			if yieldStr != "" {
+				if v, err := strconv.Atoi(yieldStr); err == nil {
+					trialMap[key].ActualYieldGrams = v
+				}
+			}
+
+			keyOrder = append(keyOrder, key)
+		}
+
+		// Add this row's day data to the trial's confirmed days.
+		tr := trialMap[key]
+		tr.ConfirmedDays = append(tr.ConfirmedDays, trial.TrialDayParams{
+			Day:   parseIntCell(row, col["day"]),
+			Stage: strings.TrimSpace(cellString(row, col["stage"])),
+			Tasks: strings.TrimSpace(cellString(row, col["tasks"])),
+		})
+	}
+
+	// Assemble the final slice in insertion order.
+	var records []trial.TrialRecord
+	for _, key := range keyOrder {
+		tr := trialMap[key]
+
+		// Derive LastManaged from the sow date — set it to the day before
+		// the sow date so the manage flow starts at Day 1 if the user
+		// decides to manage this trial on the new device.
+		if tr.SowDate != "" {
+			if sowTime, parseErr := time.Parse(task.DateFormat, tr.SowDate); parseErr == nil {
+				tr.LastManaged = sowTime.AddDate(0, 0, -1).Format(task.DateFormat)
+			}
+		}
+
+		records = append(records, *tr)
+	}
+
+	return records, nil
 }
 
 // ─── Fire-and-forget sync helper ────────────────────────────────────────────

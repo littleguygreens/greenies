@@ -38,36 +38,41 @@
                 schedule to Google Calendar, Tasks, and Sheets.
             </p>
             <p class="task-notes">
-                Clicking below will open Google in your browser.
+                Clicking below will open Google's sign-in page.
                 Sign in and click "Allow" to grant greenies permission to manage
-                your calendar, tasks, and spreadsheets.
+                your calendar, tasks, and spreadsheets. Then come back here.
             </p>
 
-            <button id="signin-btn"
-                    class="btn btn-primary"
-                    hx-post="/google-signin"
-                    hx-target="#signin-area"
-                    hx-swap="innerHTML"
-                    hx-disabled-elt="this">
+            <!-- This is a regular link, not an htmx button. /auth/start
+                 redirects to Google's sign-in page. On Android, the WebView
+                 intercepts the Google URL and opens it in Chrome (because
+                 Google blocks sign-in from embedded WebViews). On desktop,
+                 it opens in the same browser window. Either way, after the
+                 user approves, Google redirects back to /auth/callback,
+                 which saves the token and redirects to /sync. -->
+            <a href="/auth/start" class="btn btn-primary" style="display: inline-block;">
                 Sign in with Google
-            </button>
+            </a>
 
-            <!-- Shown while waiting for the user to approve in their browser. -->
-            <div id="signin-spinner" style="display: none; margin-top: 1.5rem;">
-                <p>Waiting for you to approve in the browser...</p>
-                <p class="task-notes">
-                    A Google sign-in page should have opened in your browser.
-                    Sign in and click "Allow", then come back here.
-                </p>
-            </div>
-
+            <!-- On Android, the user signs in via Chrome and then switches
+                 back to the app. The WebView still shows this page, so we
+                 poll the server to detect when the token has been saved.
+                 Once it exists, we reload the page to show the next step.
+                 On desktop this is harmless — the /auth/callback redirect
+                 reloads the page before this poll fires. -->
             <script>
                 (function() {
-                    var btn = document.getElementById("signin-btn");
-                    var spinner = document.getElementById("signin-spinner");
-                    btn.addEventListener("htmx:beforeRequest", function() {
-                        spinner.style.display = "block";
-                    });
+                    var check = setInterval(function() {
+                        fetch("/auth/status")
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (data.signed_in) {
+                                    clearInterval(check);
+                                    window.location.href = "/sync";
+                                }
+                            })
+                            .catch(function() {}); // ignore errors, keep trying
+                    }, 2000); // check every 2 seconds
                 })();
             </script>
         </div>
@@ -79,15 +84,36 @@
         <div id="sheets-setup-area">
             <h2 style="margin-top: 0;">Link Google Sheets</h2>
             <p>
-                You're signed in with Google. The next step is to create a Google
-                Sheet for your farm data.
+                You're signed in with Google. Next, link a Google Sheet for
+                your farm data.
             </p>
+
+            <!-- Option A: Use an existing Sheet (e.g. from the desktop version) -->
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+                <p style="margin-top: 0;"><strong>Already have a greenies Sheet?</strong></p>
+                <p class="task-notes" style="margin-bottom: 0.75rem;">
+                    If you set up greenies on another device, paste your Sheet URL
+                    here to link this device to the same Sheet.
+                </p>
+                <form style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <input type="text" name="sheet_url"
+                           placeholder="https://docs.google.com/spreadsheets/d/..."
+                           style="flex: 1; min-width: 200px; padding: 0.5rem; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;">
+                    <button type="submit" class="btn btn-primary"
+                            hx-post="/sheets-link"
+                            hx-include="[name='sheet_url']"
+                            hx-target="#sheets-setup-area"
+                            hx-swap="innerHTML"
+                            hx-disabled-elt="this">
+                        Link
+                    </button>
+                </form>
+            </div>
+
+            <!-- Option B: Create a brand new Sheet -->
             <p class="task-notes">
-                This creates a spreadsheet called "greenies" in your Google Drive
-                with four tabs: Crops, Cycle, Farm, and Trials.
-                Your existing local data will be uploaded automatically.
-                You'll be able to view and edit your crop library and farm layout
-                from any device.
+                Or create a new Sheet from scratch. This makes a spreadsheet called
+                "greenies" in your Google Drive and uploads your local data.
             </p>
 
             <button id="sheets-setup-btn"
@@ -96,7 +122,7 @@
                     hx-target="#sheets-setup-area"
                     hx-swap="innerHTML"
                     hx-disabled-elt="this">
-                Link Google Sheets
+                Create New Sheet
             </button>
 
             <div id="sheets-setup-spinner" style="display: none; margin-top: 1.5rem;">
@@ -114,19 +140,19 @@
             </script>
         </div>
 
-        <!-- The Sync Now button is still available for Calendar-only sync. -->
+        <!-- Push button is still available for Calendar-only sync. -->
         <hr style="border-color: #333; margin: 2rem 0;">
 
-        <p>You can also sync your schedule to Google Calendar without linking Sheets.</p>
+        <p>You can also push your schedule to Google Calendar without linking Sheets.</p>
 
-        <button id="sync-btn"
+        <button id="push-btn"
                 class="btn btn-primary"
-                hx-post="/sync"
+                hx-post="/sync-push"
                 hx-target="#sync-result-area"
                 hx-swap="innerHTML"
                 hx-disabled-elt="this"
                 style="margin-top: 0.5rem;">
-            Sync Calendar Only
+            Push to Calendar
         </button>
 
         <div id="sync-result-area"></div>
@@ -140,7 +166,7 @@
 
         <script>
             (function() {
-                var btn = document.getElementById("sync-btn");
+                var btn = document.getElementById("push-btn");
                 var timerBox = document.getElementById("sync-timer");
                 var elapsedSpan = document.getElementById("sync-elapsed");
                 var intervalId = null;
@@ -163,17 +189,11 @@
         </script>
 
     {{else}}
-        <!-- ── State 4: Everything linked — full sync ────────────────────
-             Credentials, token, and Sheet are all set up. One button does
-             the full sync: pull from Sheets, push to Sheets, then sync
-             Calendar and Tasks. -->
-        <p>Sync your farm data with Google.</p>
-        <p class="task-notes">
-            This pulls your crop library and farm layout from Google Sheets,
-            pushes trial data to Google Sheets, then syncs your schedule to
-            Google Calendar and Google Tasks.
-            Running it multiple times is safe — duplicates are automatically removed.
-        </p>
+        <!-- ── State 4: Everything linked — pull or push ─────────────────
+             Credentials, token, and Sheet are all set up. Two buttons let
+             the user choose the direction of the sync:
+               Pull = download from Google → overwrite local files
+               Push = upload local files → overwrite Google data -->
 
         {{if .SheetID}}
             <p style="margin-bottom: 1.5rem;">
@@ -185,14 +205,39 @@
             </p>
         {{end}}
 
-        <button id="sync-btn"
-                class="btn btn-primary"
-                hx-post="/sync"
-                hx-target="#sync-area"
-                hx-swap="innerHTML"
-                hx-disabled-elt="this">
-            Sync Now
-        </button>
+        <!-- Pull button -->
+        <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+            <p style="margin-top: 0;"><strong>Pull from Google</strong></p>
+            <p class="task-notes" style="margin-bottom: 0.75rem;">
+                Download data from Google Sheets and overwrite local files.
+                Use this to bring this device up to date with changes made elsewhere.
+            </p>
+            <button id="pull-btn"
+                    class="btn btn-primary"
+                    hx-post="/sync-pull"
+                    hx-target="#sync-area"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this">
+                Pull from Google
+            </button>
+        </div>
+
+        <!-- Push button -->
+        <div style="padding: 1rem; border: 1px solid var(--border); border-radius: 4px;">
+            <p style="margin-top: 0;"><strong>Push to Google</strong></p>
+            <p class="task-notes" style="margin-bottom: 0.75rem;">
+                Upload local data to Google Sheets, Calendar, and Tasks.
+                Use this after making changes on this device.
+            </p>
+            <button id="push-btn"
+                    class="btn btn-primary"
+                    hx-post="/sync-push"
+                    hx-target="#sync-area"
+                    hx-swap="innerHTML"
+                    hx-disabled-elt="this">
+                Push to Google
+            </button>
+        </div>
 
         <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
             <p>Syncing with Google...</p>
@@ -203,31 +248,37 @@
 
         <script>
             (function() {
-                var btn = document.getElementById("sync-btn");
                 var timerBox = document.getElementById("sync-timer");
                 var elapsedSpan = document.getElementById("sync-elapsed");
                 var intervalId = null;
 
-                btn.addEventListener("htmx:beforeRequest", function() {
-                    timerBox.style.display = "block";
-                    var startTime = Date.now();
-                    intervalId = setInterval(function() {
-                        var seconds = Math.floor((Date.now() - startTime) / 1000);
-                        if (seconds >= 60) {
-                            var minutes = Math.floor(seconds / 60);
-                            var remainSeconds = seconds % 60;
-                            elapsedSpan.textContent = minutes + "m " + remainSeconds + "s";
-                        } else {
-                            elapsedSpan.textContent = seconds + "s";
-                        }
-                    }, 1000);
-                });
+                // Attach the timer to both buttons — whichever one is
+                // clicked starts the stopwatch.
+                ["pull-btn", "push-btn"].forEach(function(id) {
+                    var btn = document.getElementById(id);
+                    if (!btn) return;
 
-                btn.addEventListener("htmx:afterRequest", function() {
-                    if (intervalId !== null) {
-                        clearInterval(intervalId);
-                        intervalId = null;
-                    }
+                    btn.addEventListener("htmx:beforeRequest", function() {
+                        timerBox.style.display = "block";
+                        var startTime = Date.now();
+                        intervalId = setInterval(function() {
+                            var seconds = Math.floor((Date.now() - startTime) / 1000);
+                            if (seconds >= 60) {
+                                var minutes = Math.floor(seconds / 60);
+                                var remainSeconds = seconds % 60;
+                                elapsedSpan.textContent = minutes + "m " + remainSeconds + "s";
+                            } else {
+                                elapsedSpan.textContent = seconds + "s";
+                            }
+                        }, 1000);
+                    });
+
+                    btn.addEventListener("htmx:afterRequest", function() {
+                        if (intervalId !== null) {
+                            clearInterval(intervalId);
+                            intervalId = null;
+                        }
+                    });
                 });
             })();
         </script>
@@ -305,47 +356,11 @@
         </p>
     </div>
 
-    <!-- After setup succeeds, offer the full Sync Now button. -->
-    <button id="sync-btn"
-            class="btn btn-primary"
-            hx-post="/sync"
-            hx-target="#sync-area"
-            hx-swap="innerHTML"
-            hx-disabled-elt="this"
-            style="margin-top: 1rem;">
-        Sync Now
-    </button>
-
-    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
-        <p>Syncing with Google...</p>
-        <p style="font-size: 1.5rem; font-weight: 600; color: #8bc34a;">
-            ⏱ <span id="sync-elapsed">0s</span>
-        </p>
-    </div>
-
-    <script>
-        (function() {
-            var btn = document.getElementById("sync-btn");
-            var timerBox = document.getElementById("sync-timer");
-            var elapsedSpan = document.getElementById("sync-elapsed");
-            var intervalId = null;
-            btn.addEventListener("htmx:beforeRequest", function() {
-                timerBox.style.display = "block";
-                var startTime = Date.now();
-                intervalId = setInterval(function() {
-                    var seconds = Math.floor((Date.now() - startTime) / 1000);
-                    if (seconds >= 60) {
-                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
-                    } else {
-                        elapsedSpan.textContent = seconds + "s";
-                    }
-                }, 1000);
-            });
-            btn.addEventListener("htmx:afterRequest", function() {
-                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
-            });
-        })();
-    </script>
+    <p style="margin-top: 1rem;">
+        <a href="/sync" class="btn btn-primary" style="display: inline-block;">
+            Back to Sync
+        </a>
+    </p>
 {{end}}
 {{end}}
 
@@ -360,91 +375,26 @@
         <p>Check your internet connection and try again.</p>
     </div>
 
-    <button id="sync-btn"
-            class="btn btn-primary"
-            hx-post="/sync"
-            hx-target="#sync-area"
-            hx-swap="innerHTML"
-            hx-disabled-elt="this"
-            style="margin-top: 1rem;">
-        Retry
-    </button>
-
-    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
-        <p>Syncing with Google...</p>
-        <p style="font-size: 1.5rem; font-weight: 600; color: #8bc34a;">
-            ⏱ <span id="sync-elapsed">0s</span>
-        </p>
-    </div>
-
-    <script>
-        (function() {
-            var btn = document.getElementById("sync-btn");
-            var timerBox = document.getElementById("sync-timer");
-            var elapsedSpan = document.getElementById("sync-elapsed");
-            var intervalId = null;
-            btn.addEventListener("htmx:beforeRequest", function() {
-                timerBox.style.display = "block";
-                var startTime = Date.now();
-                intervalId = setInterval(function() {
-                    var seconds = Math.floor((Date.now() - startTime) / 1000);
-                    if (seconds >= 60) {
-                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
-                    } else {
-                        elapsedSpan.textContent = seconds + "s";
-                    }
-                }, 1000);
-            });
-            btn.addEventListener("htmx:afterRequest", function() {
-                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
-            });
-        })();
-    </script>
+    <p style="margin-top: 1rem;">
+        <a href="/sync" class="btn btn-primary" style="display: inline-block;">
+            Back to Sync
+        </a>
+    </p>
 {{else}}
     <div class="clear-success">
-        <p>Sync complete! Finished in {{.Elapsed}}.</p>
-        <p class="task-notes">Your Google data is up to date.</p>
+        {{if eq .Direction "pull"}}
+            <p>Pull complete! Finished in {{.Elapsed}}.</p>
+            <p class="task-notes">Local data updated from Google.</p>
+        {{else}}
+            <p>Push complete! Finished in {{.Elapsed}}.</p>
+            <p class="task-notes">Google data updated from this device.</p>
+        {{end}}
     </div>
 
-    <button id="sync-btn"
-            class="btn btn-primary"
-            hx-post="/sync"
-            hx-target="#sync-area"
-            hx-swap="innerHTML"
-            hx-disabled-elt="this"
-            style="margin-top: 1rem;">
-        Sync Again
-    </button>
-
-    <div id="sync-timer" style="display: none; margin-top: 1.5rem;">
-        <p>Syncing with Google...</p>
-        <p style="font-size: 1.5rem; font-weight: 600; color: #8bc34a;">
-            ⏱ <span id="sync-elapsed">0s</span>
-        </p>
-    </div>
-
-    <script>
-        (function() {
-            var btn = document.getElementById("sync-btn");
-            var timerBox = document.getElementById("sync-timer");
-            var elapsedSpan = document.getElementById("sync-elapsed");
-            var intervalId = null;
-            btn.addEventListener("htmx:beforeRequest", function() {
-                timerBox.style.display = "block";
-                var startTime = Date.now();
-                intervalId = setInterval(function() {
-                    var seconds = Math.floor((Date.now() - startTime) / 1000);
-                    if (seconds >= 60) {
-                        elapsedSpan.textContent = Math.floor(seconds / 60) + "m " + (seconds % 60) + "s";
-                    } else {
-                        elapsedSpan.textContent = seconds + "s";
-                    }
-                }, 1000);
-            });
-            btn.addEventListener("htmx:afterRequest", function() {
-                if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
-            });
-        })();
-    </script>
+    <p style="margin-top: 1rem;">
+        <a href="/sync" class="btn btn-primary" style="display: inline-block;">
+            Back to Sync
+        </a>
+    </p>
 {{end}}
 {{end}}

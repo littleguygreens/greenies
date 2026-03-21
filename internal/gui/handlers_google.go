@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/gcal"
 	"github.com/littleguygreens/greenies/internal/store"
+	"github.com/littleguygreens/greenies/internal/supply"
 	"github.com/littleguygreens/greenies/internal/trial"
 )
 
@@ -40,70 +42,136 @@ func handleSyncPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSyncAction performs the full Google sync (POST /sync).
+// handleSyncPull downloads everything from Google to the local device
+// (POST /sync-pull).
 //
-// This does the same thing as "greenies sync" in the terminal:
-//  1. Google Sheets sync — pulls crops and farm layout from the Sheet,
-//     pushes trials to the Sheet (same two-way + one-way pattern as CLI)
-//  2. Google Calendar + Tasks sync — pushes the schedule to Google
+// This reads every tab in the Google Sheet and overwrites the matching
+// local files: crops.csv, farm.csv, supplies.csv, tasks.json, cycles.json,
+// harvests.json, and trials.json.
 //
-// The response is an htmx fragment (just a piece of HTML, not a full page)
-// that replaces the button area with a success or error message.
-func handleSyncAction(w http.ResponseWriter, r *http.Request) {
-	// context.Background() means "no deadline, no cancellation" — fine for
-	// a user-initiated action they're waiting on.
+// Use this when the desktop has pushed fresh data and you want to bring
+// this device up to date. "Pull" = Google → local.
+func handleSyncPull(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	syncStart := time.Now()
 
-	// ── Google Sheets sync ──────────────────────────────────────────────
-	//
-	// Pull crops and farm layout from the Sheet (two-way), push trials
-	// (one-way). This runs BEFORE Calendar/Tasks so that any changes
-	// from the Sheet are reflected in the local data first.
-	//
-	// Sheets sync is best-effort — if it fails, we continue with the
-	// Calendar/Tasks sync using whatever local data we have.
+	cfg, _ := config.Load()
+	if !cfg.SheetsEnabled || cfg.SheetID == "" {
+		renderFragment(w, "sync_result.html", map[string]any{
+			"Error": "Google Sheets is not linked yet.",
+		})
+		return
+	}
+
+	sc, err := gcal.NewSheetsClient(ctx, cfg.SheetID)
+	if err != nil {
+		renderFragment(w, "sync_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not connect to Google Sheets: %v", err),
+		})
+		return
+	}
+
+	// Pull crops.
+	if pulledCrops, pullErr := sc.PullCrops(); pullErr == nil && len(pulledCrops) > 0 {
+		if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
+			_ = crop.WriteCrops(cropsPath, pulledCrops)
+		}
+	}
+
+	// Pull farm layout.
+	if pulledFarm, pullErr := sc.PullFarm(); pullErr == nil && len(pulledFarm) > 0 {
+		if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
+			_ = farm.WriteConfig(farmPath, pulledFarm)
+		}
+	}
+
+	// Pull supplies.
+	if pulledSupplies, pullErr := sc.PullSupplies(); pullErr == nil && len(pulledSupplies) > 0 {
+		_ = supply.Save(pulledSupplies)
+	}
+
+	// Pull schedule (tasks).
+	if pulledTasks, pullErr := sc.PullSchedule(); pullErr == nil && len(pulledTasks) > 0 {
+		_ = store.Save(pulledTasks)
+	}
+
+	// Pull batches (cycles).
+	if pulledCycles, pullErr := sc.PullBatches(); pullErr == nil && len(pulledCycles) > 0 {
+		_ = farm.SaveCycles(pulledCycles)
+	}
+
+	// Pull harvests.
+	if pulledHarvests, pullErr := sc.PullHarvests(); pullErr == nil && len(pulledHarvests) > 0 {
+		_ = farm.SaveHarvests(pulledHarvests)
+	}
+
+	// Pull trials (lossy — observations don't transfer).
+	if pulledTrials, pullErr := sc.PullTrials(); pullErr == nil && len(pulledTrials) > 0 {
+		_ = trial.SaveTrials(pulledTrials)
+	}
+
+	elapsed := time.Since(syncStart).Round(time.Second)
+	renderFragment(w, "sync_result.html", map[string]any{
+		"Elapsed":   elapsed.String(),
+		"Direction": "pull",
+	})
+}
+
+// handleSyncPush uploads everything from the local device to Google
+// (POST /sync-push).
+//
+// This pushes all local data to the Google Sheet, then syncs the schedule
+// to Google Calendar and Google Tasks. "Push" = local → Google.
+func handleSyncPush(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+	syncStart := time.Now()
+
+	// ── Push to Google Sheets ───────────────────────────────────────────
 	cfg, _ := config.Load()
 	if cfg.SheetsEnabled && cfg.SheetID != "" {
 		sc, err := gcal.NewSheetsClient(ctx, cfg.SheetID)
 		if err == nil {
-			// Pull crops (two-way).
-			if pulledCrops, pullErr := sc.PullCrops(); pullErr == nil && len(pulledCrops) > 0 {
-				if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
-					_ = crop.WriteCrops(cropsPath, pulledCrops)
+			// Push crops.
+			if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
+				localSource := crop.CSVSource{Path: cropsPath}
+				if localCrops, loadErr := localSource.LoadCrops(); loadErr == nil && len(localCrops) > 0 {
+					_ = sc.PushCrops(localCrops)
 				}
 			}
 
-			// Pull farm layout (two-way).
-			if pulledFarm, pullErr := sc.PullFarm(); pullErr == nil && len(pulledFarm) > 0 {
-				if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
-					_ = farm.WriteConfig(farmPath, pulledFarm)
-				}
+			// Push farm layout.
+			if envs, loadErr := farm.LoadConfig(); loadErr == nil && len(envs) > 0 {
+				_ = sc.PushFarm(envs)
 			}
 
-			// Push trials (one-way to Sheet).
+			// Push supplies.
+			if supplies, loadErr := supply.Load(); loadErr == nil && len(supplies) > 0 {
+				_ = sc.PushSupplies(supplies)
+			}
+
+			// Push trials.
 			if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
 				_ = sc.PushTrials(records)
 			}
 
-			// Push schedule (one-way to Sheet).
+			// Push schedule (tasks.json).
 			if allTasks, loadErr := store.Load(); loadErr == nil {
 				_ = sc.PushSchedule(allTasks)
 			}
 
-			// Push batches (one-way to Sheet).
+			// Push batches (cycles.json).
 			if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
 				_ = sc.PushBatches(allCycles)
 			}
 
-			// Push harvests (one-way to Sheet).
+			// Push harvests (harvests.json).
 			if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
 				_ = sc.PushHarvests(allHarvests)
 			}
 		}
 	}
 
-	// ── Load local data (freshly synced from Sheets if available) ───────
+	// ── Google Calendar + Tasks sync ────────────────────────────────────
 	tasks, err := store.Load()
 	if err != nil {
 		renderFragment(w, "sync_result.html", map[string]any{
@@ -115,7 +183,6 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 	envs, _ := farm.LoadConfig()
 	cycles, _ := farm.LoadCycles()
 
-	// ── Google Calendar + Tasks sync ────────────────────────────────────
 	exporter, err := gcal.NewExporter(ctx)
 	if err != nil {
 		renderFragment(w, "sync_result.html", map[string]any{
@@ -135,7 +202,8 @@ func handleSyncAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderFragment(w, "sync_result.html", map[string]any{
-		"Elapsed": elapsed.String(),
+		"Elapsed":   elapsed.String(),
+		"Direction": "push",
 	})
 }
 
@@ -219,33 +287,245 @@ func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGoogleSignIn runs just the Google OAuth browser sign-in flow
-// (POST /google-signin). This is the GUI equivalent of the browser popup
-// that normally triggers the first time you run "greenies sync" in the
-// terminal.
+// handleSheetsLink links an existing Google Sheet by URL (POST /sheets-link).
 //
-// It does NOT create a Sheet or sync anything — just authenticates. Once
-// signed in, the sync page reloads to show the next step (Link Google
-// Sheets / Sync Now).
+// This is for users who already have a greenies Sheet (e.g. set up on their
+// desktop) and want to link a second device to the same Sheet instead of
+// creating a duplicate. They paste the Sheet URL and we extract the ID.
 //
-// How it works:
-//  1. Calls AuthorizeClient, which opens the user's browser to Google's
-//     sign-in page if no saved token exists
-//  2. The user approves in their browser — the token is saved to token.json
-//  3. Returns an htmx fragment confirming success (or showing the error)
-func handleGoogleSignIn(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+// A Google Sheets URL looks like:
+//   https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
+// We extract the SHEET_ID_HERE part.
+func handleSheetsLink(w http.ResponseWriter, r *http.Request) {
+	sheetURL := strings.TrimSpace(r.FormValue("sheet_url"))
 
-	// AuthorizeClient handles everything: opens the browser, waits for
-	// approval, saves the token. If a token already exists, it returns
-	// immediately without opening the browser.
-	_, err := gcal.AuthorizeClient(ctx)
-	if err != nil {
-		renderFragment(w, "google_signin_result.html", map[string]any{
-			"Error": fmt.Sprintf("%v", err),
+	if sheetURL == "" {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": "Please paste a Google Sheet URL.",
 		})
 		return
 	}
 
-	renderFragment(w, "google_signin_result.html", map[string]any{})
+	// Extract the Sheet ID from the URL.
+	// The ID is between "/d/" and the next "/" (or end of string).
+	sheetID := extractSheetID(sheetURL)
+	if sheetID == "" {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": "Could not find a Sheet ID in that URL. Make sure you paste the full URL from your browser's address bar (it should contain /spreadsheets/d/).",
+		})
+		return
+	}
+
+	// Verify we can actually access this Sheet by trying to read from it.
+	ctx := context.Background()
+	_, clientErr := gcal.NewSheetsClient(ctx, sheetID)
+	if clientErr != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not access that Sheet: %v. Make sure the Sheet belongs to the Google account you signed in with.", clientErr),
+		})
+		return
+	}
+
+	// Save the sheet ID to config.
+	cfg, _ := config.Load()
+	cfg.SheetsEnabled = true
+	cfg.SheetID = sheetID
+	if saveErr := config.Save(cfg); saveErr != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not save config: %v", saveErr),
+		})
+		return
+	}
+
+	// Pull ALL data FROM the Sheet into local files. This is the key
+	// difference from "Create New Sheet" — we're joining an existing Sheet,
+	// so we want its data, not the other way around.
+	//
+	// This is the main use case for a fresh Android install: the desktop
+	// has been pushing data to the Sheet, and the phone needs all of it.
+	sc, pullErr := gcal.NewSheetsClient(ctx, sheetID)
+	if pullErr == nil {
+		// Pull crops (two-way).
+		if pulledCrops, err := sc.PullCrops(); err == nil && len(pulledCrops) > 0 {
+			if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
+				_ = crop.WriteCrops(cropsPath, pulledCrops)
+			}
+		}
+
+		// Pull farm layout (two-way).
+		if pulledFarm, err := sc.PullFarm(); err == nil && len(pulledFarm) > 0 {
+			if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
+				_ = farm.WriteConfig(farmPath, pulledFarm)
+			}
+		}
+
+		// Pull supplies (two-way).
+		if pulledSupplies, err := sc.PullSupplies(); err == nil && len(pulledSupplies) > 0 {
+			_ = supply.Save(pulledSupplies)
+		}
+
+		// Pull schedule — all calendar tasks from the Sheet.
+		// Each task gets a fresh local ID since IDs aren't stored in the Sheet.
+		if pulledTasks, err := sc.PullSchedule(); err == nil && len(pulledTasks) > 0 {
+			_ = store.Save(pulledTasks)
+		}
+
+		// Pull batches — planned crop cycle records.
+		if pulledCycles, err := sc.PullBatches(); err == nil && len(pulledCycles) > 0 {
+			_ = farm.SaveCycles(pulledCycles)
+		}
+
+		// Pull harvests — harvest log records.
+		if pulledHarvests, err := sc.PullHarvests(); err == nil && len(pulledHarvests) > 0 {
+			_ = farm.SaveHarvests(pulledHarvests)
+		}
+
+		// Pull trials — trial records (lossy: observations don't transfer).
+		if pulledTrials, err := sc.PullTrials(); err == nil && len(pulledTrials) > 0 {
+			_ = trial.SaveTrials(pulledTrials)
+		}
+	}
+
+	renderFragment(w, "sheets_setup_result.html", map[string]any{
+		"SheetID": sheetID,
+	})
+}
+
+// extractSheetID pulls the spreadsheet ID out of a Google Sheets URL.
+// Given "https://docs.google.com/spreadsheets/d/ABC123/edit", returns "ABC123".
+// Returns "" if the URL doesn't look like a Sheets URL.
+func extractSheetID(url string) string {
+	// Look for "/d/" which precedes the ID in all Google Sheets URLs.
+	marker := "/d/"
+	idx := strings.Index(url, marker)
+	if idx == -1 {
+		// Maybe they just pasted the ID directly (no URL).
+		// Sheet IDs are long alphanumeric strings with dashes and underscores.
+		if len(url) > 20 && !strings.Contains(url, " ") && !strings.Contains(url, "/") {
+			return url
+		}
+		return ""
+	}
+
+	// Extract everything after "/d/" up to the next "/" or end of string.
+	rest := url[idx+len(marker):]
+	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
+		return rest[:slashIdx]
+	}
+	return rest
+}
+
+// handleGoogleSignIn redirects the browser/WebView to Google's sign-in page
+// (POST /google-signin). This replaces the old approach that tried to launch
+// an external browser with xdg-open — which doesn't work on Android.
+//
+// The flow:
+//  1. This handler returns an HTML fragment with a JavaScript redirect
+//     to /auth/start (which builds the Google URL and redirects there)
+//  2. The user signs in on Google's page (inside the same window)
+//  3. Google redirects to /auth/callback with a one-time code
+//  4. /auth/callback exchanges the code for a token, saves it, and
+//     redirects to /sync — where the user now sees the next step
+//
+// This works everywhere: Android WebView, desktop browser, Chromium --app.
+func handleGoogleSignIn(w http.ResponseWriter, r *http.Request) {
+	// Return a tiny HTML fragment that redirects the whole page to
+	// /auth/start. We use JavaScript because htmx swaps only replace
+	// part of the page — we need to navigate away entirely so Google's
+	// sign-in page can take over the full window.
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, `<p>Redirecting to Google sign-in...</p><script>window.location.href="/auth/start";</script>`)
+}
+
+// handleAuthStart builds the Google sign-in URL and redirects the browser
+// there (GET /auth/start). After the user approves on Google's page,
+// Google will redirect back to /auth/callback on this same server.
+func handleAuthStart(w http.ResponseWriter, r *http.Request) {
+	// Build the callback URL pointing back to our own server.
+	// We use the Host header from the request so it works regardless
+	// of what port the server is on.
+	callbackURL := "http://" + r.Host + "/auth/callback"
+
+	authURL, err := gcal.BuildAuthURL(callbackURL)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Could not build auth URL: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect the browser to Google's sign-in page.
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// handleAuthCallback receives the one-time code from Google after the user
+// approves (GET /auth/callback?code=...). It exchanges the code for a
+// long-lived token, saves it, and redirects to the sync page.
+func handleAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		// Google sends an "error" parameter if the user denied access
+		// or something went wrong on Google's end.
+		errMsg := r.URL.Query().Get("error")
+		if errMsg == "" {
+			errMsg = "no authorisation code received"
+		}
+		// Show a simple error page with a link back to sync.
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<h2>Sign-in failed</h2><p>%s</p><p><a href="/sync">Back to sync</a></p>`, errMsg)
+		return
+	}
+
+	// The callback URL must match exactly what BuildAuthURL used.
+	callbackURL := "http://" + r.Host + "/auth/callback"
+
+	ctx := context.Background()
+	if err := gcal.HandleAuthCallback(ctx, code, callbackURL); err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<h2>Sign-in failed</h2><p>%v</p><p><a href="/sync">Back to sync</a></p>`, err)
+		return
+	}
+
+	// Success! Now we need to get the user back to the app.
+	//
+	// On desktop, the browser IS the app — redirect to /sync and done.
+	// On Android, Chrome handled the sign-in but the app is in the WebView.
+	// We show a "success, go back" message so the user knows to switch back.
+	//
+	// How we detect Android: the User-Agent header from an Android Chrome
+	// browser will contain "Android". The WebView would too, but the WebView
+	// never reaches this handler (it opened Chrome for Google sign-in).
+	ua := r.Header.Get("User-Agent")
+	if containsAndroid(ua) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { background: #1a1a1a; color: #c8e6c9; font-family: sans-serif;
+         display: flex; align-items: center; justify-content: center;
+         min-height: 100vh; margin: 0; text-align: center; padding: 2rem; }
+  h2 { color: #8bc34a; }
+</style>
+</head><body>
+<div>
+  <h2>Signed in!</h2>
+  <p>You can close this tab and go back to Greenies.</p>
+</div>
+</body></html>`)
+		return
+	}
+
+	// Desktop — redirect straight to the sync page.
+	http.Redirect(w, r, "/sync", http.StatusFound)
+}
+
+// containsAndroid checks if a User-Agent string contains "Android".
+// Used to detect when the auth callback is being handled by Chrome on
+// an Android phone (as opposed to a desktop browser).
+func containsAndroid(ua string) bool {
+	for i := 0; i <= len(ua)-7; i++ {
+		if ua[i:i+7] == "Android" {
+			return true
+		}
+	}
+	return false
 }

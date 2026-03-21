@@ -30,6 +30,9 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import android.content.Intent;
+import android.net.Uri;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
@@ -353,10 +356,38 @@ public class MainActivity extends Activity {
         // remember things like which nav sections are collapsed.
         settings.setDomStorageEnabled(true);
 
-        // Keep all navigation inside the WebView. Without this, clicking a
-        // link would open the phone's default browser app instead of staying
-        // inside Greenies.
-        webView.setWebViewClient(new WebViewClient());
+        // Keep all navigation inside the WebView — EXCEPT for Google sign-in.
+        //
+        // Google blocks OAuth sign-in from WebViews (embedded browser windows)
+        // for security reasons — they want to make sure the user is signing in
+        // on a "real" browser where they can verify the URL. So when the user
+        // taps "Sign in with Google", we detect the Google auth URL and open
+        // it in Chrome instead.
+        //
+        // The flow:
+        //   1. User taps "Sign in with Google" in the WebView
+        //   2. WebView navigates to /auth/start, which redirects to Google
+        //   3. We intercept the Google URL and open it in Chrome
+        //   4. User signs in on Google in Chrome
+        //   5. Google redirects back to localhost:8080/auth/callback
+        //   6. Our Go server catches it, saves the token, shows "Success!"
+        //   7. User switches back to Greenies app
+        //   8. The sync page auto-refreshes and sees they're signed in
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                // If the URL is going to Google's auth pages, open it in
+                // Chrome (or whatever the default browser is) instead of
+                // loading it in the WebView. Google blocks WebViews.
+                if (url.contains("accounts.google.com")
+                        || url.contains("googleapis.com/auth")) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                    return true; // "I handled it — don't load in WebView"
+                }
+                return false; // Everything else stays in the WebView
+            }
+        });
 
         // Tell the WebView to use wide viewport mode so it respects the
         // viewport meta tag in our HTML. Without this, some Android versions

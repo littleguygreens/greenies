@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/config"
+	"github.com/littleguygreens/greenies/internal/gcal"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -367,9 +368,29 @@ func StartServer(port int) error {
 	mux.HandleFunc("POST /settings", handleSettingsUpdate)
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
-	mux.HandleFunc("POST /sync", handleSyncAction)
+	mux.HandleFunc("POST /sync-pull", handleSyncPull)
+	mux.HandleFunc("POST /sync-push", handleSyncPush)
 	mux.HandleFunc("POST /google-signin", handleGoogleSignIn)
 	mux.HandleFunc("POST /sheets-setup", handleSheetsSetup)
+	mux.HandleFunc("POST /sheets-link", handleSheetsLink)
+
+	// ── OAuth callback ──────────────────────────────────────────────
+	// These two routes handle Google sign-in inside the browser/WebView
+	// instead of trying to launch an external browser (which doesn't
+	// work on Android). See handleAuthStart and handleAuthCallback in
+	// handlers_google.go for details.
+	mux.HandleFunc("GET /auth/start", handleAuthStart)
+	mux.HandleFunc("GET /auth/callback", handleAuthCallback)
+	// Polled by the sync page to detect when the user finishes signing
+	// in via an external browser (Android). Returns {"signed_in": true/false}.
+	mux.HandleFunc("GET /auth/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if gcal.TokenExists() {
+			w.Write([]byte(`{"signed_in":true}`))
+		} else {
+			w.Write([]byte(`{"signed_in":false}`))
+		}
+	})
 
 	// ── Open terminal ───────────────────────────────────────────────
 	// When the grower clicks "Open Terminal" in the nav bar, the browser

@@ -22,13 +22,44 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"os"      // for os.Exit and reading command-line arguments
+	"runtime" // for detecting Android
 	"strings" // for string utilities used throughout
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/task"
 )
+
+// init runs automatically before main(). We use it to fix DNS on Android.
+//
+// On a normal computer, Go looks up domain names (like "google.com") by
+// reading /etc/resolv.conf to find the DNS server. On Android, that file
+// doesn't exist — Android handles DNS through its own system APIs that
+// Go's pure-Go resolver can't access.
+//
+// Without this fix, any network request that needs a domain name lookup
+// (like the OAuth token exchange with googleapis.com) will fail with
+// "connection refused" because Go tries localhost as a DNS server.
+//
+// The fix: on Android, we tell Go to use Google's public DNS server
+// (8.8.8.8) directly. This works because our Android manifest already
+// has the INTERNET permission.
+func init() {
+	if runtime.GOOS == "android" {
+		net.DefaultResolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				// Use Google's public DNS. The "udp" network type means we're
+				// sending a standard DNS query over UDP (the normal way DNS works).
+				dialer := net.Dialer{Timeout: 5 * time.Second}
+				return dialer.DialContext(ctx, "udp", "8.8.8.8:53")
+			},
+		}
+	}
+}
 
 func main() {
 	// os.Args is the list of words the user typed. os.Args[0] is always the

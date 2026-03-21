@@ -178,13 +178,18 @@ javac -source 11 -target 11 \
 #
 # Think of it like translating a book: javac wrote it in "Java dialect," and
 # d8 translates it to "Android dialect."
+#
+# We pass ALL .class files in the package directory, not just MainActivity.class.
+# When Java code uses anonymous inner classes (like our WebViewClient override),
+# the compiler creates extra files named MainActivity$1.class, MainActivity$2.class,
+# etc. All of them must be included or d8 will fail with a "nest mates" error.
 
 echo "==> Converting Java bytecode to Android DEX format..."
 "$BUILD_TOOLS/d8" \
     --release \
     --lib "$PLATFORM" \
     --output "$OUT" \
-    "$OUT/classes/com/littleguygreens/greenies/MainActivity.class"
+    "$OUT/classes/com/littleguygreens/greenies/"*.class
 
 # ── Step 6: Assemble the final APK ──────────────────────────────────────────
 #

@@ -215,7 +215,8 @@ func saveToken(tok *oauth2.Token) error {
 // AuthorizeClient returns an HTTP client that automatically attaches the
 // user's Google Calendar permission to every request it makes.
 //
-// On first run: opens the browser, asks the user to approve, saves the token.
+// On first run (CLI): opens the browser, asks the user to approve, saves the token.
+// On first run (GUI): the GUI uses BuildAuthURL / HandleAuthCallback instead.
 // On subsequent runs: loads the saved token silently. If the token has
 // expired, the oauth2 library refreshes it automatically using the internet —
 // no user action needed.
@@ -247,6 +248,75 @@ func AuthorizeClient(ctx context.Context) (*http.Client, error) {
 	// config.Client wraps a standard HTTP client with automatic token
 	// attachment and refresh — every API call goes through it transparently.
 	return config.Client(ctx, tok), nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUI-friendly auth flow (redirect-based)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The CLI auth flow (runBrowserAuthFlow) launches an external browser and
+// spins up a temporary server on a random port. This works on desktop but
+// FAILS on Android because:
+//   - There's no xdg-open to launch a browser
+//   - The Go process is sandboxed and can't start other apps
+//   - The WebView IS the browser — we need to redirect it, not open a new one
+//
+// The GUI flow works differently:
+//   1. BuildAuthURL builds the Google sign-in URL with a callback pointing
+//      back to the main server (e.g. http://127.0.0.1:8080/auth/callback)
+//   2. The frontend redirects the WebView/browser to that URL
+//   3. The user signs in on Google's page (inside the same window)
+//   4. Google redirects back to /auth/callback with a one-time code
+//   5. HandleAuthCallback exchanges the code for a token and saves it
+//   6. The handler redirects to /sync — the user sees "Sync Now"
+//
+// This works everywhere: Android WebView, desktop browser, Chromium --app.
+
+// BuildAuthURL creates a Google sign-in URL that redirects back to the
+// given callback URL after the user approves. The callback URL should be
+// a route on the main Greenies server (e.g. http://127.0.0.1:8080/auth/callback).
+//
+// Returns the URL the browser/WebView should navigate to.
+func BuildAuthURL(callbackURL string) (string, error) {
+	config, err := loadConfig()
+	if err != nil {
+		return "", err
+	}
+
+	config.RedirectURL = callbackURL
+
+	// AccessTypeOffline means Google gives us a refresh token too, so the
+	// program can silently renew the permission without the browser again.
+	authURL := config.AuthCodeURL("state", oauth2.AccessTypeOffline)
+	return authURL, nil
+}
+
+// HandleAuthCallback takes the one-time code from Google's redirect,
+// exchanges it for a long-lived token, and saves the token to disk.
+// This is called by the GUI's /auth/callback route handler.
+//
+// The callbackURL must match exactly what was passed to BuildAuthURL —
+// Google verifies they're the same as a security check.
+func HandleAuthCallback(ctx context.Context, code string, callbackURL string) error {
+	config, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	config.RedirectURL = callbackURL
+
+	// Exchange the one-time code for a long-lived token.
+	tok, err := config.Exchange(ctx, code)
+	if err != nil {
+		return fmt.Errorf("could not exchange authorisation code for token: %w", err)
+	}
+
+	// Save the token so the user never has to sign in again.
+	if err := saveToken(tok); err != nil {
+		return fmt.Errorf("signed in successfully but could not save token: %w", err)
+	}
+
+	return nil
 }
 
 // runBrowserAuthFlow handles the one-time setup where the user grants
