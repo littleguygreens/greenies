@@ -21,6 +21,111 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared pull/push helpers
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// These two functions contain the actual "download everything" and "upload
+// everything" logic for Google Sheets. They're used by multiple handlers:
+//
+//   - pullAllFromSheet is called by handleSyncPull AND handleSheetsLink
+//   - pushAllToSheet  is called by handleSyncPush AND handleSheetsSetup
+//
+// By keeping the logic in one place, we avoid the bug where changing how
+// one handler pulls/pushes data but forgetting to update the other.
+
+// pullAllFromSheet downloads every data type from the Google Sheet into
+// the matching local files: crops.csv, farm.csv, supplies.csv, tasks.json,
+// cycles.json, harvests.json, and trials.json.
+//
+// Each pull is independent — if one fails, the others still run. This is
+// "best effort" because a partially-synced state is better than no sync.
+func pullAllFromSheet(sc *gcal.SheetsClient) {
+	// Pull crops.
+	if pulledCrops, err := sc.PullCrops(); err == nil && len(pulledCrops) > 0 {
+		if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
+			_ = crop.WriteCrops(cropsPath, pulledCrops)
+		}
+	}
+
+	// Pull farm layout.
+	if pulledFarm, err := sc.PullFarm(); err == nil && len(pulledFarm) > 0 {
+		if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
+			_ = farm.WriteConfig(farmPath, pulledFarm)
+		}
+	}
+
+	// Pull supplies.
+	if pulledSupplies, err := sc.PullSupplies(); err == nil && len(pulledSupplies) > 0 {
+		_ = supply.Save(pulledSupplies)
+	}
+
+	// Pull schedule (tasks).
+	if pulledTasks, err := sc.PullSchedule(); err == nil && len(pulledTasks) > 0 {
+		_ = store.Save(pulledTasks)
+	}
+
+	// Pull batches (cycles).
+	if pulledCycles, err := sc.PullBatches(); err == nil && len(pulledCycles) > 0 {
+		_ = farm.SaveCycles(pulledCycles)
+	}
+
+	// Pull harvests.
+	if pulledHarvests, err := sc.PullHarvests(); err == nil && len(pulledHarvests) > 0 {
+		_ = farm.SaveHarvests(pulledHarvests)
+	}
+
+	// Pull trials (lossy — observations don't transfer via Sheets).
+	if pulledTrials, err := sc.PullTrials(); err == nil && len(pulledTrials) > 0 {
+		_ = trial.SaveTrials(pulledTrials)
+	}
+}
+
+// pushAllToSheet uploads every data type from local files to the Google
+// Sheet: crops.csv, farm.csv, supplies.csv, trials.json, tasks.json,
+// cycles.json, and harvests.json.
+//
+// Like pullAllFromSheet, each push is independent and best-effort.
+func pushAllToSheet(sc *gcal.SheetsClient) {
+	// Push crops.
+	if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
+		localSource := crop.CSVSource{Path: cropsPath}
+		if localCrops, loadErr := localSource.LoadCrops(); loadErr == nil && len(localCrops) > 0 {
+			_ = sc.PushCrops(localCrops)
+		}
+	}
+
+	// Push farm layout.
+	if envs, loadErr := farm.LoadConfig(); loadErr == nil && len(envs) > 0 {
+		_ = sc.PushFarm(envs)
+	}
+
+	// Push supplies.
+	if supplies, loadErr := supply.Load(); loadErr == nil && len(supplies) > 0 {
+		_ = sc.PushSupplies(supplies)
+	}
+
+	// Push trials.
+	if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
+		_ = sc.PushTrials(records)
+	}
+
+	// Push schedule (tasks.json).
+	if allTasks, loadErr := store.Load(); loadErr == nil {
+		_ = sc.PushSchedule(allTasks)
+	}
+
+	// Push batches (cycles.json).
+	if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
+		_ = sc.PushBatches(allCycles)
+	}
+
+	// Push harvests (harvests.json).
+	if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
+		_ = sc.PushHarvests(allHarvests)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sync
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -71,44 +176,7 @@ func handleSyncPull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Pull crops.
-	if pulledCrops, pullErr := sc.PullCrops(); pullErr == nil && len(pulledCrops) > 0 {
-		if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
-			_ = crop.WriteCrops(cropsPath, pulledCrops)
-		}
-	}
-
-	// Pull farm layout.
-	if pulledFarm, pullErr := sc.PullFarm(); pullErr == nil && len(pulledFarm) > 0 {
-		if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
-			_ = farm.WriteConfig(farmPath, pulledFarm)
-		}
-	}
-
-	// Pull supplies.
-	if pulledSupplies, pullErr := sc.PullSupplies(); pullErr == nil && len(pulledSupplies) > 0 {
-		_ = supply.Save(pulledSupplies)
-	}
-
-	// Pull schedule (tasks).
-	if pulledTasks, pullErr := sc.PullSchedule(); pullErr == nil && len(pulledTasks) > 0 {
-		_ = store.Save(pulledTasks)
-	}
-
-	// Pull batches (cycles).
-	if pulledCycles, pullErr := sc.PullBatches(); pullErr == nil && len(pulledCycles) > 0 {
-		_ = farm.SaveCycles(pulledCycles)
-	}
-
-	// Pull harvests.
-	if pulledHarvests, pullErr := sc.PullHarvests(); pullErr == nil && len(pulledHarvests) > 0 {
-		_ = farm.SaveHarvests(pulledHarvests)
-	}
-
-	// Pull trials (lossy — observations don't transfer).
-	if pulledTrials, pullErr := sc.PullTrials(); pullErr == nil && len(pulledTrials) > 0 {
-		_ = trial.SaveTrials(pulledTrials)
-	}
+	pullAllFromSheet(sc)
 
 	elapsed := time.Since(syncStart).Round(time.Second)
 	renderFragment(w, "sync_result.html", map[string]any{
@@ -131,43 +199,7 @@ func handleSyncPush(w http.ResponseWriter, r *http.Request) {
 	if cfg.SheetsEnabled && cfg.SheetID != "" {
 		sc, err := gcal.NewSheetsClient(ctx, cfg.SheetID)
 		if err == nil {
-			// Push crops.
-			if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
-				localSource := crop.CSVSource{Path: cropsPath}
-				if localCrops, loadErr := localSource.LoadCrops(); loadErr == nil && len(localCrops) > 0 {
-					_ = sc.PushCrops(localCrops)
-				}
-			}
-
-			// Push farm layout.
-			if envs, loadErr := farm.LoadConfig(); loadErr == nil && len(envs) > 0 {
-				_ = sc.PushFarm(envs)
-			}
-
-			// Push supplies.
-			if supplies, loadErr := supply.Load(); loadErr == nil && len(supplies) > 0 {
-				_ = sc.PushSupplies(supplies)
-			}
-
-			// Push trials.
-			if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
-				_ = sc.PushTrials(records)
-			}
-
-			// Push schedule (tasks.json).
-			if allTasks, loadErr := store.Load(); loadErr == nil {
-				_ = sc.PushSchedule(allTasks)
-			}
-
-			// Push batches (cycles.json).
-			if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
-				_ = sc.PushBatches(allCycles)
-			}
-
-			// Push harvests (harvests.json).
-			if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
-				_ = sc.PushHarvests(allHarvests)
-			}
+			pushAllToSheet(sc)
 		}
 	}
 
@@ -248,38 +280,7 @@ func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 	// to re-enter everything by hand.
 	sc, clientErr := gcal.NewSheetsClient(ctx, sheetID)
 	if clientErr == nil {
-		// Push crops.
-		if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
-			localSource := crop.CSVSource{Path: cropsPath}
-			if localCrops, loadErr := localSource.LoadCrops(); loadErr == nil && len(localCrops) > 0 {
-				_ = sc.PushCrops(localCrops)
-			}
-		}
-
-		// Push farm layout.
-		if envs, loadErr := farm.LoadConfig(); loadErr == nil && len(envs) > 0 {
-			_ = sc.PushFarm(envs)
-		}
-
-		// Push trials.
-		if records, loadErr := trial.LoadTrials(); loadErr == nil && len(records) > 0 {
-			_ = sc.PushTrials(records)
-		}
-
-		// Push schedule (tasks.json).
-		if allTasks, loadErr := store.Load(); loadErr == nil {
-			_ = sc.PushSchedule(allTasks)
-		}
-
-		// Push batches (cycles.json).
-		if allCycles, loadErr := farm.LoadCycles(); loadErr == nil {
-			_ = sc.PushBatches(allCycles)
-		}
-
-		// Push harvests (harvests.json).
-		if allHarvests, loadErr := farm.LoadHarvests(); loadErr == nil {
-			_ = sc.PushHarvests(allHarvests)
-		}
+		pushAllToSheet(sc)
 	}
 
 	renderFragment(w, "sheets_setup_result.html", map[string]any{
@@ -345,45 +346,7 @@ func handleSheetsLink(w http.ResponseWriter, r *http.Request) {
 	// has been pushing data to the Sheet, and the phone needs all of it.
 	sc, pullErr := gcal.NewSheetsClient(ctx, sheetID)
 	if pullErr == nil {
-		// Pull crops (two-way).
-		if pulledCrops, err := sc.PullCrops(); err == nil && len(pulledCrops) > 0 {
-			if cropsPath, pathErr := crop.CropsFilePath(); pathErr == nil {
-				_ = crop.WriteCrops(cropsPath, pulledCrops)
-			}
-		}
-
-		// Pull farm layout (two-way).
-		if pulledFarm, err := sc.PullFarm(); err == nil && len(pulledFarm) > 0 {
-			if farmPath, pathErr := farm.FarmConfigPath(); pathErr == nil {
-				_ = farm.WriteConfig(farmPath, pulledFarm)
-			}
-		}
-
-		// Pull supplies (two-way).
-		if pulledSupplies, err := sc.PullSupplies(); err == nil && len(pulledSupplies) > 0 {
-			_ = supply.Save(pulledSupplies)
-		}
-
-		// Pull schedule — all calendar tasks from the Sheet.
-		// Each task gets a fresh local ID since IDs aren't stored in the Sheet.
-		if pulledTasks, err := sc.PullSchedule(); err == nil && len(pulledTasks) > 0 {
-			_ = store.Save(pulledTasks)
-		}
-
-		// Pull batches — planned crop cycle records.
-		if pulledCycles, err := sc.PullBatches(); err == nil && len(pulledCycles) > 0 {
-			_ = farm.SaveCycles(pulledCycles)
-		}
-
-		// Pull harvests — harvest log records.
-		if pulledHarvests, err := sc.PullHarvests(); err == nil && len(pulledHarvests) > 0 {
-			_ = farm.SaveHarvests(pulledHarvests)
-		}
-
-		// Pull trials — trial records (lossy: observations don't transfer).
-		if pulledTrials, err := sc.PullTrials(); err == nil && len(pulledTrials) > 0 {
-			_ = trial.SaveTrials(pulledTrials)
-		}
+		pullAllFromSheet(sc)
 	}
 
 	renderFragment(w, "sheets_setup_result.html", map[string]any{
