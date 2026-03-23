@@ -15,11 +15,19 @@ package main
 // for a future release.
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
+
+// appIcon is the Greenies sprout icon (white on dark green, 192×192 PNG)
+// embedded directly into the binary at compile time. This means the icon
+// travels with the program — no external image file needed.
+//
+//go:embed desktop/icon.png
+var appIcon []byte
 
 // runInstallDesktop creates a .desktop shortcut file in two places:
 //   1. The grower's Desktop folder — so they see an icon to double-click
@@ -45,12 +53,36 @@ func runInstallDesktop() {
 		os.Exit(1)
 	}
 
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Error: could not find home directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// ── Install the app icon ────────────────────────────────────────────
+	//
+	// Copy the embedded PNG icon to ~/.local/share/icons/ — the standard
+	// location for user-installed icons on Linux. Every desktop environment
+	// (Cinnamon, GNOME, KDE, etc.) looks here for icons referenced by
+	// .desktop files.
+	iconDir := filepath.Join(home, ".local", "share", "icons")
+	if err := os.MkdirAll(iconDir, 0755); err != nil {
+		fmt.Printf("Warning: could not create icon directory %s: %v\n", iconDir, err)
+	}
+	iconPath := filepath.Join(iconDir, "greenies.png")
+	if err := os.WriteFile(iconPath, appIcon, 0644); err != nil {
+		fmt.Printf("Warning: could not write icon %s: %v\n", iconPath, err)
+	} else {
+		fmt.Printf("Installed icon: %s\n", iconPath)
+	}
+
 	// Build the .desktop file content. This is a standard format defined by
 	// freedesktop.org — every Linux desktop environment knows how to read it.
 	//
 	// Key fields:
 	//   Name        — what appears under the icon
 	//   Exec        — the command to run when double-clicked
+	//   Icon        — path to the PNG icon shown on the desktop and app menu
 	//   Terminal     — false means "don't open a terminal window"
 	//   Type        — "Application" is the standard type for programs
 	//   Comment     — tooltip text shown when hovering over the icon
@@ -61,19 +93,14 @@ func runInstallDesktop() {
 Name=Greenies
 Comment=Microgreens farm scheduler
 Exec=%s
+Icon=%s
 Terminal=false
 Type=Application
 Categories=Office;
 StartupNotify=false
-`, exePath)
+`, exePath, iconPath)
 
 	// ── Place 1: the grower's Desktop folder ────────────────────────────
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Printf("Error: could not find home directory: %v\n", err)
-		os.Exit(1)
-	}
-
 	desktopDir := filepath.Join(home, "Desktop")
 	desktopPath := filepath.Join(desktopDir, "greenies.desktop")
 
