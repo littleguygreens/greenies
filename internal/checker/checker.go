@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/task"
 )
@@ -48,6 +49,12 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 	if len(cycles) == 0 {
 		return nil
 	}
+
+	// Load the irrigation mode setting so we know whether bottom trays are
+	// returned at move-to-light ("flood", the default) or stay paired for
+	// the entire cycle ("tray_pairs").
+	cfg, _ := config.Load()
+	trayPairs := cfg.IsTrayPairs()
 
 	// ── Step 1: collect capacity limits from the farm layout ──────────────────
 
@@ -212,11 +219,15 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 				growNames = append(growNames, label)
 			}
 
-			// Bottom trays are in use from the sow date up to (but not
-			// including) the move-to-light date. They are returned to the
-			// cupboard the moment trays go onto the lit rack.
-			// Date range: sow <= date < moveToLight
-			if !date.Before(pc.sow) && date.Before(pc.moveToLight) {
+			// Bottom trays: in "flood" mode they are returned at
+			// move-to-light (date range: sow <= date < moveToLight).
+			// In "tray_pairs" mode they stay paired for the whole cycle,
+			// same as grow trays (date range: sow <= date < harvest).
+			bottomEnd := pc.moveToLight
+			if trayPairs {
+				bottomEnd = pc.harvest
+			}
+			if !date.Before(pc.sow) && date.Before(bottomEnd) {
 				bottomInUse += pc.c.Trays
 				bottomNames = append(bottomNames, label)
 			}

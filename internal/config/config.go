@@ -57,6 +57,21 @@ type Config struct {
 	//
 	// Valid values: "metric" (default) or "imperial".
 	Units string `json:"units"`
+
+	// IrrigationMode controls how the program counts bottom tray usage.
+	//
+	// "flood" (the default) — the lit environment has automated watering
+	//   (flood tables, drip lines, etc.), so bottom trays are only needed
+	//   during blackout. They are returned to inventory the moment trays
+	//   move to light.
+	//
+	// "tray_pairs" — every grow tray sits in a bottom tray for the entire
+	//   cycle, from sow through harvest. Both trays are returned together
+	//   on harvest day. This is typical for growers who hand-water on open
+	//   shelving or wire racks.
+	//
+	// Valid values: "flood" (default) or "tray_pairs".
+	IrrigationMode string `json:"irrigation_mode"`
 }
 
 // IsImperial returns true when the grower has chosen the imperial unit
@@ -65,6 +80,13 @@ type Config struct {
 // = metric) automatically.
 func (c Config) IsImperial() bool {
 	return c.Units == "imperial"
+}
+
+// IsTrayPairs returns true when the grower uses tray pairs for the full
+// cycle (bottom trays stay paired from sow to harvest). When false
+// (the default "flood" mode), bottom trays are returned at move-to-light.
+func (c Config) IsTrayPairs() bool {
+	return c.IrrigationMode == "tray_pairs"
 }
 
 // WeightLabel returns the small-weight unit label: "g" for metric, "oz"

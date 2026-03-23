@@ -68,14 +68,15 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderPage(w, "settings.html", map[string]any{
-		"Spaces":    spaces,
-		"Inventory": inventory,
-		"Supplies":  supplies,
-		"Lowercase": cfg.Lowercase,
-		"WeekStart": cfg.WeekStart,
-		"Theme":     cfg.Theme,
-		"Units":     cfg.Units,
-		"Saved":     r.URL.Query().Get("saved") == "1",
+		"Spaces":         spaces,
+		"Inventory":      inventory,
+		"Supplies":       supplies,
+		"Lowercase":      cfg.Lowercase,
+		"WeekStart":      cfg.WeekStart,
+		"Theme":          cfg.Theme,
+		"Units":          cfg.Units,
+		"IrrigationMode": cfg.IrrigationMode,
+		"Saved":          r.URL.Query().Get("saved") == "1",
 	})
 }
 
@@ -221,6 +222,12 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cfg.Units = "metric"
 	}
+	im := r.FormValue("irrigation_mode")
+	if im == "tray_pairs" {
+		cfg.IrrigationMode = "tray_pairs"
+	} else {
+		cfg.IrrigationMode = "flood"
+	}
 	_ = config.Save(cfg)
 
 	// Save to farm.csv.
@@ -257,13 +264,14 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderPage(w, "settings.html", map[string]any{
-		"Spaces":    spaces,
-		"Inventory": inventory,
-		"Supplies":  supplies,
-		"Lowercase": cfg.Lowercase,
-		"WeekStart": cfg.WeekStart,
-		"Theme":     cfg.Theme,
-		"Units":     cfg.Units,
-		"Saved":     true,
+		"Spaces":         spaces,
+		"Inventory":      inventory,
+		"Supplies":       supplies,
+		"Lowercase":      cfg.Lowercase,
+		"WeekStart":      cfg.WeekStart,
+		"Theme":          cfg.Theme,
+		"Units":          cfg.Units,
+		"IrrigationMode": cfg.IrrigationMode,
+		"Saved":          true,
 	})
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/checker"
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/task"
 )
@@ -531,6 +532,14 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 		// Count how many of each tray type are currently out on the farm.
 		growInUse := 0
 		bottomInUse := 0
+
+		// Load the irrigation mode setting. In "tray_pairs" mode, bottom
+		// trays stay paired with grow trays for the entire cycle (sow
+		// through harvest). In the default "flood" mode, bottom trays are
+		// returned the moment trays move to light.
+		cfg, _ := config.Load()
+		trayPairs := cfg.IsTrayPairs()
+
 		for _, cc := range classified {
 			isHarvestDay := t.Equal(cc.harvest)
 			// Grow trays: occupied during blackout and light stages,
@@ -538,9 +547,17 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 			if (cc.status == statusBlackout || cc.status == statusLit) && !isHarvestDay {
 				growInUse += cc.cycle.Trays
 			}
-			// Bottom trays: occupied during blackout only.
-			if cc.status == statusBlackout {
-				bottomInUse += cc.cycle.Trays
+			// Bottom trays: in "flood" mode they are only used during
+			// blackout (returned at move-to-light). In "tray_pairs" mode
+			// they stay paired for the whole cycle, same as grow trays.
+			if trayPairs {
+				if (cc.status == statusBlackout || cc.status == statusLit) && !isHarvestDay {
+					bottomInUse += cc.cycle.Trays
+				}
+			} else {
+				if cc.status == statusBlackout {
+					bottomInUse += cc.cycle.Trays
+				}
 			}
 		}
 
@@ -809,13 +826,26 @@ func BuildSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 
 	if hasInventory {
 		growInUse, bottomInUse := 0, 0
+
+		// Load irrigation mode — "tray_pairs" means bottom trays stay
+		// paired for the whole cycle, "flood" (default) means they are
+		// returned at move-to-light.
+		cfg, _ := config.Load()
+		trayPairs := cfg.IsTrayPairs()
+
 		for _, cc := range classified {
 			isHarvestDay := t.Equal(cc.harvest)
 			if (cc.status == statusBlackout || cc.status == statusLit) && !isHarvestDay {
 				growInUse += cc.cycle.Trays
 			}
-			if cc.status == statusBlackout {
-				bottomInUse += cc.cycle.Trays
+			if trayPairs {
+				if (cc.status == statusBlackout || cc.status == statusLit) && !isHarvestDay {
+					bottomInUse += cc.cycle.Trays
+				}
+			} else {
+				if cc.status == statusBlackout {
+					bottomInUse += cc.cycle.Trays
+				}
 			}
 		}
 		if growTotal > 0 {

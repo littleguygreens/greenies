@@ -213,6 +213,30 @@
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">
+            <label>Irrigation mode</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="irrigation_mode" value="flood"
+                           {{if ne .IrrigationMode "tray_pairs"}}checked{{end}}>
+                    Flood tables
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="irrigation_mode" value="tray_pairs"
+                           {{if eq .IrrigationMode "tray_pairs"}}checked{{end}}>
+                    Tray pairs
+                </label>
+            </div>
+            <p class="task-notes" style="margin-top: 0.25rem;">
+                Controls how bottom tray inventory is counted.<br>
+                <strong>Flood tables</strong> — your lit environment has automated
+                watering (flood tables, drip lines, etc.), so bottom trays are returned
+                to inventory when trays move to light.<br>
+                <strong>Tray pairs</strong> — every grow tray sits in a bottom tray for
+                the entire cycle. Both are returned together at harvest.
+            </p>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
             <label>Units</label>
             <div class="radio-group">
                 <label class="radio-label">
@@ -302,7 +326,9 @@ function addSupplyRow() {
 
 <!-- ── Inline styles for settings inputs ──────────────────────────────── -->
 <style>
-/* Input fields inside the settings tables — themed to match the app. */
+/* Input fields inside the settings tables — themed to match the app.
+   min-width stops text fields from collapsing to the width of their
+   column header on narrow screens — ensures room for a word or two. */
 .settings-input {
     background: var(--bg);
     color: var(--text);
@@ -312,6 +338,7 @@ function addSupplyRow() {
     font-size: 0.9rem;
     font-family: inherit;
     width: 100%;
+    min-width: 8rem;
     box-sizing: border-box;
 }
 
