@@ -51,9 +51,9 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	supplies, _ := supply.Load()
 	if len(supplies) == 0 {
 		supplies = []supply.Supply{
-			{Name: "dirt"},
-			{Name: "containers"},
-			{Name: "labels"},
+			{Name: "grow medium", Category: "medium"},
+			{Name: "containers", Category: "container"},
+			{Name: "labels", Category: "label"},
 		}
 	}
 
@@ -152,8 +152,10 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Read the supply rows: supply_name[], supply_cost[], supply_units[].
+	// Read the supply rows: supply_name[], supply_category[], supply_cost[],
+	// supply_units[].
 	supplyNames := r.Form["supply_name"]
+	supplyCats := r.Form["supply_category"]
 	supplyCosts := r.Form["supply_cost"]
 	supplyUnits := r.Form["supply_units"]
 
@@ -162,6 +164,11 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimSpace(supplyNames[i])
 		if name == "" {
 			continue // skip blank rows
+		}
+
+		cat := ""
+		if i < len(supplyCats) {
+			cat = strings.TrimSpace(supplyCats[i])
 		}
 
 		costVal := 0.0
@@ -176,6 +183,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 		supplies = append(supplies, supply.Supply{
 			Name:         name,
+			Category:     cat,
 			CostPerCase:  costVal,
 			UnitsPerCase: unitsVal,
 		})

@@ -1238,8 +1238,12 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Each week is a separate table block with a small gap between them */
+/* overflow:hidden clips any label text that would extend past the right
+   edge of the table — the Go code picks shorter labels for narrow spans,
+   but this is the safety net for edge cases on small screens. */
 .mcal-week {
     margin-bottom: 0.25rem;
+    overflow: hidden;
 }
 
 /* The table itself fills the available width */
@@ -1285,8 +1289,8 @@ input:focus, select:focus, textarea:focus {
 
 /* Individual day cells — empty by default (themed background).
    position:relative lets the label inside position itself relative to
-   the cell. overflow:visible lets the label text spill across into
-   neighbouring cells so long labels remain readable. */
+   the cell. overflow:visible lets the single centered label spill
+   across neighbouring cells in the same row. */
 .mcal-cell {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -1317,14 +1321,18 @@ input:focus, select:focus, textarea:focus {
     box-shadow: inset 0 0 0 100px rgba(139, 195, 74, 0.15);
 }
 
-/* Label text on the first cell of each stage run — floats on top of
-   the coloured cells and overflows to the right so you can read
-   "sunnies 16x — dark" even though one cell is only one day wide. */
+/* Label text — one per crop row, centered across all active cells.
+   The --span variable (set inline by the template) tells the label
+   how many cells it covers. The label is positioned on the first
+   active cell and stretches across --span cells using width: span × 100%.
+   text-align:center keeps it visually centered in the coloured bar. */
 .mcal-label {
     position: absolute;
     top: 50%;
-    left: 4px;
+    left: 0;
     transform: translateY(-50%);
+    width: calc(var(--span) * 100%);
+    text-align: center;
     white-space: nowrap;
     font-size: 0.7rem;
     font-weight: 600;

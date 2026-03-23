@@ -272,10 +272,7 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Build the header line ────────────────────────────────────────────
-	trayWord := "tray"
-	if trays != 1 {
-		trayWord = "trays"
-	}
+	trayWord := task.TrayWord(trays)
 	anchorLabel := "harvest"
 	if !fromHarvest {
 		anchorLabel = "sow"

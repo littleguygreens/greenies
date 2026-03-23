@@ -153,7 +153,7 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	}
 
 	// parseFloat reads a named column as a decimal number.
-	// An empty cell defaults to 1.0 (the standard dirt amount per tray).
+	// An empty cell defaults to 1.0 (the standard medium amount per tray).
 	parseFloat := func(colName string) (float64, error) {
 		v := get(row, colName)
 		if v == "" {
@@ -181,7 +181,7 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	if err != nil {
 		return Crop{}, err
 	}
-	dirtLitres, err := parseFloat("dirt_litres")
+	mediumLitres, err := parseFloat("medium_litres")
 	if err != nil {
 		return Crop{}, err
 	}
@@ -203,18 +203,23 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	if err != nil {
 		return Crop{}, err
 	}
-	// parseFloat defaults empty cells to 1.0 (for dirt), but seed_cost
+	// parseFloat defaults empty cells to 1.0 (for medium), but seed_cost
 	// should default to 0 (meaning "not set yet"). Override here.
 	if get(row, "seed_cost") == "" {
 		seedCost = 0
 	}
 
-	seedPurchaseWeight, err := parseInt("seed_purchase_weight")
+	seedPurchaseWeight, err := parseFloat("seed_purchase_weight")
 	if err != nil {
 		return Crop{}, err
 	}
+	// parseFloat defaults empty cells to 1.0 (for medium), but seed purchase
+	// weight should default to 0 (meaning "not set yet"). Override here.
+	if get(row, "seed_purchase_weight") == "" {
+		seedPurchaseWeight = 0
+	}
 
-	unitWeight, err := parseInt("unit_weight")
+	unitWeight, err := parseFloat("unit_weight")
 	if err != nil {
 		return Crop{}, err
 	}
@@ -238,7 +243,7 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 		OvernightSoak: parseBool("overnight_soak"),
 		SoakHours:     soakHours,
 		SeedGrams:     seedGrams,
-		DirtLitres:    dirtLitres,
+		MediumLitres:    mediumLitres,
 		DarkDays:      darkDays,
 		LightDays:     lightDays,
 		YieldGrams:    yieldGrams,
@@ -547,7 +552,7 @@ func WriteCrops(path string, crops []Crop) error {
 	header := []string{
 		"name", "day", "stage", "tasks",
 		"overnight_soak", "soak_hours", "seed_grams",
-		"dirt_litres", "dark_days", "light_days", "yield_grams",
+		"medium_litres", "dark_days", "light_days", "yield_grams",
 		"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 	}
 	if err := w.Write(header); err != nil {
@@ -586,7 +591,7 @@ func WriteCrops(path string, crops []Crop) error {
 				row[col["soak_hours"]] = strconv.Itoa(c.SoakHours)
 				row[col["seed_grams"]] = strconv.Itoa(c.SeedGrams)
 
-				row[col["dirt_litres"]] = FormatFloat(c.DirtLitres)
+				row[col["medium_litres"]] = FormatFloat(c.MediumLitres)
 
 				row[col["dark_days"]] = strconv.Itoa(c.DarkDays)
 				row[col["light_days"]] = strconv.Itoa(c.LightDays)
@@ -595,8 +600,8 @@ func WriteCrops(path string, crops []Crop) error {
 				// Business / costing fields.
 				// Format money as clean decimals: "15" not "15.00", "4.5" stays "4.5".
 				row[col["seed_cost"]] = FormatFloat(c.SeedCost)
-				row[col["seed_purchase_weight"]] = strconv.Itoa(c.SeedPurchaseWeight)
-				row[col["unit_weight"]] = strconv.Itoa(c.UnitWeight)
+				row[col["seed_purchase_weight"]] = FormatFloat(c.SeedPurchaseWeight)
+				row[col["unit_weight"]] = FormatFloat(c.UnitWeight)
 				row[col["unit_sell_price"]] = FormatFloat(c.UnitSellPrice)
 			}
 

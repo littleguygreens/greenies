@@ -139,7 +139,9 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 // enrichSnapshotFinancials loads the crop library and supply costs, then fills
 // in the profitability fields on every CycleRow in the snapshot. It also
-// computes a FinancialSummary with farm-wide totals.
+// computes a FinancialSummary — but only for cycles harvesting this calendar
+// week (Monday through Sunday). This gives the grower a useful "what am I
+// making this week?" number instead of a sum of everything on the farm.
 //
 // This runs after BuildSnapshot() because the visualizer package deliberately
 // knows nothing about crops or supplies — it only deals with farm layout and
@@ -165,8 +167,30 @@ func enrichSnapshotFinancials(snap *visualizer.SnapshotData) {
 		cropMap[strings.ToLower(c.Name)] = c
 	}
 
-	// Load supply costs (dirt, containers, labels).
+	// Load supply costs (medium, containers, labels).
 	sc := supply.LoadSupplyCosts()
+
+	// Work out the boundaries of the current calendar week. The grower's
+	// WeekStart setting controls whether weeks run Mon–Sun or Sun–Sat.
+	// Any cycle whose harvest date falls in this window counts toward the
+	// weekly financial summary.
+	cfg, _ := config.Load()
+	now := time.Now()
+	weekday := int(now.Weekday()) // Sunday=0 … Saturday=6
+	var daysBack int
+	if cfg.WeekStart == "mon" {
+		// ISO weeks: Monday is day 1, Sunday is day 7.
+		if weekday == 0 {
+			daysBack = 6 // today is Sunday → go back 6 days to Monday
+		} else {
+			daysBack = weekday - 1 // e.g. Wednesday (3) → back 2 to Monday
+		}
+	} else {
+		// US weeks: Sunday is the first day of the week.
+		daysBack = weekday // e.g. Wednesday (3) → back 3 to Sunday
+	}
+	weekStart := time.Date(now.Year(), now.Month(), now.Day()-daysBack, 0, 0, 0, 0, now.Location())
+	weekEnd := weekStart.AddDate(0, 0, 7)
 
 	// Helper that fills in financial fields on a single CycleRow.
 	enrich := func(row *visualizer.CycleRow) {
@@ -180,18 +204,34 @@ func enrichSnapshotFinancials(snap *visualizer.SnapshotData) {
 		row.HasProfit = true
 	}
 
+	// Helper that checks whether a cycle's harvest falls in this week.
+	inThisWeek := func(row *visualizer.CycleRow) bool {
+		h := row.HarvestRaw
+		return !h.Before(weekStart) && h.Before(weekEnd)
+	}
+
+	// Helper that adds a cycle's financials to the weekly totals.
+	// Uses SellableUnits (floor of total units across all trays) so we
+	// don't count fractional clamshells that can't actually be sold.
+	addToTotals := func(fin *visualizer.FinancialSummary, row *visualizer.CycleRow) {
+		if !row.HasProfit || !inThisWeek(row) {
+			return
+		}
+		c := cropMap[strings.ToLower(row.CropName)]
+		trays := float64(row.Trays)
+		fin.TotalCost += row.CostPerTray * trays
+		sellable := c.SellableUnits(row.Trays)
+		fin.TotalRevenue += float64(sellable) * c.UnitSellPrice
+		fin.HasData = true
+	}
+
 	// Walk through every cycle in every environment and enrich it.
 	var fin visualizer.FinancialSummary
 	for i := range snap.Environments {
 		for j := range snap.Environments[i].Cycles {
 			row := &snap.Environments[i].Cycles[j]
 			enrich(row)
-			if row.HasProfit {
-				trays := float64(row.Trays)
-				fin.TotalCost += row.CostPerTray * trays
-				fin.TotalRevenue += row.RevenuePerTray * trays
-				fin.HasData = true
-			}
+			addToTotals(&fin, row)
 		}
 	}
 
@@ -199,12 +239,7 @@ func enrichSnapshotFinancials(snap *visualizer.SnapshotData) {
 	for i := range snap.HarvestToday {
 		row := &snap.HarvestToday[i]
 		enrich(row)
-		if row.HasProfit {
-			trays := float64(row.Trays)
-			fin.TotalCost += row.CostPerTray * trays
-			fin.TotalRevenue += row.RevenuePerTray * trays
-			fin.HasData = true
-		}
+		addToTotals(&fin, row)
 	}
 	// Upcoming cycles aren't active yet — don't include them in totals,
 	// but still enrich for per-cycle display.

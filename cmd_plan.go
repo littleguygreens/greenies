@@ -180,12 +180,8 @@ func runPlan() {
 		// (yielding ~1000g, which covers the 700g need with some surplus).
 		trays = int(math.Ceil(float64(desiredYield) / float64(found.YieldGrams)))
 
-		trayWord := "tray"
-		if trays != 1 {
-			trayWord = "trays"
-		}
 		fmt.Printf("→ %d %s needed to yield ~%d%s (target: %d%s)\n",
-			trays, trayWord, trays*found.YieldGrams, pwl, desiredYield, pwl)
+			trays, task.TrayWord(trays), trays*found.YieldGrams, pwl, desiredYield, pwl)
 
 	default:
 		// "t", "tray", blank, or anything unrecognised — default to tray count.
@@ -247,10 +243,7 @@ func runPlan() {
 	}
 
 	// Show the full preview so the user can check everything looks right.
-	trayWord := "tray"
-	if trays != 1 {
-		trayWord = "trays"
-	}
+	trayWord := task.TrayWord(trays)
 	// The header shows the anchor date — harvest date for backward scheduling,
 	// sow date for forward scheduling — so the user knows what they entered.
 	anchorLabel := "harvest"
@@ -638,12 +631,8 @@ func runBatchPlan(
 				continue
 			}
 			trays = int(math.Ceil(float64(desiredYield) / float64(found.YieldGrams)))
-			trayWord := "tray"
-			if trays != 1 {
-				trayWord = "trays"
-			}
 			fmt.Printf("→ %d %s needed to yield ~%d%s (target: %d%s)\n",
-				trays, trayWord, trays*found.YieldGrams, pwl, desiredYield, pwl)
+				trays, task.TrayWord(trays), trays*found.YieldGrams, pwl, desiredYield, pwl)
 		default:
 			traysStr := ask("How many trays? ")
 			n, convErr := strconv.Atoi(traysStr)
@@ -662,12 +651,8 @@ func runBatchPlan(
 		}
 
 		// Show a preview so the grower can see when this crop needs to be sown.
-		trayWord := "tray"
-		if trays != 1 {
-			trayWord = "trays"
-		}
 		fmt.Printf("\n%s — %d %s — harvest %s\n\n",
-			task.Capitalize(found.Name), trays, trayWord, harvestDate)
+			task.Capitalize(found.Name), trays, task.TrayWord(trays), harvestDate)
 		for _, d := range preview {
 			tasks := d.CropDay.Tasks
 			if tasks == "" {
@@ -806,12 +791,8 @@ func runBatchPlan(
 	fmt.Println("Batch summary:")
 	fmt.Println()
 	for _, c := range allCycleRecords {
-		trayWord := "tray"
-		if c.Trays != 1 {
-			trayWord = "trays"
-		}
 		fmt.Printf("  %s  %d %s  sow %s  harvest %s  [%s]\n",
-			task.Capitalize(c.CropName), c.Trays, trayWord,
+			task.Capitalize(c.CropName), c.Trays, task.TrayWord(c.Trays),
 			c.SowDate, c.HarvestDate, farm.DisplayName(c.LitEnvironment))
 	}
 	fmt.Println()

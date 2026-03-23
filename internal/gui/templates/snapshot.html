@@ -76,7 +76,7 @@
                 {{range .Cells}}
                     <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}" data-date="{{.DateStr}}">
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
-                            {{if .Label}}<span class="mcal-label">{{.Label}}</span>{{else}}&nbsp;{{end}}
+                            {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
                         </a>
                     </td>
                 {{end}}
@@ -187,7 +187,7 @@
     <!-- ── Financials ────────────────────────────────────────────────── -->
     {{if .Snapshot.Financial.HasData}}
     <div class="snap-section">
-        <h3 class="snap-section-title">Financials (active cycles)</h3>
+        <h3 class="snap-section-title">Financials (this week)</h3>
         <div class="snap-financial-card">
             <div class="snap-financial-row">
                 <span class="snap-financial-label">Expected cost</span>

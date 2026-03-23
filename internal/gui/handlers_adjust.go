@@ -699,8 +699,8 @@ func handleAdjustConfirm(w http.ResponseWriter, r *http.Request) {
 
 // ─── Adjust helper functions ─────────────────────────────────────────────────
 //
-// These mirror the helper functions in cmd_adjust.go but work without terminal
-// I/O. They are prefixed with "gui" to avoid name collisions.
+// GUI-specific versions of the adjustment helpers. Prefixed with "gui" to
+// distinguish them from the CLI equivalents in cmd_adjust.go.
 
 // buildGUICycleView returns a day-by-day timeline from sow to harvest.
 // Each entry pairs a date with a label describing what that day is.

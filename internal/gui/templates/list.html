@@ -71,7 +71,7 @@
                 {{range .Cells}}
                     <td class="mcal-cell{{if not .InMonth}} mcal-outside{{end}}{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}" data-date="{{.DateStr}}">
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
-                            {{if .Label}}<span class="mcal-label">{{.Label}}</span>{{else}}&nbsp;{{end}}
+                            {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
                         </a>
                     </td>
                 {{end}}

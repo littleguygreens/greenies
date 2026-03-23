@@ -7,8 +7,9 @@
     The page is split into four sections:
       1. Spaces — physical environments where trays live (blackout/lit)
       2. Inventory — countable items the farm owns (grow trays, bottom trays)
-      3. Supplies — farm-wide consumables bought in bulk (dirt, containers,
-         labels). Used to calculate per-tray costs on the crop library page.
+      3. Supplies — farm-wide consumables bought in bulk (grow medium,
+         containers, labels). Used to calculate per-tray costs on the crop
+         library page.
       4. Preferences — cosmetic settings (lowercase, week start, theme)
 
     Data passed from the handler (handleSettingsPage in handlers.go):
@@ -124,15 +125,18 @@
         <!-- ── Supplies section ────────────────────────────────────────── -->
         <h2>Supplies</h2>
         <p class="task-notes">
-            Farm-wide consumables you buy in bulk — dirt, containers, labels, etc.
-            Enter what you pay per case/bag and how many units come in it. The
+            Farm-wide consumables you buy in bulk — grow medium, containers, labels,
+            etc. Enter what you pay per case/bag and how many units come in it. The
             program uses these to calculate per-tray costs on the crop library page.
+            The "category" tells the program what role each supply plays in cost
+            calculations — don't change it unless you know what you're doing.
         </p>
 
         <table class="data-table" id="supplies-table">
             <thead>
                 <tr>
                     <th>Item</th>
+                    <th>Category</th>
                     <th>Cost per case/bag ($)</th>
                     <th>Units per case/bag</th>
                     <th></th>
@@ -143,7 +147,15 @@
                 <tr>
                     <td>
                         <input type="text" name="supply_name" value="{{$s.Name}}"
-                               class="settings-input" placeholder="e.g. dirt">
+                               class="settings-input" placeholder="e.g. grow medium">
+                    </td>
+                    <td>
+                        <select name="supply_category" class="settings-input" style="width: 7rem;">
+                            <option value="" {{if eq $s.Category ""}}selected{{end}}>—</option>
+                            <option value="medium" {{if eq $s.Category "medium"}}selected{{end}}>medium</option>
+                            <option value="container" {{if eq $s.Category "container"}}selected{{end}}>container</option>
+                            <option value="label" {{if eq $s.Category "label"}}selected{{end}}>label</option>
+                        </select>
                     </td>
                     <td>
                         <input type="number" name="supply_cost" value="{{printf "%.2f" $s.CostPerCase}}"
@@ -217,7 +229,7 @@
             <p class="task-notes" style="margin-top: 0.25rem; color: #e07070;">
                 Changing units only swaps the labels — it does NOT convert
                 any numbers. You will need to update your crop values
-                (seed weight, yield, dirt, etc.) manually after switching.
+                (seed weight, yield, medium, etc.) manually after switching.
             </p>
         </div>
 
@@ -280,6 +292,7 @@ function addSupplyRow() {
     var tr = document.createElement('tr');
     tr.innerHTML =
         '<td><input type="text" name="supply_name" value="" class="settings-input" placeholder="e.g. labels"></td>' +
+        '<td><select name="supply_category" class="settings-input" style="width: 7rem;"><option value="" selected>\u2014</option><option value="medium">medium</option><option value="container">container</option><option value="label">label</option></select></td>' +
         '<td><input type="number" name="supply_cost" value="0" class="settings-input" min="0" step="0.01" style="width: 7rem;"></td>' +
         '<td><input type="number" name="supply_units" value="0" class="settings-input" min="0" step="1" style="width: 7rem;"></td>' +
         '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this supply">✕</button></td>';

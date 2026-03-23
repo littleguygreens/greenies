@@ -1,4 +1,4 @@
-name,cost_per_case,units_per_case
-labels,0,0
-containers,0,0
-dirt,0,0
+name,category,cost_per_case,units_per_case
+labels,label,0,0
+containers,container,0,0
+grow medium,medium,0,0

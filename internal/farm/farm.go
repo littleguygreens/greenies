@@ -105,8 +105,8 @@ type Cycle struct {
 	// plan was made — even if the crop library is later edited.
 	//
 	// A value of 0 means no yield data was available when this cycle was
-	// planned (e.g. cycles saved before this field was added). The harvest
-	// log treats 0 as "unknown" and omits the expected/actual comparison.
+	// planned. The harvest log treats 0 as "unknown" and omits the
+	// expected/actual comparison.
 	ExpectedGrams int
 }
 

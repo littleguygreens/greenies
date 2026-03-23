@@ -36,8 +36,8 @@ import (
 type CropRow struct {
 	crop.Crop
 
-	// UnitsPerTray is how many sellable units one tray produces.
-	UnitsPerTray int
+	// UnitsPerTray is how many sellable units one tray produces (exact decimal).
+	UnitsPerTray float64
 
 	// CostPerTray is the all-in cost to grow and package one tray, in dollars.
 	CostPerTray float64
@@ -129,9 +129,9 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 		seedGrams = v
 	}
 
-	dirtLitres := 1.0
-	if v, err := strconv.ParseFloat(r.FormValue("dirt_litres"), 64); err == nil && v > 0 {
-		dirtLitres = v
+	mediumLitres := 1.0
+	if v, err := strconv.ParseFloat(r.FormValue("medium_litres"), 64); err == nil && v > 0 {
+		mediumLitres = v
 	}
 
 	yieldGrams := 0
@@ -145,19 +145,19 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 		seedCost = v
 	}
 
-	seedPurchaseWeight := 0
-	if v, err := strconv.Atoi(r.FormValue("seed_purchase_weight")); err == nil {
+	seedPurchaseWeight := 0.0
+	if v, err := strconv.ParseFloat(r.FormValue("seed_purchase_weight"), 64); err == nil {
 		seedPurchaseWeight = v
 	}
 	// If the grower chose the large unit (kg or lb) in the dropdown,
 	// convert to the small unit (g or oz) for storage.
 	if r.FormValue("seed_weight_unit") == "kg" {
 		cfg, _ := config.Load()
-		seedPurchaseWeight *= cfg.LargeWeightMultiplier()
+		seedPurchaseWeight *= float64(cfg.LargeWeightMultiplier())
 	}
 
-	unitWeight := 100 // default: 100 g per sellable unit
-	if v, err := strconv.Atoi(r.FormValue("unit_weight")); err == nil && v > 0 {
+	unitWeight := 100.0 // default: 100 g per sellable unit
+	if v, err := strconv.ParseFloat(r.FormValue("unit_weight"), 64); err == nil && v > 0 {
 		unitWeight = v
 	}
 
@@ -224,7 +224,7 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 		OvernightSoak:      overnightSoak,
 		SoakHours:          soakHours,
 		SeedGrams:          seedGrams,
-		DirtLitres:         dirtLitres,
+		MediumLitres:         mediumLitres,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         yieldGrams,

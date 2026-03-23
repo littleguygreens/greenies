@@ -5,7 +5,6 @@
 package gui
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -150,33 +149,27 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 			hasActivity := false
 
-			prevStage := ""
 			for i := 0; i < 7; i++ {
 				d := weekStart.AddDate(0, 0, i)
 				ds := d.Format(task.DateFormat)
 				stage := ci.DayStage[ds]
 
-				// Put a label on the first cell of each new stage run.
-				label := ""
-				if stage != "" && stage != prevStage {
-					label = fmt.Sprintf("%s %dx", ci.CropName, ci.Trays)
-				}
-
 				row.Cells[i] = monthCell{
 					DayNum:        d.Day(),
 					Stage:         stage,
-					Label:         label,
 					Trays:         ci.Trays,
 					InMonth:       d.Month() == month,
 					IsHighlighted: d.Equal(now),
 					DateStr:       ds,
 				}
 
-				prevStage = stage
 				if stage != "" {
 					hasActivity = true
 				}
 			}
+
+			// Place one centered label per row across all active cells.
+			placeRowLabel(&row.Cells, ci.CropName, ci.Trays, ci.SowDate, ci.HarvestDate)
 
 			if hasActivity {
 				week.Rows = append(week.Rows, row)

@@ -51,7 +51,7 @@ type Config struct {
 	// IMPORTANT: this setting only changes the *labels* shown next to
 	// numbers. It does NOT convert any values. When a grower switches
 	// from metric to imperial, they need to manually update their crop
-	// numbers (seed weight, yield, dirt volume, etc.) to match the new
+	// numbers (seed weight, yield, medium volume, etc.) to match the new
 	// unit system. The program shows a warning about this on the
 	// settings page.
 	//
@@ -86,7 +86,7 @@ func (c Config) LargeWeightLabel() string {
 }
 
 // VolumeLabel returns the volume unit label: "L" for metric (litres),
-// "gal" for imperial (gallons). Used for dirt/growing medium amounts.
+// "gal" for imperial (gallons). Used for growing medium amounts.
 func (c Config) VolumeLabel() string {
 	if c.IsImperial() {
 		return "gal"

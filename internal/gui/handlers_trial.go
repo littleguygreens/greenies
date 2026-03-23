@@ -74,10 +74,7 @@ func handleTrialPage(w http.ResponseWriter, r *http.Request) {
 		if tr.Status != trial.StatusActive {
 			continue
 		}
-		trayWord := "tray"
-		if tr.Trays != 1 {
-			trayWord = "trays"
-		}
+		trayWord := task.TrayWord(tr.Trays)
 		sow, _ := time.Parse(task.DateFormat, tr.SowDate)
 		harvestFmt := ""
 		if hd := tr.TentativeHarvestDate(); hd != "" {
@@ -158,7 +155,7 @@ func handleTrialNew(w http.ResponseWriter, r *http.Request) {
 	soakType := r.FormValue("soak_type") // "none", "hours", "overnight"
 	soakHoursStr := r.FormValue("soak_hours")
 	seedGramsStr := r.FormValue("seed_grams")
-	dirtLitresStr := r.FormValue("dirt_litres")
+	mediumLitresStr := r.FormValue("medium_litres")
 	mtlDayStr := r.FormValue("mtl_day")
 	harvestDayStr := r.FormValue("harvest_day")
 
@@ -208,13 +205,13 @@ func handleTrialNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var dirtLitres float64
-	if dirtLitresStr == "" {
-		dirtLitres = 1
-	} else if d, err := strconv.ParseFloat(dirtLitresStr, 64); err == nil && d > 0 {
-		dirtLitres = d
+	var mediumLitres float64
+	if mediumLitresStr == "" {
+		mediumLitres = 1
+	} else if d, err := strconv.ParseFloat(mediumLitresStr, 64); err == nil && d > 0 {
+		mediumLitres = d
 	} else {
-		dirtLitres = 1
+		mediumLitres = 1
 	}
 
 	var moveToLightDay int
@@ -253,7 +250,7 @@ func handleTrialNew(w http.ResponseWriter, r *http.Request) {
 		OvernightSoak:  overnightSoak,
 		SoakHours:      soakHours,
 		SeedGrams:      seedGrams,
-		DirtLitres:     dirtLitres,
+		MediumLitres:     mediumLitres,
 		MoveToLightDay: moveToLightDay,
 		HarvestDay:     harvestDay,
 	}
@@ -327,13 +324,7 @@ func handleTrialManage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the trial.
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr == nil {
 		http.Error(w, "Trial not found", http.StatusNotFound)
 		return
@@ -408,13 +399,7 @@ func handleTrialManageAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr == nil {
 		renderFragment(w, "trial_manage_result.html", map[string]any{
 			"Error": "Trial not found.",
@@ -535,13 +520,7 @@ func handleTrialOutcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr == nil {
 		renderFragment(w, "trial_outcome_result.html", map[string]any{
 			"Error": "Trial not found.",
@@ -623,13 +602,7 @@ func handleTrialPromote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr == nil {
 		renderFragment(w, "trial_outcome_result.html", map[string]any{
 			"Error": "Trial not found.",
@@ -698,13 +671,7 @@ func handleTrialDiscard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the trial to remove its tentative tasks.
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr != nil {
 		_ = trial.RemoveTentativeTasks(tr)
 	}
@@ -738,13 +705,7 @@ func handleTrialView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tr *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == trialID {
-			tr = &trials[i]
-			break
-		}
-	}
+	tr := trial.FindByID(trials, trialID)
 	if tr == nil {
 		http.Error(w, "Trial not found", http.StatusNotFound)
 		return
@@ -769,15 +730,8 @@ func handleTrialCompare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var trA, trB *trial.TrialRecord
-	for i := range trials {
-		if trials[i].ID == idA {
-			trA = &trials[i]
-		}
-		if trials[i].ID == idB {
-			trB = &trials[i]
-		}
-	}
+	trA := trial.FindByID(trials, idA)
+	trB := trial.FindByID(trials, idB)
 	if trA == nil || trB == nil {
 		http.Error(w, "Trial not found", http.StatusNotFound)
 		return
@@ -859,7 +813,7 @@ type trialViewData struct {
 	Trays         int
 	Soak          string // "overnight", "4 hours", or "—"
 	SeedGrams     string // "50g" or "—"
-	DirtLitres    string // "1.0L" or "—"
+	MediumLitres    string // "1.0L" or "—"
 	MTLDay        string // "Day 5" or "—"
 	HarvestDay    string // "Day 9" or "—"
 	ActualYield   string // "1400g" or "not recorded"
@@ -897,17 +851,17 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 		soak = fmt.Sprintf("%.0f hours", tr.SoakHours)
 	}
 
-	// Format seed weight and dirt volume using the grower's unit system.
+	// Format seed weight and medium volume using the grower's unit system.
 	cfg, _ := config.Load()
 	seedGrams := "—"
 	if tr.SeedGrams > 0 {
 		seedGrams = fmt.Sprintf("%.0f%s", tr.SeedGrams, cfg.WeightLabel())
 	}
 
-	// Format dirt.
-	dirtLitres := "—"
-	if tr.DirtLitres > 0 {
-		dirtLitres = fmt.Sprintf("%.1f%s", tr.DirtLitres, cfg.VolumeLabel())
+	// Format medium.
+	mediumLitres := "—"
+	if tr.MediumLitres > 0 {
+		mediumLitres = fmt.Sprintf("%.1f%s", tr.MediumLitres, cfg.VolumeLabel())
 	}
 
 	// Format milestone days.
@@ -968,7 +922,7 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 		Trays:         tr.Trays,
 		Soak:          soak,
 		SeedGrams:     seedGrams,
-		DirtLitres:    dirtLitres,
+		MediumLitres:    mediumLitres,
 		MTLDay:        mtlDay,
 		HarvestDay:    harvestDay,
 		ActualYield:   actualYield,
@@ -982,11 +936,7 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Trial tentative task helpers (GUI versions)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// These mirror the functions in cmd_trial.go but are callable from the GUI
-// Tentative calendar task helpers now live in internal/trial/tentative.go.
+// Tentative calendar task helpers are in internal/trial/tentative.go.
 // Both the CLI and the GUI call the same shared functions:
 //   trial.CreateTentativeTask()
 //   trial.RefreshTentativeTasks()

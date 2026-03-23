@@ -55,8 +55,8 @@ type SnapshotData struct {
 	// conflict checker (e.g. "Main Tent over capacity on 2026-03-22").
 	Conflicts []string
 
-	// Financial holds the aggregated cost/revenue/profit for all active cycles
-	// that have costing data. Filled in by the GUI handler after BuildSnapshot
+	// Financial holds the aggregated cost/revenue/profit for cycles harvesting
+	// this calendar week. Filled in by the GUI handler after BuildSnapshot
 	// returns — the visualizer itself stays independent of crop/supply packages.
 	Financial FinancialSummary
 
@@ -66,10 +66,11 @@ type SnapshotData struct {
 	HasData bool
 }
 
-// FinancialSummary holds aggregated profitability numbers across all active
-// crop cycles. The GUI handler populates this after calling BuildSnapshot()
-// by looping through cycles, looking up each crop's costing data, and
-// multiplying per-tray numbers by the tray count.
+// FinancialSummary holds aggregated profitability numbers for cycles
+// harvesting in the current calendar week (Mon–Sun). The GUI handler
+// populates this after calling BuildSnapshot() by filtering cycles by
+// harvest date, looking up each crop's costing data, and using
+// SellableUnits (floor of total units) for revenue.
 type FinancialSummary struct {
 	// TotalCost is the sum of (cost per tray × trays) for all cycles with data.
 	TotalCost float64
@@ -128,6 +129,11 @@ type CycleRow struct {
 
 	// HarvestDate is formatted like "Mon Jan 02" for display.
 	HarvestDate string
+
+	// HarvestRaw is the harvest date as a time.Time value. The financial
+	// enrichment logic uses this to filter cycles by calendar week. The
+	// display templates should use HarvestDate (the formatted string) instead.
+	HarvestRaw time.Time
 
 	// CostPerTray is the all-in cost to grow one tray (filled by caller).
 	CostPerTray float64
@@ -264,11 +270,8 @@ func printCycleRow(w io.Writer, c farm.Cycle, today, sow, moveToLight, harvest t
 // ─────────────────────────────────────────────────────────────────────────────
 
 // writeSnapshot renders the full farm snapshot to any output destination (w).
-//
-// This is the shared core used by both PrintSnapshot (which sends output to the
-// terminal) and SnapshotText (which captures it as a string for Google
-// Calendar). Splitting it this way means the display logic only lives once —
-// there is no risk of the two outputs drifting apart.
+// Both PrintSnapshot (terminal) and SnapshotText (string for Google Calendar)
+// call this function, so the display logic only lives in one place.
 func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, today time.Time) {
 	// Strip the time-of-day from today so all comparisons are date-only.
 	// We use time.UTC here because time.Parse (used to read stored date strings)
@@ -356,7 +359,7 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 			}
 		}
 		// If every env is over capacity, assign to the first one anyway.
-		// The conflict checker (Phase 4) will flag it.
+		// The conflict checker will flag it.
 		if assigned == "" && len(litEnvs) > 0 {
 			assigned = litEnvs[0].Name
 		}
@@ -657,6 +660,7 @@ func buildCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) Cyc
 		StageLabel:  stageLabel,
 		SowDate:     sow.Format("Mon Jan 02"),
 		HarvestDate: harvest.Format("Mon Jan 02"),
+		HarvestRaw:  harvest,
 	}
 }
 

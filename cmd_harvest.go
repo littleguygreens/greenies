@@ -83,10 +83,7 @@ func runHarvest() {
 	fmt.Println()
 	for i, c := range eligible {
 		harv, _ := time.Parse(task.DateFormat, c.HarvestDate)
-		trayWord := "tray"
-		if c.Trays != 1 {
-			trayWord = "trays"
-		}
+		trayWord := task.TrayWord(c.Trays)
 		// Show the expected weight if we have it; skip if unknown (older cycles).
 		expectedLabel := ""
 		if c.ExpectedGrams > 0 {
@@ -123,12 +120,8 @@ func runHarvest() {
 	chosen := eligible[n-1]
 
 	harv, _ := time.Parse(task.DateFormat, chosen.HarvestDate)
-	chosenTrayWord := "tray"
-	if chosen.Trays != 1 {
-		chosenTrayWord = "trays"
-	}
 	fmt.Printf("\nLogging harvest: %s — %d %s — harvest %s\n\n",
-		task.Capitalize(chosen.CropName), chosen.Trays, chosenTrayWord,
+		task.Capitalize(chosen.CropName), chosen.Trays, task.TrayWord(chosen.Trays),
 		harv.Format("Jan 02"))
 
 	// Ask actual trays. The default is the planned tray count — press Enter

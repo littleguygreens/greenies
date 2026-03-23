@@ -102,7 +102,7 @@ func setupSheets(ctx context.Context) {
 		urlLine = strings.TrimSpace(urlLine)
 
 		// Extract the Sheet ID from the URL.
-		sheetID := extractSheetIDFromURL(urlLine)
+		sheetID := gcal.ExtractSheetID(urlLine)
 		if sheetID == "" {
 			fmt.Println("Could not find a Sheet ID in that URL.")
 			fmt.Println("Make sure you paste the full URL from your browser's address bar.")
@@ -407,31 +407,4 @@ loop:
 	fmt.Println()
 	fmt.Printf("Push complete! Finished in %s.\n", elapsed)
 	fmt.Println()
-}
-
-// extractSheetIDFromURL pulls the spreadsheet ID out of a Google Sheets URL.
-// Given "https://docs.google.com/spreadsheets/d/ABC123/edit", returns "ABC123".
-// Returns "" if the URL doesn't look like a Sheets URL.
-//
-// This is a copy of the same logic in handlers_google.go — duplicated here
-// because cmd_sync.go is in the main package and can't import the gui package.
-func extractSheetIDFromURL(url string) string {
-	// Look for "/d/" which precedes the ID in all Google Sheets URLs.
-	marker := "/d/"
-	idx := strings.Index(url, marker)
-	if idx == -1 {
-		// Maybe they just pasted the ID directly (no URL).
-		// Sheet IDs are long alphanumeric strings with dashes and underscores.
-		if len(url) > 20 && !strings.Contains(url, " ") && !strings.Contains(url, "/") {
-			return url
-		}
-		return ""
-	}
-
-	// Extract everything after "/d/" up to the next "/" or end of string.
-	rest := url[idx+len(marker):]
-	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
-		return rest[:slashIdx]
-	}
-	return rest
 }

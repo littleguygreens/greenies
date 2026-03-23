@@ -85,13 +85,9 @@ func tokenPath() (string, error) {
 	return filepath.Join(home, ".greenies", "token.json"), nil
 }
 
-// CredentialsExist always returns true now that OAuth credentials are
+// CredentialsExist always returns true because OAuth credentials are
 // embedded in the binary. Google features are always available — no setup
 // file required.
-//
-// (Previously, this checked for a credentials.json file and returned false
-// if it was missing. Now that credentials are embedded, every user has them
-// automatically.)
 func CredentialsExist() bool {
 	return true
 }

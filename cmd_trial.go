@@ -18,7 +18,7 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// greenies trial — Phase 6 crop trialling
+// greenies trial — crop trialling
 // ─────────────────────────────────────────────────────────────────────────────
 
 // runTrial is the entry point for the "greenies trial" command.
@@ -149,7 +149,7 @@ func runTrial() {
 // It asks for the minimum required information (crop name and sow date),
 // shows a summary of any past trials of the same crop so the grower can
 // learn from them, then asks for optional upfront parameters — soak details,
-// seed weight, dirt volume, and tentative milestone days.
+// seed weight, medium volume, and tentative milestone days.
 //
 // Nothing is written to disk until the very end. If the grower types "cancel"
 // at any prompt, the whole thing exits cleanly.
@@ -265,15 +265,15 @@ func startNewTrial(ask func(string) string, trials []trial.TrialRecord) {
 		}
 	}
 
-	// Dirt litres per tray — blank defaults to 1 (the standard for most crops).
-	var dirtLitres float64
-	dirtStr := strings.TrimSpace(ask("Dirt litres per tray [1]: "))
-	if dirtStr == "" {
-		dirtLitres = 1
-	} else if d, err := strconv.ParseFloat(dirtStr, 64); err == nil && d > 0 {
-		dirtLitres = d
+	// Medium litres per tray — blank defaults to 1 (the standard for most crops).
+	var mediumLitres float64
+	mediumStr := strings.TrimSpace(ask("Medium litres per tray [1]: "))
+	if mediumStr == "" {
+		mediumLitres = 1
+	} else if d, err := strconv.ParseFloat(mediumStr, 64); err == nil && d > 0 {
+		mediumLitres = d
 	} else {
-		dirtLitres = 1
+		mediumLitres = 1
 	}
 
 	// Move-to-light day — used to place a tentative calendar marker.
@@ -322,7 +322,7 @@ func startNewTrial(ask func(string) string, trials []trial.TrialRecord) {
 		OvernightSoak:  overnightSoak,
 		SoakHours:      soakHours,
 		SeedGrams:      seedGrams,
-		DirtLitres:     dirtLitres,
+		MediumLitres:     mediumLitres,
 		MoveToLightDay: moveToLightDay,
 		HarvestDay:     harvestDay,
 	}
@@ -717,8 +717,8 @@ func trialPromote(ask func(string) string, tr *trial.TrialRecord, trials []trial
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tentative calendar task helpers now live in internal/trial/tentative.go.
-// Both the CLI and the GUI call the same shared functions:
+// Tentative calendar task helpers are in internal/trial/tentative.go.
+// Both the CLI and the GUI call these shared functions:
 //   trial.CreateTentativeTask()
 //   trial.RefreshTentativeTasks()
 //   trial.CancelTentativeTasks()
@@ -912,7 +912,7 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		}
 		return fmt.Sprintf("%.0f%s", f, vwl)
 	}
-	fmtDirt := func(f float64) string {
+	fmtMedium := func(f float64) string {
 		if f == 0 {
 			return "—"
 		}
@@ -993,7 +993,7 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		printRow("Trays", strconv.Itoa(tr.Trays))
 		printRow("Overnight soak", fmtSoak(tr))
 		printRow(fmt.Sprintf("Seed %s/tray", vwl), fmtSeedGrams(tr.SeedGrams))
-		printRow(fmt.Sprintf("Dirt %s/tray", vvl), fmtDirt(tr.DirtLitres))
+		printRow(fmt.Sprintf("Medium %s/tray", vvl), fmtMedium(tr.MediumLitres))
 		printRow("Move-to-light day", fmtIntDay(tr.MoveToLightDay))
 		printRow("Expected harvest", fmtIntDay(tr.HarvestDay))
 		printRow("Actual yield", fmtYieldGrams(tr.ActualYieldGrams))
@@ -1005,7 +1005,7 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 		printRow("Trays", strconv.Itoa(a.Trays), strconv.Itoa(b.Trays))
 		printRow("Overnight soak", fmtSoak(a), fmtSoak(b))
 		printRow(fmt.Sprintf("Seed %s/tray", vwl), fmtSeedGrams(a.SeedGrams), fmtSeedGrams(b.SeedGrams))
-		printRow(fmt.Sprintf("Dirt %s/tray", vvl), fmtDirt(a.DirtLitres), fmtDirt(b.DirtLitres))
+		printRow(fmt.Sprintf("Medium %s/tray", vvl), fmtMedium(a.MediumLitres), fmtMedium(b.MediumLitres))
 		printRow("Move-to-light day", fmtIntDay(a.MoveToLightDay), fmtIntDay(b.MoveToLightDay))
 		printRow("Expected harvest", fmtIntDay(a.HarvestDay), fmtIntDay(b.HarvestDay))
 		printRow("Actual yield", fmtYieldGrams(a.ActualYieldGrams), fmtYieldGrams(b.ActualYieldGrams))

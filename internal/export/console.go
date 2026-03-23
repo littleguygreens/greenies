@@ -1,9 +1,6 @@
-// This file contains the ConsoleExporter — the Phase 1 implementation of the
-// Exporter interface. It simply prints a list of tasks to the terminal.
-//
-// In later phases this will be joined by other exporters (GoogleCalendar, CSV)
-// but this one will always remain useful for quick debugging and for users who
-// prefer the terminal over external integrations.
+// This file contains the ConsoleExporter, which prints a list of tasks to
+// the terminal. It serves as both a working output and a reference example
+// for anyone adding new exporters (CSV, email, etc.).
 package export
 
 import (

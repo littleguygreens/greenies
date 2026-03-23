@@ -30,8 +30,7 @@ import (
 //   - pullAllFromSheet is called by handleSyncPull AND handleSheetsLink
 //   - pushAllToSheet  is called by handleSyncPush AND handleSheetsSetup
 //
-// By keeping the logic in one place, we avoid the bug where changing how
-// one handler pulls/pushes data but forgetting to update the other.
+// By keeping the logic in one place, both handlers always stay in sync.
 
 // pullAllFromSheet downloads every data type from the Google Sheet into
 // the matching local files: crops.csv, farm.csv, supplies.csv, tasks.json,
@@ -309,7 +308,7 @@ func handleSheetsLink(w http.ResponseWriter, r *http.Request) {
 
 	// Extract the Sheet ID from the URL.
 	// The ID is between "/d/" and the next "/" (or end of string).
-	sheetID := extractSheetID(sheetURL)
+	sheetID := gcal.ExtractSheetID(sheetURL)
 	if sheetID == "" {
 		renderFragment(w, "sheets_setup_result.html", map[string]any{
 			"Error": "Could not find a Sheet ID in that URL. Make sure you paste the full URL from your browser's address bar (it should contain /spreadsheets/d/).",
@@ -354,33 +353,9 @@ func handleSheetsLink(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// extractSheetID pulls the spreadsheet ID out of a Google Sheets URL.
-// Given "https://docs.google.com/spreadsheets/d/ABC123/edit", returns "ABC123".
-// Returns "" if the URL doesn't look like a Sheets URL.
-func extractSheetID(url string) string {
-	// Look for "/d/" which precedes the ID in all Google Sheets URLs.
-	marker := "/d/"
-	idx := strings.Index(url, marker)
-	if idx == -1 {
-		// Maybe they just pasted the ID directly (no URL).
-		// Sheet IDs are long alphanumeric strings with dashes and underscores.
-		if len(url) > 20 && !strings.Contains(url, " ") && !strings.Contains(url, "/") {
-			return url
-		}
-		return ""
-	}
-
-	// Extract everything after "/d/" up to the next "/" or end of string.
-	rest := url[idx+len(marker):]
-	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
-		return rest[:slashIdx]
-	}
-	return rest
-}
-
 // handleGoogleSignIn redirects the browser/WebView to Google's sign-in page
-// (POST /google-signin). This replaces the old approach that tried to launch
-// an external browser with xdg-open — which doesn't work on Android.
+// (POST /google-signin). Uses an in-page redirect so it works everywhere:
+// Android WebView, desktop browsers, and Chromium --app mode.
 //
 // The flow:
 //  1. This handler returns an HTML fragment with a JavaScript redirect
@@ -485,10 +460,5 @@ func handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 // Used to detect when the auth callback is being handled by Chrome on
 // an Android phone (as opposed to a desktop browser).
 func containsAndroid(ua string) bool {
-	for i := 0; i <= len(ua)-7; i++ {
-		if ua[i:i+7] == "Android" {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(ua, "Android")
 }

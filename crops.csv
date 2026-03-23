@@ -1,4 +1,4 @@
-name,day,stage,tasks,overnight_soak,soak_hours,seed_grams,dirt_litres,dark_days,light_days,yield_grams,seed_cost,seed_purchase_weight,unit_weight,unit_sell_price
+name,day,stage,tasks,overnight_soak,soak_hours,seed_grams,medium_litres,dark_days,light_days,yield_grams,seed_cost,seed_purchase_weight,unit_weight,unit_sell_price
 sunnies,1,sow,"measure seed, soak 4 hours, drain seed, prepare trays, sow seed, saturate dirt, top water, stack",FALSE,4,150,1,4,3,500,,,100,
 ,2,dark,"top water, rotate stack",,,,,,,,,,,
 ,3,dark,"top water, rotate stack",,,,,,,,,,,

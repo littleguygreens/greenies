@@ -1,5 +1,5 @@
-// This file contains the Google Tasks integration — the half of the Phase 5
-// sync that puts daily task instructions into the grower's Google Tasks list.
+// This file contains the Google Tasks integration — the half of the sync
+// that puts daily task instructions into the grower's Google Tasks list.
 //
 // Why Google Tasks alongside Calendar events?
 //   The multi-day stage blocks in Google Calendar give an at-a-glance view of

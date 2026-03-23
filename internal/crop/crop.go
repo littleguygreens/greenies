@@ -59,9 +59,9 @@ type Crop struct {
 	// Multiply by tray count to get the total seed needed for a batch.
 	SeedGrams int
 
-	// DirtLitres is how many litres of growing medium go into one tray.
+	// MediumLitres is how many litres of growing medium go into one tray.
 	// Defaults to 1 if not specified in the CSV.
-	DirtLitres float64
+	MediumLitres float64
 
 	// DarkDays is how many days the crop spends in the dark room.
 	// (Dark and blackout refer to the same stage.)
@@ -78,7 +78,7 @@ type Crop struct {
 	//
 	// These fields capture what the grower pays for seed and what they
 	// charge per unit sold. Combined with farm-wide supply costs (labels,
-	// containers, dirt — stored separately in supplies.csv), the program
+	// containers, grow medium — stored separately in supplies.csv), the program
 	// can calculate per-crop profitability on the fly.
 
 	// SeedCost is the purchase price of one bag/lot of seed, in dollars.
@@ -88,12 +88,15 @@ type Crop struct {
 	// SeedPurchaseWeight is the weight of that purchase unit, in grams.
 	// Used together with SeedCost and SeedGrams to calculate the seed
 	// cost per tray: (SeedCost / SeedPurchaseWeight) × SeedGrams.
-	SeedPurchaseWeight int
+	// Stored as a decimal so the grower can enter fractional weights
+	// (e.g. 113.4 g).
+	SeedPurchaseWeight float64
 
 	// UnitWeight is the weight in grams of one sellable unit (e.g. one
 	// clamshell). Defaults to 100 g if not specified. The number of units
-	// per tray is derived: YieldGrams / UnitWeight, rounded down.
-	UnitWeight int
+	// per tray is derived: YieldGrams / UnitWeight (exact decimal).
+	// Stored as a decimal so the grower can enter fractional weights.
+	UnitWeight float64
 
 	// UnitSellPrice is the retail price per sellable unit, in dollars.
 	// Example: $4.50 per clamshell.

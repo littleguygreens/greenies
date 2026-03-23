@@ -1,10 +1,19 @@
 // Package supply manages farm-wide supply costs — things like labels,
-// containers, and dirt that are the same price no matter which crop you
-// are growing.
+// containers, and grow medium that are the same price no matter which crop
+// you are growing.
 //
 // These costs are stored in a simple CSV file (~/.greenies/supplies.csv)
-// with three columns: item name, cost per case/bag, and units per case/bag.
-// The program divides to get the per-unit cost automatically.
+// with four columns: item name, category, cost per case/bag, and units per
+// case/bag. The program divides to get the per-unit cost automatically.
+//
+// Each supply has a category that tells the program what role it plays:
+//   - "medium"    — the growing medium (e.g. coco coir, peat moss)
+//   - "container" — the food-service container each unit is sold in
+//   - "label"     — the label stuck on each container
+//
+// The category is what the profitability calculator uses to find the right
+// cost — not the name. This means the grower can rename "grow medium" to
+// "coco coir" or "containers" to "clamshells" without breaking anything.
 //
 // This data is kept separate from crops.csv (which holds per-crop parameters)
 // and farm.csv (which holds physical spaces and inventory counts). Together,
@@ -26,22 +35,28 @@ import (
 // Supply represents one line item in the supplies file — a consumable that
 // the farm buys in bulk (cases, bags, etc.) and uses across all crops.
 type Supply struct {
-	// Name identifies the supply item, e.g. "labels", "containers", "dirt".
+	// Name identifies the supply item, e.g. "labels", "containers", "grow medium".
 	Name string
+
+	// Category tells the profitability calculator what role this supply plays.
+	// Valid values: "medium", "container", "label", or "" (no special role).
+	// The calculator looks up supplies by category, not by name — so the
+	// grower can rename items without breaking cost calculations.
+	Category string
 
 	// CostPerCase is the purchase price of one case/bag, in dollars.
 	// Example: $12.50 for a case of 500 labels.
 	CostPerCase float64
 
 	// UnitsPerCase is how many individual items come in one case/bag.
-	// For labels this is labels per case; for dirt this is litres per bag.
+	// For labels this is labels per case; for medium this is litres per bag.
 	UnitsPerCase float64
 }
 
 // CostPerUnit returns the cost of a single item (one label, one container,
-// one litre of dirt). It divides the bulk purchase price by the number of
-// items in the package. Returns 0 if UnitsPerCase is zero (avoids a
-// division-by-zero crash).
+// one litre of grow medium). It divides the bulk purchase price by the
+// number of items in the package. Returns 0 if UnitsPerCase is zero
+// (avoids a division-by-zero crash).
 func (s Supply) CostPerUnit() float64 {
 	if s.UnitsPerCase == 0 {
 		return 0
@@ -127,6 +142,7 @@ func Load() ([]Supply, error) {
 
 		supplies = append(supplies, Supply{
 			Name:         name,
+			Category:     get(row, "category"),
 			CostPerCase:  cost,
 			UnitsPerCase: units,
 		})
@@ -154,7 +170,7 @@ func Save(supplies []Supply) error {
 
 	w := csv.NewWriter(out)
 
-	header := []string{"name", "cost_per_case", "units_per_case"}
+	header := []string{"name", "category", "cost_per_case", "units_per_case"}
 	col := make(map[string]int, len(header))
 	for i, name := range header {
 		col[name] = i
@@ -167,6 +183,7 @@ func Save(supplies []Supply) error {
 	for _, s := range supplies {
 		row := make([]string, len(header))
 		row[col["name"]] = s.Name
+		row[col["category"]] = s.Category
 		row[col["cost_per_case"]] = crop.FormatFloat(s.CostPerCase)
 		row[col["units_per_case"]] = crop.FormatFloat(s.UnitsPerCase)
 
@@ -180,14 +197,15 @@ func Save(supplies []Supply) error {
 }
 
 
-// ─── Lookup helper ──────────────────────────────────────────────────────────
+// ─── Lookup helpers ─────────────────────────────────────────────────────────
 
-// Find returns the supply item with the given name (case-insensitive),
-// or nil if not found. This is used by the profitability calculator to
-// look up specific items like "labels", "containers", or "dirt".
-func Find(supplies []Supply, name string) *Supply {
+// FindByCategory returns the first supply item with the given category
+// (case-insensitive), or nil if not found. The profitability calculator
+// uses this to look up supplies by role ("medium", "container", "label")
+// regardless of what the grower has named them.
+func FindByCategory(supplies []Supply, category string) *Supply {
 	for i := range supplies {
-		if strings.EqualFold(supplies[i].Name, name) {
+		if strings.EqualFold(supplies[i].Category, category) {
 			return &supplies[i]
 		}
 	}
@@ -196,8 +214,8 @@ func Find(supplies []Supply, name string) *Supply {
 
 // LoadSupplyCosts is a convenience function that loads the supplies CSV and
 // builds a crop.SupplyCosts struct in one step. It looks up the three
-// farm-wide consumables (dirt, containers, labels) and calculates their
-// per-unit costs.
+// farm-wide consumables by their category — "medium", "container", and
+// "label" — and calculates their per-unit costs.
 //
 // If the supplies file doesn't exist or can't be read, the returned struct
 // has all zeroes — the profitability calculations still work, they just
@@ -205,13 +223,13 @@ func Find(supplies []Supply, name string) *Supply {
 func LoadSupplyCosts() crop.SupplyCosts {
 	supplies, _ := Load()
 	sc := crop.SupplyCosts{}
-	if s := Find(supplies, "dirt"); s != nil {
-		sc.DirtPerLitre = s.CostPerUnit()
+	if s := FindByCategory(supplies, "medium"); s != nil {
+		sc.MediumPerLitre = s.CostPerUnit()
 	}
-	if s := Find(supplies, "containers"); s != nil {
+	if s := FindByCategory(supplies, "container"); s != nil {
 		sc.ContainerEach = s.CostPerUnit()
 	}
-	if s := Find(supplies, "labels"); s != nil {
+	if s := FindByCategory(supplies, "label"); s != nil {
 		sc.LabelEach = s.CostPerUnit()
 	}
 	return sc

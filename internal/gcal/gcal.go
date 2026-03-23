@@ -1,5 +1,5 @@
-// This file contains the Google Calendar exporter — the Phase 5 implementation
-// of the Exporter interface.
+// This file contains the Google Calendar exporter, which implements the
+// Exporter interface.
 //
 // There are two ways to send data to Google:
 //

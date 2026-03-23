@@ -1,12 +1,11 @@
 // Package export defines the standard shape that any output destination must
-// follow, and provides the Phase 1 implementation that prints to the terminal.
+// follow, and provides a reference implementation that prints to the terminal.
 //
 // Why does this exist?
-// Right now we only need to display tasks in the terminal. But in future phases
-// we will want to send tasks to Google Calendar, export them as a CSV file, or
-// push them to other services. Rather than rewriting the core scheduling logic
-// for each output, we define one standard "plug shape" here. Any new output
-// just needs to fit that shape — the rest of the program never changes.
+// The program can send tasks to multiple destinations — the terminal, Google
+// Calendar, CSV files, and more. Rather than rewriting the core scheduling
+// logic for each output, we define one standard "plug shape" here. Any new
+// output just needs to fit that shape — the rest of the program never changes.
 //
 // This pattern is called "programming to an interface" and is one of the most
 // useful tools in Go for keeping a codebase flexible and manageable.
@@ -20,9 +19,9 @@ import (
 
 // Exporter is the standard plug shape that every output destination must match.
 //
-// To add a new output in a future phase (e.g. Google Calendar, CSV), create a
-// new type in this package and give it an Export method with this exact
-// signature. That is all that is required — no changes anywhere else.
+// To add a new output destination (e.g. CSV, email), create a new type in
+// this package and give it an Export method with this exact signature.
+// That is all that is required — no changes anywhere else.
 //
 // Export receives a list of tasks and is responsible for doing something useful
 // with them — printing them, sending them to an API, writing them to a file, etc.

@@ -154,7 +154,7 @@ func runCrops() {
 	// ── Numeric parameters ──────────────────────────────────────────────
 
 	seedGrams := askInt(fmt.Sprintf("Seed %s per tray (e.g. 150) [0]: ", wl), 0)
-	dirtLitres := askFloat(fmt.Sprintf("Dirt %s per tray [1]: ", cfg.VolumeLabel()), 1.0)
+	mediumLitres := askFloat(fmt.Sprintf("Medium %s per tray [1]: ", cfg.VolumeLabel()), 1.0)
 	yieldGrams := askInt(fmt.Sprintf("Expected yield %s per tray (e.g. 500) [0]: ", wl), 0)
 
 	// ── Costing parameters (optional) ───────────────────────────────────
@@ -165,16 +165,16 @@ func runCrops() {
 	fmt.Println()
 	fmt.Println("Costing (optional — press Enter to skip):")
 	seedCost := askFloat("  Seed bag cost in $ (e.g. 15.00) [0]: ", 0)
-	seedPurchaseWeight := askInt("  Seed bag weight (e.g. 500) [0]: ", 0)
+	seedPurchaseWeight := askFloat("  Seed bag weight (e.g. 500) [0]: ", 0)
 	// Ask what unit the weight is in — convert to the small unit for storage.
 	if seedPurchaseWeight > 0 {
 		lgLabel := cfg.LargeWeightLabel() // "kg" or "lb"
 		unit := strings.ToLower(ask(fmt.Sprintf("  Weight unit — (%s) or (%s) [%s]: ", wl, lgLabel, wl)))
 		if unit == lgLabel || unit == string(lgLabel[0]) {
-			seedPurchaseWeight *= cfg.LargeWeightMultiplier()
+			seedPurchaseWeight *= float64(cfg.LargeWeightMultiplier())
 		}
 	}
-	unitWeight := askInt(fmt.Sprintf("  %s per sellable unit (e.g. 100) [100]: ", cfg.WeightLabel()), 100)
+	unitWeight := askFloat(fmt.Sprintf("  %s per sellable unit (e.g. 100) [100]: ", cfg.WeightLabel()), 100)
 	unitSellPrice := askFloat("  Sell price per unit in $ (e.g. 4.50) [0]: ", 0)
 	fmt.Println()
 
@@ -297,7 +297,7 @@ func runCrops() {
 		OvernightSoak:      overnightSoak,
 		SoakHours:          soakHours,
 		SeedGrams:          seedGrams,
-		DirtLitres:         dirtLitres,
+		MediumLitres:         mediumLitres,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         yieldGrams,
@@ -404,7 +404,7 @@ func editCropCLI(
 	evl := ecfg.VolumeLabel()  // "L" or "gal"
 
 	picked.SeedGrams = askInt(fmt.Sprintf("Seed %s per tray [%d]: ", ewl, picked.SeedGrams), picked.SeedGrams)
-	picked.DirtLitres = askFloat(fmt.Sprintf("Dirt %s per tray [%.1f]: ", evl, picked.DirtLitres), picked.DirtLitres)
+	picked.MediumLitres = askFloat(fmt.Sprintf("Medium %s per tray [%.1f]: ", evl, picked.MediumLitres), picked.MediumLitres)
 	picked.YieldGrams = askInt(fmt.Sprintf("Expected yield %s per tray [%d]: ", ewl, picked.YieldGrams), picked.YieldGrams)
 
 	// ── Costing parameters (optional) ───────────────────────────────────
@@ -415,19 +415,19 @@ func editCropCLI(
 
 	// Show seed bag weight in a friendly unit (large unit if evenly divisible).
 	lgLabel := ecfg.LargeWeightLabel() // "kg" or "lb"
-	mult := ecfg.LargeWeightMultiplier()
-	currentWeightDisplay := fmt.Sprintf("%d%s", picked.SeedPurchaseWeight, ewl)
-	if picked.SeedPurchaseWeight >= mult && picked.SeedPurchaseWeight%mult == 0 {
-		currentWeightDisplay = fmt.Sprintf("%d%s", picked.SeedPurchaseWeight/mult, lgLabel)
+	mult := float64(ecfg.LargeWeightMultiplier())
+	currentWeightDisplay := fmt.Sprintf("%s%s", crop.FormatFloat(picked.SeedPurchaseWeight), ewl)
+	if picked.SeedPurchaseWeight >= mult && picked.SeedPurchaseWeight == float64(int(picked.SeedPurchaseWeight/mult))*mult {
+		currentWeightDisplay = fmt.Sprintf("%s%s", crop.FormatFloat(picked.SeedPurchaseWeight/mult), lgLabel)
 	}
-	picked.SeedPurchaseWeight = askInt(fmt.Sprintf("  Seed bag weight [%s]: ", currentWeightDisplay), picked.SeedPurchaseWeight)
+	picked.SeedPurchaseWeight = askFloat(fmt.Sprintf("  Seed bag weight [%s]: ", currentWeightDisplay), picked.SeedPurchaseWeight)
 	// Ask what unit — only if the grower typed a new value (not just Enter).
 	unit := strings.ToLower(ask(fmt.Sprintf("  Weight unit — (%s) or (%s) [%s]: ", ewl, lgLabel, ewl)))
 	if unit == lgLabel || unit == string(lgLabel[0]) {
 		picked.SeedPurchaseWeight *= mult
 	}
 
-	picked.UnitWeight = askInt(fmt.Sprintf("  %s per sellable unit [%d]: ", ewl, picked.UnitWeight), picked.UnitWeight)
+	picked.UnitWeight = askFloat(fmt.Sprintf("  %s per sellable unit [%s]: ", ewl, crop.FormatFloat(picked.UnitWeight)), picked.UnitWeight)
 	picked.UnitSellPrice = askFloat(fmt.Sprintf("  Sell price per unit in $ [%.2f]: ", picked.UnitSellPrice), picked.UnitSellPrice)
 	fmt.Println()
 
@@ -560,7 +560,7 @@ func editCropCLI(
 		OvernightSoak:      picked.OvernightSoak,
 		SoakHours:          picked.SoakHours,
 		SeedGrams:          picked.SeedGrams,
-		DirtLitres:         picked.DirtLitres,
+		MediumLitres:         picked.MediumLitres,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         picked.YieldGrams,

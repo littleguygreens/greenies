@@ -141,15 +141,11 @@ func handleHarvestPage(w http.ResponseWriter, r *http.Request) {
 		// harv <= today  →  !today.Before(harv)
 		// harv >= cutoff →  !harv.Before(cutoff)
 		if !today.Before(harv) && !harv.Before(cutoff) && !logged[c.CycleID] {
-			trayWord := "tray"
-			if c.Trays != 1 {
-				trayWord = "trays"
-			}
 			eligible = append(eligible, eligibleCycle{
 				CycleID:         c.CycleID,
 				CropName:        task.Capitalize(c.CropName),
 				Trays:           c.Trays,
-				TrayWord:        trayWord,
+				TrayWord:        task.TrayWord(c.Trays),
 				HarvestDate:     harv.Format("Jan 02"),
 				HarvestDateSort: c.HarvestDate, // YYYY-MM-DD — sorts chronologically
 				ExpectedGrams:   c.ExpectedGrams,

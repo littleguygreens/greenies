@@ -200,12 +200,8 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 			// A short human-readable label for this cycle, used in conflict
 			// messages so the grower knows exactly which batches are clashing.
 			// Example: "Sunnies (sown Mar 03, 2 trays)"
-			trayLabel := "tray"
-			if pc.c.Trays != 1 {
-				trayLabel = "trays"
-			}
 			label := fmt.Sprintf("%s (sown %s, %d %s)",
-				task.Capitalize(pc.c.CropName), pc.sow.Format("Jan 02"), pc.c.Trays, trayLabel)
+				task.Capitalize(pc.c.CropName), pc.sow.Format("Jan 02"), pc.c.Trays, task.TrayWord(pc.c.Trays))
 
 			// Grow trays are in use from the sow date up to (but not including)
 			// the harvest date. On harvest day the grower cuts first thing in

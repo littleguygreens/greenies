@@ -12,7 +12,7 @@ package main
 // opens in the browser and the grower never sees a command line.
 //
 // This command only works on Linux. macOS and Windows support is planned
-// for a future release (see Phase 9 in CLAUDE.md).
+// for a future release.
 
 import (
 	"fmt"

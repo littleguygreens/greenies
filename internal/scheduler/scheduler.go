@@ -16,6 +16,29 @@ import (
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
+// buildTask creates a single calendar task from one day in a crop cycle.
+// This is the shared core used by all three scheduling functions below.
+func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cycleID string) (task.Task, error) {
+	// Title format: "Sunnies 12x dark" — crop name, tray count, stage.
+	title := fmt.Sprintf("%s %dx %s", task.Capitalize(cropName), trays, day.Stage)
+
+	// Notes include tray count and that day's task instructions.
+	trayWord := task.TrayWord(trays)
+	var notes string
+	if strings.TrimSpace(day.Tasks) == "" {
+		notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
+	} else {
+		notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
+	}
+
+	t, err := task.New(title, dateStr, notes)
+	if err != nil {
+		return task.Task{}, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+	}
+	t.CycleID = cycleID
+	return t, nil
+}
+
 // ScheduledDay is one day in the preview shown to the user before they confirm.
 // It holds the calculated calendar date alongside the crop day information,
 // so the preview can display both "March 7th" and "Day 1 — sow" together.
@@ -71,36 +94,10 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 			CropDay: day,
 		})
 
-		// Build the task title: crop name + tray count + stage.
-		// Example: "Sunnies 12x dark"
-		// The "12x" shows at a glance how many trays are in this batch.
-		// No day number in the title — the date on the calendar already tells
-		// the grower exactly where they are in the cycle.
-		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
-
-		// Put tray count and task instructions in the notes field.
-		// Even days with no tasks are saved to the calendar — the trays are
-		// still occupying physical space on the rack and should be visible.
-		trayWord := "tray"
-		if trays != 1 {
-			trayWord = "trays"
-		}
-		var notes string
-		if strings.TrimSpace(day.Tasks) == "" {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
-		} else {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
-		}
-
-		t, err := task.New(title, dateStr, notes)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+			return nil, nil, err
 		}
-
-		// Stamp the shared batch ID so this task can be found and deleted
-		// together with all other tasks from this same planning session.
-		t.CycleID = cycleID
-
 		tasks = append(tasks, t)
 	}
 
@@ -151,27 +148,10 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 			CropDay: day,
 		})
 
-		// Same title format as Schedule: "Sunnies 12x dark"
-		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
-
-		trayWord := "tray"
-		if trays != 1 {
-			trayWord = "trays"
-		}
-		var notes string
-		if strings.TrimSpace(day.Tasks) == "" {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
-		} else {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
-		}
-
-		t, err := task.New(title, dateStr, notes)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+			return nil, nil, err
 		}
-
-		t.CycleID = cycleID
-
 		tasks = append(tasks, t)
 	}
 
@@ -224,30 +204,10 @@ func ScheduleFromDay(c crop.Crop, sowDate string, fromDayNum int, trays int, cyc
 		date := sow.AddDate(0, 0, daysFromSow)
 		dateStr := date.Format(task.DateFormat)
 
-		// Same title and notes format as the other schedulers.
-		// Example title: "Sunnies 8x dark"
-		title := fmt.Sprintf("%s %dx %s", task.Capitalize(c.Name), trays, day.Stage)
-
-		trayWord := "tray"
-		if trays != 1 {
-			trayWord = "trays"
-		}
-		var notes string
-		if strings.TrimSpace(day.Tasks) == "" {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
-		} else {
-			notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
-		}
-
-		t, err := task.New(title, dateStr, notes)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
 		if err != nil {
-			return nil, fmt.Errorf("error creating task for day %d: %w", day.Day, err)
+			return nil, err
 		}
-
-		// Stamp the *existing* CycleID rather than generating a fresh one.
-		// This keeps the regenerated tasks linked to the same Cycle record.
-		t.CycleID = cycleID
-
 		tasks = append(tasks, t)
 	}
 

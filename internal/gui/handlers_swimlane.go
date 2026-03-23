@@ -8,6 +8,7 @@ package gui
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/crop"
@@ -24,9 +25,11 @@ import (
 // pre-computed once and then used by both the full-month calendar and the
 // snapshot-week mini calendar so the stage-assignment logic lives in one place.
 type swimCycleInfo struct {
-	CropName string
-	Trays    int
-	DayStage map[string]string // date (YYYY-MM-DD) → stage name
+	CropName    string
+	Trays       int
+	SowDate     string            // YYYY-MM-DD — used by label builder for date display
+	HarvestDate string            // YYYY-MM-DD — used by label builder for date display
+	DayStage    map[string]string // date (YYYY-MM-DD) → stage name
 }
 
 // buildCycleStages takes a list of farm cycles and a crop lookup map, sorts
@@ -82,13 +85,76 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 		}
 
 		result = append(result, swimCycleInfo{
-			CropName: c.CropName,
-			Trays:    c.Trays,
-			DayStage: stages,
+			CropName:    c.CropName,
+			Trays:       c.Trays,
+			SowDate:     c.SowDate,
+			HarvestDate: c.HarvestDate,
+			DayStage:    stages,
 		})
 	}
 
 	return result
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Responsive swim-lane labels
+// ─────────────────────────────────────────────────────────────────────────────
+
+// swimLabel picks the right label text for a crop row based on how many
+// cells the crop occupies this week (the span). Wider spans get more
+// detail; a single cell gets just the crop name. The label is placed
+// once per row and centered across all active cells.
+//
+// Three tiers:
+//   span >= 3 : "sunnies 12x (mar 20 - mar 28)"
+//   span == 2 : "sunnies 12x"
+//   span == 1 : "sunnies"
+func swimLabel(cropName string, trays int, sowDateStr, harvestDateStr string, span int) string {
+	if span == 1 {
+		return cropName
+	}
+	base := fmt.Sprintf("%s %dx", cropName, trays)
+	if span <= 2 {
+		return base
+	}
+
+	// Parse the sow and harvest dates so we can show short date labels.
+	sowDate, err1 := time.Parse(task.DateFormat, sowDateStr)
+	harvestDate, err2 := time.Parse(task.DateFormat, harvestDateStr)
+	if err1 != nil || err2 != nil {
+		return base // fall back if dates don't parse
+	}
+
+	// Short month+day format like "mar 20".
+	sowShort := strings.ToLower(sowDate.Format("Jan 2"))
+	harvestShort := strings.ToLower(harvestDate.Format("Jan 2"))
+
+	return fmt.Sprintf("%s (%s - %s)", base, sowShort, harvestShort)
+}
+
+// placeRowLabel finds the first and last active cells in a 7-cell row,
+// calculates the total span, picks the right label, and writes it onto
+// the first active cell. This gives each swim-lane row exactly one
+// centered label instead of one per stage transition.
+func placeRowLabel(cells *[7]monthCell, cropName string, trays int, sowDate, harvestDate string) {
+	// Find first and last active cell indices.
+	first := -1
+	last := -1
+	for i := 0; i < 7; i++ {
+		if cells[i].Stage != "" {
+			if first == -1 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 0 {
+		return // no activity this week
+	}
+
+	span := last - first + 1
+	cells[first].Label = swimLabel(cropName, trays, sowDate, harvestDate, span)
+	cells[first].Span = span
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,33 +224,28 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 			Trays:    ci.Trays,
 		}
 		hasActivity := false
-		prevStage := ""
 
 		for i := 0; i < 7; i++ {
 			d := weekStart.AddDate(0, 0, i)
 			ds := d.Format(task.DateFormat)
 			stage := ci.DayStage[ds]
 
-			label := ""
-			if stage != "" && stage != prevStage {
-				label = fmt.Sprintf("%s %dx", ci.CropName, ci.Trays)
-			}
-
 			row.Cells[i] = monthCell{
 				DayNum:        d.Day(),
 				Stage:         stage,
-				Label:         label,
 				Trays:         ci.Trays,
 				InMonth:       true,
 				IsHighlighted: d.Equal(focusDate),
 				DateStr:       ds,
 			}
 
-			prevStage = stage
 			if stage != "" {
 				hasActivity = true
 			}
 		}
+
+		// Place one centered label per row across all active cells.
+		placeRowLabel(&row.Cells, ci.CropName, ci.Trays, ci.SowDate, ci.HarvestDate)
 
 		if hasActivity {
 			week.Rows = append(week.Rows, row)
@@ -228,6 +289,12 @@ type monthCell struct {
 	// Used to build a clickable link so tapping a cell takes the grower
 	// to the snapshot for that day.
 	DateStr string
+
+	// Span is how many consecutive cells of the same stage follow this one
+	// (including this cell). For example, if a crop is in "light" for days
+	// 3–5 of the week, the first cell gets Span=3, the others get Span=0.
+	// Used by CSS to size the label so it doesn't overflow into other rows.
+	Span int
 }
 
 // monthCycleRow is one swim-lane row in a week section. It represents one

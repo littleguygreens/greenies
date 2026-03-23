@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/config"
+	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/gcal"
 )
 
@@ -138,6 +139,37 @@ var funcMap = template.FuncMap{
 		cfg, _ := config.Load()
 		return cfg.LargeWeightMultiplier()
 	},
+	// "fLgWeightMult" is the float64 version of lgWeightMult — needed for
+	// comparing and dividing float64 fields like SeedPurchaseWeight.
+	"fLgWeightMult": func() float64 {
+		cfg, _ := config.Load()
+		return float64(cfg.LargeWeightMultiplier())
+	},
+	// "fmod" returns the floating-point remainder (e.g. 1500.0 % 1000.0 = 500.0).
+	"fmod": func(a, b float64) float64 {
+		if b == 0 {
+			return 0
+		}
+		return a - float64(int(a/b))*b
+	},
+	// "fdiv" divides two floats. Returns 0 if divisor is zero.
+	"fdiv": func(a, b float64) float64 {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	},
+	// "feq" compares two floats for equality (within a tiny tolerance).
+	"feq": func(a, b float64) bool {
+		diff := a - b
+		if diff < 0 {
+			diff = -diff
+		}
+		return diff < 0.001
+	},
+	// "fmtFloat" formats a float64 as a clean number: "500" not "500.00",
+	// "113.4" stays "113.4". Used for form input values.
+	"fmtFloat": crop.FormatFloat,
 	// "isImperial" returns true when imperial units are active.
 	"isImperial": func() bool {
 		cfg, _ := config.Load()

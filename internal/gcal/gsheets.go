@@ -63,7 +63,7 @@ const cycleTab = "Cycle"
 // Push and pull functions look up columns by name, so reordering is safe.
 var cropsHeaders = []interface{}{
 	"name", "overnight_soak", "soak_hours", "seed_grams",
-	"dirt_litres", "dark_days", "light_days", "yield_grams",
+	"medium_litres", "dark_days", "light_days", "yield_grams",
 	"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 }
 
@@ -83,14 +83,14 @@ var farmHeaders = []interface{}{
 }
 
 // suppliesTab is the name of the spreadsheet tab that holds farm-wide
-// supply costs (labels, containers, dirt). Two-way sync — the grower can
+// supply costs (labels, containers, grow medium). Two-way sync — the grower can
 // edit prices in the Sheet and pull them down with "greenies sync".
 const suppliesTab = "Supplies"
 
 // suppliesHeaders are the column headings for the Supplies tab.
 // Push and pull functions look up columns by name, so reordering is safe.
 var suppliesHeaders = []interface{}{
-	"name", "cost_per_case", "units_per_case",
+	"name", "category", "cost_per_case", "units_per_case",
 }
 
 // trialsTab is the name of the spreadsheet tab that holds trial run data.
@@ -103,7 +103,7 @@ const trialsTab = "Trials"
 var trialsHeaders = []interface{}{
 	"name", "trial_variable", "status", "sow_date",
 	"day", "stage", "tasks",
-	"overnight_soak", "soak_hours", "seed_grams", "dirt_litres",
+	"overnight_soak", "soak_hours", "seed_grams", "medium_litres",
 	"dark_days", "light_days", "yield_grams",
 }
 
@@ -166,6 +166,32 @@ func sheetRange(tab string, suffix ...string) string {
 		return name + suffix[0]
 	}
 	return name
+}
+
+// ExtractSheetID pulls the spreadsheet ID out of a Google Sheets URL.
+// Given "https://docs.google.com/spreadsheets/d/ABC123/edit", returns "ABC123".
+// Returns "" if the URL doesn't look like a Sheets URL.
+//
+// If the input has no slashes, no spaces, and is longer than 20 characters,
+// it's assumed to be a raw sheet ID and returned as-is.
+func ExtractSheetID(url string) string {
+	// Look for "/d/" which precedes the ID in all Google Sheets URLs.
+	marker := "/d/"
+	idx := strings.Index(url, marker)
+	if idx == -1 {
+		// Maybe they just pasted the ID directly (no URL).
+		if len(url) > 20 && !strings.Contains(url, " ") && !strings.Contains(url, "/") {
+			return url
+		}
+		return ""
+	}
+
+	// Extract everything after "/d/" up to the next "/" or end of string.
+	rest := url[idx+len(marker):]
+	if slashIdx := strings.Index(rest, "/"); slashIdx != -1 {
+		return rest[:slashIdx]
+	}
+	return rest
 }
 
 // ─── SheetsClient ───────────────────────────────────────────────────────────
@@ -245,6 +271,65 @@ func (sc *SheetsClient) ensureTab(tabName string) error {
 }
 
 // ─── Sheet creation ─────────────────────────────────────────────────────────
+
+// clearAndWrite is a shared helper for push-only tabs: it ensures the tab
+// exists, clears all existing data, then writes the provided rows (which
+// should include the header row as the first element). This eliminates the
+// repeated ensureTab → clear → sleep → update pattern in every Push method.
+func (sc *SheetsClient) clearAndWrite(tab string, rows [][]interface{}) error {
+	if err := sc.ensureTab(tab); err != nil {
+		return err
+	}
+
+	_, err := sc.service.Spreadsheets.Values.Clear(
+		sc.sheetID, sheetRange(tab), &sheets.ClearValuesRequest{},
+	).Do()
+	if err != nil {
+		return fmt.Errorf("could not clear %s tab: %w", tab, err)
+	}
+
+	time.Sleep(apiPause)
+
+	_, err = sc.service.Spreadsheets.Values.Update(
+		sc.sheetID, sheetRange(tab, "!A1"), &sheets.ValueRange{Values: rows},
+	).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("could not write %s tab: %w", tab, err)
+	}
+
+	return nil
+}
+
+// readTab is a shared helper for pull operations: it ensures the tab exists,
+// fetches all values, and returns a column-name-to-index lookup map plus the
+// raw data rows (excluding the header). Returns an empty map and nil rows if
+// the tab is empty.
+func (sc *SheetsClient) readTab(tab string) (col map[string]int, rows [][]interface{}, err error) {
+	if err := sc.ensureTab(tab); err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := sc.service.Spreadsheets.Values.Get(
+		sc.sheetID, sheetRange(tab),
+	).Do()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not read %s tab: %w", tab, err)
+	}
+
+	col = make(map[string]int)
+	if len(resp.Values) > 0 {
+		for i, cell := range resp.Values[0] {
+			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
+		}
+	}
+
+	// Return rows after the header.
+	if len(resp.Values) > 1 {
+		rows = resp.Values[1:]
+	}
+
+	return col, rows, nil
+}
 
 // CreateSheet creates a brand-new Google Spreadsheet with all seven tabs
 // and their header rows already in place.
@@ -430,13 +515,13 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 		OvernightSoak      bool
 		SoakHours          int
 		SeedGrams          int
-		DirtLitres         float64
+		MediumLitres         float64
 		DarkDays           int
 		LightDays          int
 		YieldGrams         int
 		SeedCost           float64
-		SeedPurchaseWeight int
-		UnitWeight         int
+		SeedPurchaseWeight float64
+		UnitWeight         float64
 		UnitSellPrice      float64
 	}
 
@@ -470,19 +555,19 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			OvernightSoak:      parseBoolCell(row, cropsCol["overnight_soak"]),
 			SoakHours:          parseIntCell(row, cropsCol["soak_hours"]),
 			SeedGrams:          parseIntCell(row, cropsCol["seed_grams"]),
-			DirtLitres:         parseFloatCell(row, cropsCol["dirt_litres"]),
+			MediumLitres:         parseFloatCell(row, cropsCol["medium_litres"]),
 			DarkDays:           parseIntCell(row, cropsCol["dark_days"]),
 			LightDays:          parseIntCell(row, cropsCol["light_days"]),
 			YieldGrams:         parseIntCell(row, cropsCol["yield_grams"]),
 			SeedCost:           parseFloatCell(row, cropsCol["seed_cost"]),
-			SeedPurchaseWeight: parseIntCell(row, cropsCol["seed_purchase_weight"]),
-			UnitWeight:         parseIntCell(row, cropsCol["unit_weight"]),
+			SeedPurchaseWeight: parseFloatCell(row, cropsCol["seed_purchase_weight"]),
+			UnitWeight:         parseFloatCell(row, cropsCol["unit_weight"]),
 			UnitSellPrice:      parseFloatCell(row, cropsCol["unit_sell_price"]),
 		}
 
-		// Default dirt to 1 litre if the cell is empty or zero.
-		if p.DirtLitres == 0 {
-			p.DirtLitres = 1.0
+		// Default medium to 1 litre if the cell is empty or zero.
+		if p.MediumLitres == 0 {
+			p.MediumLitres = 1.0
 		}
 
 		// Default unit weight to 100 g (a common clamshell size).
@@ -555,7 +640,7 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			OvernightSoak:      p.OvernightSoak,
 			SoakHours:          p.SoakHours,
 			SeedGrams:          p.SeedGrams,
-			DirtLitres:         p.DirtLitres,
+			MediumLitres:         p.MediumLitres,
 			DarkDays:           p.DarkDays,
 			LightDays:          p.LightDays,
 			YieldGrams:         p.YieldGrams,
@@ -583,7 +668,7 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 	// ── Build the Crops tab data ────────────────────────────────────────
 	//
 	// One row per variety: name, overnight_soak, soak_hours, seed_grams,
-	// dirt_litres, dark_days, light_days, yield_grams.
+	// medium_litres, dark_days, light_days, yield_grams.
 	//
 	// We build a column-name → position map from cropsHeaders so that
 	// adding a new parameter column means updating the header list and
@@ -602,12 +687,12 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 			soakStr = "TRUE"
 		}
 
-		// Format dirt_litres nicely: "1" not "1.0", "1.5" stays "1.5".
-		var dirtStr string
-		if c.DirtLitres == float64(int(c.DirtLitres)) {
-			dirtStr = strconv.Itoa(int(c.DirtLitres))
+		// Format grow medium volume nicely: "1" not "1.0", "1.5" stays "1.5".
+		var mediumStr string
+		if c.MediumLitres == float64(int(c.MediumLitres)) {
+			mediumStr = strconv.Itoa(int(c.MediumLitres))
 		} else {
-			dirtStr = strconv.FormatFloat(c.DirtLitres, 'f', -1, 64)
+			mediumStr = strconv.FormatFloat(c.MediumLitres, 'f', -1, 64)
 		}
 
 		// Format money fields cleanly: "15" not "15.000000".
@@ -625,7 +710,7 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 		row[cropCol["overnight_soak"]] = soakStr
 		row[cropCol["soak_hours"]] = c.SoakHours
 		row[cropCol["seed_grams"]] = c.SeedGrams
-		row[cropCol["dirt_litres"]] = dirtStr
+		row[cropCol["medium_litres"]] = mediumStr
 		row[cropCol["dark_days"]] = c.DarkDays
 		row[cropCol["light_days"]] = c.LightDays
 		row[cropCol["yield_grams"]] = c.YieldGrams
@@ -844,6 +929,7 @@ func (sc *SheetsClient) PullSupplies() ([]supply.Supply, error) {
 
 		supplies = append(supplies, supply.Supply{
 			Name:         name,
+			Category:     strings.TrimSpace(cellString(row, supCol["category"])),
 			CostPerCase:  parseFloatCell(row, supCol["cost_per_case"]),
 			UnitsPerCase: parseFloatCell(row, supCol["units_per_case"]),
 		})
@@ -871,6 +957,7 @@ func (sc *SheetsClient) PushSupplies(supplies []supply.Supply) error {
 	for _, s := range supplies {
 		row := make([]interface{}, len(suppliesHeaders))
 		row[sCol["name"]] = s.Name
+		row[sCol["category"]] = s.Category
 		row[sCol["cost_per_case"]] = formatSheetFloat(s.CostPerCase)
 		row[sCol["units_per_case"]] = formatSheetFloat(s.UnitsPerCase)
 
@@ -941,9 +1028,9 @@ func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
 		if tr.SeedGrams > 0 {
 			seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
 		}
-		dirtStr := ""
-		if tr.DirtLitres > 0 {
-			dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
+		mediumStr := ""
+		if tr.MediumLitres > 0 {
+			mediumStr = strconv.FormatFloat(tr.MediumLitres, 'f', -1, 64)
 		}
 		yieldStr := ""
 		if tr.ActualYieldGrams > 0 {
@@ -967,7 +1054,7 @@ func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
 			if i == 0 {
 				// First row: include all parameters.
 				row = append(row,
-					soakStr, soakHoursStr, seedStr, dirtStr,
+					soakStr, soakHoursStr, seedStr, mediumStr,
 					darkDays, lightDays, yieldStr,
 				)
 			} else {
@@ -1012,13 +1099,6 @@ func (sc *SheetsClient) PushTrials(records []trial.TrialRecord) error {
 // a chronological list. "No tasks today" placeholder tasks are excluded —
 // they exist only for slot tracking and would clutter the view.
 func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
-	// Make sure the tab exists — it may be missing if the user's sheet
-	// was created before this tab was added.
-	if err := sc.ensureTab(scheduleTab); err != nil {
-		return err
-	}
-
-	// Build the rows: header + one row per task.
 	rows := [][]interface{}{scheduleHeaders}
 
 	for _, t := range tasks {
@@ -1036,24 +1116,7 @@ func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
 		})
 	}
 
-	// Clear the tab and rewrite from scratch.
-	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, sheetRange(scheduleTab), &sheets.ClearValuesRequest{},
-	).Do()
-	if err != nil {
-		return fmt.Errorf("could not clear Schedule tab: %w", err)
-	}
-
-	time.Sleep(apiPause)
-
-	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, sheetRange(scheduleTab, "!A1"), &sheets.ValueRange{Values: rows},
-	).ValueInputOption("RAW").Do()
-	if err != nil {
-		return fmt.Errorf("could not write Schedule tab: %w", err)
-	}
-
-	return nil
+	return sc.clearAndWrite(scheduleTab, rows)
 }
 
 // ─── Batches (cycles.json): push-only ───────────────────────────────────────
@@ -1062,18 +1125,10 @@ func (sc *SheetsClient) PushSchedule(tasks []task.Task) error {
 // — the program never reads cycle records back from the Sheet. The tab exists
 // so the grower can see all their planned batches on any device.
 func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
-	// Make sure the tab exists — it may be missing if the user's sheet
-	// was created before this tab was added.
-	if err := sc.ensureTab(batchesTab); err != nil {
-		return err
-	}
-
-	// Build the rows: header + one row per cycle.
 	rows := [][]interface{}{batchesHeaders}
 
 	for _, c := range cycles {
-		// Format expected grams: empty string for zero so the cell stays
-		// blank rather than showing a misleading "0".
+		// Empty string for zero so the cell stays blank.
 		gramsStr := ""
 		if c.ExpectedGrams > 0 {
 			gramsStr = strconv.Itoa(c.ExpectedGrams)
@@ -1091,24 +1146,7 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 		})
 	}
 
-	// Clear the tab and rewrite from scratch.
-	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, sheetRange(batchesTab), &sheets.ClearValuesRequest{},
-	).Do()
-	if err != nil {
-		return fmt.Errorf("could not clear Batches tab: %w", err)
-	}
-
-	time.Sleep(apiPause)
-
-	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, sheetRange(batchesTab, "!A1"), &sheets.ValueRange{Values: rows},
-	).ValueInputOption("RAW").Do()
-	if err != nil {
-		return fmt.Errorf("could not write Batches tab: %w", err)
-	}
-
-	return nil
+	return sc.clearAndWrite(batchesTab, rows)
 }
 
 // ─── Harvests (harvests.json): push-only ────────────────────────────────────
@@ -1117,17 +1155,10 @@ func (sc *SheetsClient) PushBatches(cycles []farm.Cycle) error {
 // the program never reads harvest records back from the Sheet. The tab
 // exists so the grower can review their harvest history on any device.
 func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
-	// Make sure the tab exists — it may be missing if the user's sheet
-	// was created before this tab was added.
-	if err := sc.ensureTab(harvestsTab); err != nil {
-		return err
-	}
-
-	// Build the rows: header + one row per harvest record.
 	rows := [][]interface{}{harvestsHeaders}
 
 	for _, h := range records {
-		// Format expected grams: empty string for zero (means "unknown").
+		// Empty string for zero (means "unknown").
 		expectedStr := ""
 		if h.ExpectedGrams > 0 {
 			expectedStr = strconv.Itoa(h.ExpectedGrams)
@@ -1145,24 +1176,7 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 		})
 	}
 
-	// Clear the tab and rewrite from scratch.
-	_, err := sc.service.Spreadsheets.Values.Clear(
-		sc.sheetID, sheetRange(harvestsTab), &sheets.ClearValuesRequest{},
-	).Do()
-	if err != nil {
-		return fmt.Errorf("could not clear Harvests tab: %w", err)
-	}
-
-	time.Sleep(apiPause)
-
-	_, err = sc.service.Spreadsheets.Values.Update(
-		sc.sheetID, sheetRange(harvestsTab, "!A1"), &sheets.ValueRange{Values: rows},
-	).ValueInputOption("RAW").Do()
-	if err != nil {
-		return fmt.Errorf("could not write Harvests tab: %w", err)
-	}
-
-	return nil
+	return sc.clearAndWrite(harvestsTab, rows)
 }
 
 // ─── Pull: Schedule Tasks (tasks.json) ──────────────────────────────────────
@@ -1179,34 +1193,16 @@ func (sc *SheetsClient) PushHarvests(records []farm.HarvestRecord) error {
 // "No tasks today" placeholders are filtered out during push, so they
 // won't exist after pull — this is harmless, they're cosmetic.
 func (sc *SheetsClient) PullSchedule() ([]task.Task, error) {
-	// Make sure the tab exists — it may be missing on very old Sheets.
-	if err := sc.ensureTab(scheduleTab); err != nil {
-		return nil, err
-	}
-
-	resp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, sheetRange(scheduleTab),
-	).Do()
+	col, rows, err := sc.readTab(scheduleTab)
 	if err != nil {
-		return nil, fmt.Errorf("could not read Schedule Tasks tab: %w", err)
-	}
-
-	// Build a header lookup so columns are found by name, not position.
-	col := make(map[string]int)
-	if len(resp.Values) > 0 {
-		for i, cell := range resp.Values[0] {
-			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
-		}
+		return nil, err
 	}
 
 	var tasks []task.Task
 
-	for i, row := range resp.Values {
-		if i == 0 {
-			continue // skip header row
-		}
+	for _, row := range rows {
 		if len(row) == 0 {
-			continue // blank row
+			continue
 		}
 
 		title := strings.TrimSpace(cellString(row, col["title"]))
@@ -1248,34 +1244,16 @@ func (sc *SheetsClient) PullSchedule() ([]task.Task, error) {
 // that were pushed before cycle_id was added will have this column added
 // automatically on the next push.
 func (sc *SheetsClient) PullBatches() ([]farm.Cycle, error) {
-	// Make sure the tab exists.
-	if err := sc.ensureTab(batchesTab); err != nil {
-		return nil, err
-	}
-
-	resp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, sheetRange(batchesTab),
-	).Do()
+	col, rows, err := sc.readTab(batchesTab)
 	if err != nil {
-		return nil, fmt.Errorf("could not read Schedule Cycles tab: %w", err)
-	}
-
-	// Build a header lookup so columns are found by name, not position.
-	col := make(map[string]int)
-	if len(resp.Values) > 0 {
-		for i, cell := range resp.Values[0] {
-			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
-		}
+		return nil, err
 	}
 
 	var cycles []farm.Cycle
 
-	for i, row := range resp.Values {
-		if i == 0 {
-			continue // skip header row
-		}
+	for _, row := range rows {
 		if len(row) == 0 {
-			continue // blank row
+			continue
 		}
 
 		cropName := strings.TrimSpace(cellString(row, col["crop"]))
@@ -1304,34 +1282,16 @@ func (sc *SheetsClient) PullBatches() ([]farm.Cycle, error) {
 // the data as []farm.HarvestRecord. Used when linking an existing Sheet
 // on a new device to populate local harvests.json.
 func (sc *SheetsClient) PullHarvests() ([]farm.HarvestRecord, error) {
-	// Make sure the tab exists.
-	if err := sc.ensureTab(harvestsTab); err != nil {
-		return nil, err
-	}
-
-	resp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, sheetRange(harvestsTab),
-	).Do()
+	col, rows, err := sc.readTab(harvestsTab)
 	if err != nil {
-		return nil, fmt.Errorf("could not read Harvests tab: %w", err)
-	}
-
-	// Build a header lookup so columns are found by name, not position.
-	col := make(map[string]int)
-	if len(resp.Values) > 0 {
-		for i, cell := range resp.Values[0] {
-			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
-		}
+		return nil, err
 	}
 
 	var records []farm.HarvestRecord
 
-	for i, row := range resp.Values {
-		if i == 0 {
-			continue // skip header row
-		}
+	for _, row := range rows {
 		if len(row) == 0 {
-			continue // blank row
+			continue
 		}
 
 		cropName := strings.TrimSpace(cellString(row, col["crop"]))
@@ -1369,47 +1329,24 @@ func (sc *SheetsClient) PullHarvests() ([]farm.HarvestRecord, error) {
 // The round-trip is lossy but gives the new device enough to display
 // trial status and confirmed parameters.
 func (sc *SheetsClient) PullTrials() ([]trial.TrialRecord, error) {
-	// Make sure the tab exists.
-	if err := sc.ensureTab(trialsTab); err != nil {
+	col, dataRows, err := sc.readTab(trialsTab)
+	if err != nil {
 		return nil, err
 	}
 
-	resp, err := sc.service.Spreadsheets.Values.Get(
-		sc.sheetID, sheetRange(trialsTab),
-	).Do()
-	if err != nil {
-		return nil, fmt.Errorf("could not read Trials tab: %w", err)
-	}
-
-	// Build a header lookup so columns are found by name, not position.
-	col := make(map[string]int)
-	if len(resp.Values) > 0 {
-		for i, cell := range resp.Values[0] {
-			col[strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", cell)))] = i
-		}
-	}
-
 	// Trials in the Sheet are stored as blocks of rows — each row is one
-	// confirmed day. All rows in the same block share the same crop name,
-	// trial variable, status, and sow date. Parameters (soak, seed, dirt,
-	// etc.) only appear on the first row of each block.
-	//
-	// We group consecutive rows with the same (name + sow_date) into one
-	// TrialRecord. If a new combination appears, we start a new record.
+	// confirmed day. We group consecutive rows with the same
+	// (name + sow_date) into one TrialRecord.
 
 	type trialKey struct {
 		name    string
 		sowDate string
 	}
 
-	// trialMap preserves insertion order via keyOrder slice.
 	trialMap := make(map[trialKey]*trial.TrialRecord)
 	var keyOrder []trialKey
 
-	for i, row := range resp.Values {
-		if i == 0 {
-			continue // skip header row
-		}
+	for _, row := range dataRows {
 		if len(row) == 0 {
 			continue // blank row
 		}
@@ -1440,12 +1377,12 @@ func (sc *SheetsClient) PullTrials() ([]trial.TrialRecord, error) {
 				OvernightSoak: parseBoolCell(row, col["overnight_soak"]),
 				SoakHours:     parseFloatCell(row, col["soak_hours"]),
 				SeedGrams:     parseFloatCell(row, col["seed_grams"]),
-				DirtLitres:    parseFloatCell(row, col["dirt_litres"]),
+				MediumLitres:    parseFloatCell(row, col["medium_litres"]),
 			}
 
-			// Default dirt to 1 litre if the cell was empty or zero.
-			if trialMap[key].DirtLitres == 0 {
-				trialMap[key].DirtLitres = 1.0
+			// Default medium to 1 litre if the cell was empty or zero.
+			if trialMap[key].MediumLitres == 0 {
+				trialMap[key].MediumLitres = 1.0
 			}
 
 			// Read actual yield from the first row if present.

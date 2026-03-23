@@ -4,10 +4,9 @@
 // Every item that appears on the calendar — "sow sunflowers", "water peas",
 // a reminder, anything — is represented as one Task value.
 //
-// The fields below were chosen to match Google Calendar's event format
-// exactly. That means in a future phase, converting a Task into a Google
-// Calendar event will be straightforward — the information is already in
-// the right shape.
+// The fields were chosen to match Google Calendar's event format exactly,
+// so converting a Task into a Google Calendar event is straightforward —
+// the information is already in the right shape.
 package task
 
 import (
@@ -36,7 +35,7 @@ const NoTasksNote = "no tasks today"
 // Task represents a single item on the calendar.
 //
 // Each field maps to a Google Calendar event field (noted in the comments),
-// so this struct is ready for Phase 5 integration without any redesign.
+// so converting tasks to Google Calendar events is straightforward.
 type Task struct {
 	// ID is a unique identifier for this task — like a serial number on a
 	// product. No two tasks will ever share the same ID, even if they have
@@ -173,4 +172,13 @@ func Capitalize(s string) string {
 		return ""
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// TrayWord returns "tray" if count is 1, "trays" otherwise.
+// Used throughout the program wherever tray counts are displayed.
+func TrayWord(count int) string {
+	if count == 1 {
+		return "tray"
+	}
+	return "trays"
 }

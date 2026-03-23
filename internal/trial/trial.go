@@ -1,4 +1,4 @@
-// Package trial manages experimental crop runs — the Phase 6 trialling system.
+// Package trial manages experimental crop runs — the trialling system.
 //
 // Think of this package as a lab notebook for the farm. When you want to try
 // a new crop variety, or test whether changing the seed density or soak time
@@ -157,9 +157,9 @@ type TrialRecord struct {
 	// Zero means the grower didn't record this at trial start.
 	SeedGrams float64
 
-	// DirtLitres is the volume of grow medium per tray in litres.
+	// MediumLitres is the volume of grow medium per tray in litres.
 	// Zero means unknown; the default when entered is 1.
-	DirtLitres float64
+	MediumLitres float64
 
 	// MoveToLightDay is the expected cycle day when trays move from blackout
 	// to a lit rack. Zero = unknown.
@@ -393,6 +393,52 @@ func SaveTrials(records []TrialRecord) error {
 //
 // The extra trial-specific columns (trial_variable, trial_start) come first,
 // before the standard crop columns, so the file opens sensibly in a spreadsheet.
+// countStages counts how many dark and light days are in a list of
+// confirmed trial days. Used when writing CSV rows.
+func countStages(days []TrialDayParams) (darkDays, lightDays int) {
+	for _, d := range days {
+		switch d.Stage {
+		case "dark":
+			darkDays++
+		case "light":
+			lightDays++
+		}
+	}
+	return
+}
+
+// trialFieldStrings converts a trial record's numeric and boolean fields
+// into CSV-ready strings. Empty string means "not recorded" — avoids
+// misleading zeroes in the spreadsheet.
+type trialFields struct {
+	Soak, SoakHours, Seed, Medium, Yield string
+	Dark, Light                        string
+}
+
+func formatTrialFields(tr TrialRecord) trialFields {
+	f := trialFields{}
+	f.Soak = "no"
+	if tr.OvernightSoak {
+		f.Soak = "yes"
+	}
+	if tr.SoakHours > 0 {
+		f.SoakHours = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
+	}
+	if tr.SeedGrams > 0 {
+		f.Seed = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
+	}
+	if tr.MediumLitres > 0 {
+		f.Medium = strconv.FormatFloat(tr.MediumLitres, 'f', -1, 64)
+	}
+	if tr.ActualYieldGrams > 0 {
+		f.Yield = strconv.Itoa(tr.ActualYieldGrams)
+	}
+	dark, light := countStages(tr.ConfirmedDays)
+	f.Dark = strconv.Itoa(dark)
+	f.Light = strconv.Itoa(light)
+	return f
+}
+
 func writeTrialsCSV(records []TrialRecord) error {
 	csvPath, err := TrialsCSVPath()
 	if err != nil {
@@ -407,13 +453,13 @@ func writeTrialsCSV(records []TrialRecord) error {
 
 	w := csv.NewWriter(f)
 
-	// Header row. Columns match the agreed Phase 6 design, with the two
+	// Header row. Columns match the crops.csv format, with two
 	// trial-specific columns (trial_variable, trial_start) added before
 	// the standard crop columns so they are easy to spot in a spreadsheet.
 	header := []string{
 		"name", "trial_variable", "trial_start",
 		"day", "stage", "tasks",
-		"overnight_soak", "soak_hours", "seed_grams", "dirt_litres",
+		"overnight_soak", "soak_hours", "seed_grams", "medium_litres",
 		"dark_days", "light_days", "yield_grams",
 	}
 	if err := w.Write(header); err != nil {
@@ -426,58 +472,21 @@ func writeTrialsCSV(records []TrialRecord) error {
 			continue
 		}
 
-		// Count dark and light days from the confirmed parameters so we can
-		// fill in dark_days and light_days on the first row of this block.
-		darkDays := 0
-		lightDays := 0
-		for _, d := range tr.ConfirmedDays {
-			switch d.Stage {
-			case "dark":
-				darkDays++
-			case "light":
-				lightDays++
-			}
-		}
-
-		// Build string representations of the float and bool fields.
-		// Empty string means "not recorded" — avoids misleading zeroes.
-		soakStr := "no"
-		if tr.OvernightSoak {
-			soakStr = "yes"
-		}
-		soakHoursStr := ""
-		if tr.SoakHours > 0 {
-			soakHoursStr = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
-		}
-		seedStr := ""
-		if tr.SeedGrams > 0 {
-			seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
-		}
-		dirtStr := ""
-		if tr.DirtLitres > 0 {
-			dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
-		}
-		yieldStr := ""
-		if tr.ActualYieldGrams > 0 {
-			yieldStr = strconv.Itoa(tr.ActualYieldGrams)
-		}
+		f := formatTrialFields(tr)
 
 		// Write one CSV row per confirmed day.
 		for i, d := range tr.ConfirmedDays {
 			var row []string
 			if i == 0 {
 				// First row in this trial block: include all header-level fields.
-				// These describe the crop as a whole — they only need to appear once.
 				row = []string{
 					tr.CropName, tr.TrialVariable, tr.SowDate,
 					strconv.Itoa(d.Day), d.Stage, d.Tasks,
-					soakStr, soakHoursStr, seedStr, dirtStr,
-					strconv.Itoa(darkDays), strconv.Itoa(lightDays), yieldStr,
+					f.Soak, f.SoakHours, f.Seed, f.Medium,
+					f.Dark, f.Light, f.Yield,
 				}
 			} else {
-				// Subsequent rows: only day, stage, tasks — sparse format just
-				// like crops.csv. The shared columns are left empty so the block
-				// reads cleanly in Google Sheets without visual repetition.
+				// Subsequent rows: sparse format — only day, stage, tasks.
 				row = []string{
 					tr.CropName, tr.TrialVariable, tr.SowDate,
 					strconv.Itoa(d.Day), d.Stage, d.Tasks,
@@ -519,55 +528,17 @@ func AppendToCropsCSV(cropsPath string, tr TrialRecord) error {
 
 	w := csv.NewWriter(f)
 
-	// Count dark and light days from the confirmed parameters.
-	darkDays := 0
-	lightDays := 0
-	for _, d := range tr.ConfirmedDays {
-		switch d.Stage {
-		case "dark":
-			darkDays++
-		case "light":
-			lightDays++
-		}
-	}
-
-	// Build the soak fields.
-	// crops.csv uses "overnight_soak" (yes/no) and "soak_hours" as separate columns.
-	soakStr := "no"
-	if tr.OvernightSoak {
-		soakStr = "yes"
-	}
-	soakHoursStr := ""
-	if tr.SoakHours > 0 {
-		soakHoursStr = strconv.FormatFloat(tr.SoakHours, 'f', -1, 64)
-	}
-	seedStr := ""
-	if tr.SeedGrams > 0 {
-		seedStr = strconv.FormatFloat(tr.SeedGrams, 'f', -1, 64)
-	}
-	dirtStr := ""
-	if tr.DirtLitres > 0 {
-		dirtStr = strconv.FormatFloat(tr.DirtLitres, 'f', -1, 64)
-	}
-	yieldStr := ""
-	if tr.ActualYieldGrams > 0 {
-		yieldStr = strconv.Itoa(tr.ActualYieldGrams)
-	}
-	darkStr := strconv.Itoa(darkDays)
-	lightStr := strconv.Itoa(lightDays)
+	tf := formatTrialFields(tr)
 
 	for i, d := range tr.ConfirmedDays {
 		var row []string
 		if i == 0 {
-			// First row: all crop-level fields. The column order matches the
-			// header in crops.csv exactly:
-			// name, day, stage, tasks, overnight_soak, soak_hours,
-			// seed_grams, dirt_litres, dark_days, light_days, yield_grams
+			// First row: all crop-level fields matching crops.csv column order.
 			row = []string{
 				tr.CropName,
 				strconv.Itoa(d.Day), d.Stage, d.Tasks,
-				soakStr, soakHoursStr, seedStr, dirtStr,
-				darkStr, lightStr, yieldStr,
+				tf.Soak, tf.SoakHours, tf.Seed, tf.Medium,
+				tf.Dark, tf.Light, tf.Yield,
 			}
 		} else {
 			// Subsequent rows: sparse — only the per-day columns are filled.
@@ -615,6 +586,18 @@ func PastTrialsByName(records []TrialRecord, cropName string) []TrialRecord {
 		}
 	}
 	return past
+}
+
+// FindByID returns a pointer to the trial with the given ID in the slice,
+// or nil if no match is found. The pointer refers directly into the slice,
+// so changes to the returned record will modify the original.
+func FindByID(records []TrialRecord, id string) *TrialRecord {
+	for i := range records {
+		if records[i].ID == id {
+			return &records[i]
+		}
+	}
+	return nil
 }
 
 // ReplaceByID returns a new slice with the trial matching id replaced by
