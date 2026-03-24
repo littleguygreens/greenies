@@ -313,17 +313,17 @@ func runPlan() {
 
 	if len(litEnvs) == 0 {
 		// No lit environments are configured in farm.csv.
-		// Default to "either" so the cycle record is still saved.
-		litEnv = "either"
+		// Default to "any" so the cycle record is still saved.
+		litEnv = "any"
 	} else {
 		// Build a compact prompt from the list of lit environments in the config.
-		// Example: "Which lit environment? (1) main tent / (2) test tent / (e) either [1]: "
+		// Example: "Which lit environment? (1) main tent / (2) test tent / (a) any [a]: "
 		var promptParts []string
 		for i, e := range litEnvs {
 			promptParts = append(promptParts, fmt.Sprintf("(%d) %s", i+1, farm.DisplayName(e.Name)))
 		}
-		promptParts = append(promptParts, "(e) either")
-		envInput := ask("Which lit environment? " + strings.Join(promptParts, " / ") + " [e]: ")
+		promptParts = append(promptParts, "(a) any")
+		envInput := ask("Which lit environment? " + strings.Join(promptParts, " / ") + " [a]: ")
 		litEnv = resolveLitEnv(envInput, litEnvs)
 	}
 
@@ -666,14 +666,14 @@ func runBatchPlan(
 		// --- Which lit environment? ---
 		var litEnv string
 		if len(litEnvs) == 0 {
-			litEnv = "either"
+			litEnv = "any"
 		} else {
 			var promptParts []string
 			for i, e := range litEnvs {
 				promptParts = append(promptParts, fmt.Sprintf("(%d) %s", i+1, farm.DisplayName(e.Name)))
 			}
-			promptParts = append(promptParts, "(e) either")
-			envInput := ask("Which lit environment? " + strings.Join(promptParts, " / ") + " [e]: ")
+			promptParts = append(promptParts, "(a) any")
+			envInput := ask("Which lit environment? " + strings.Join(promptParts, " / ") + " [a]: ")
 			litEnv = resolveLitEnv(envInput, litEnvs)
 		}
 
@@ -813,7 +813,7 @@ func runBatchPlan(
 			// --- Batch split logic ---
 			//
 			// A split is possible when every crop in the batch targets the
-			// same lit environment (or all chose "either") and the combined
+			// same lit environment (or all chose "any") and the combined
 			// total overflows that environment's capacity.
 			//
 			// The split uses a "greedy fill" approach: crops are assigned to
@@ -824,7 +824,7 @@ func runBatchPlan(
 			allSameBatchEnv := true
 			for _, e := range entries {
 				env := e.litEnv
-				if env == "either" && len(litEnvs) > 0 {
+				if env == "any" && len(litEnvs) > 0 {
 					env = litEnvs[0].Name
 				}
 				if targetEnvForSplit == "" {
@@ -1044,30 +1044,30 @@ func runBatchPlan(
 // Accepts any of:
 //   - a number ("1", "2") — picks the environment at that position
 //   - a full name or unique prefix ("main", "test") — matched case-insensitively
-//   - "e" or "either" — leaves the environment unassigned until snapshot time
-//   - blank — defaults to the first lit environment in the config
+//   - "a" or "any" — leaves the environment unassigned until snapshot time
+//   - blank — defaults to "any" (auto-assign at snapshot time)
 //
 // If nothing matches, defaults to the first lit environment.
 func resolveLitEnv(input string, litEnvs []farm.Environment) string {
 	if len(litEnvs) == 0 {
-		return "either"
+		return "any"
 	}
 
 	input = strings.TrimSpace(input)
 
-	// Blank → "either", which auto-assigns to the first lit environment with
+	// Blank → "any", which auto-assigns to the first lit environment with
 	// enough free slots at snapshot time, spilling to the next if needed.
 	// This is the safest lazy default: it never locks a cycle to a specific
 	// tent before the grower knows which one has room.
 	if input == "" {
-		return "either"
+		return "any"
 	}
 
 	lower := strings.ToLower(input)
 
-	// "e" or "either" → explicitly unassigned; resolved at snapshot time.
-	if lower == "e" || lower == "either" {
-		return "either"
+	// "a" or "any" → explicitly unassigned; resolved at snapshot time.
+	if lower == "a" || lower == "any" {
+		return "any"
 	}
 
 	// Number → pick by 1-based index.
@@ -1172,7 +1172,7 @@ func computePeakLitUsage(envName string, cycles []farm.Cycle, windowStart, windo
 // environments to resolve a slot overflow.
 //
 // A split is possible when:
-//   - All new cycles target the same lit environment (or all use "either").
+//   - All new cycles target the same lit environment (or all use "any").
 //   - That environment will overflow once the new cycles are added.
 //   - There is a second lit environment configured to absorb the surplus.
 //   - Both halves of the split are non-zero (otherwise it's a move, not a split).
@@ -1199,10 +1199,10 @@ func computeSingleCycleSplit(
 			return litSplit{}, false
 		}
 		env := c.LitEnvironment
-		if env == "either" && len(litEnvs) > 0 {
+		if env == "any" && len(litEnvs) > 0 {
 			env = litEnvs[0].Name
 		}
-		if targetEnv == "either" && len(litEnvs) > 0 {
+		if targetEnv == "any" && len(litEnvs) > 0 {
 			targetEnv = litEnvs[0].Name
 		}
 		if env != targetEnv {
@@ -1211,8 +1211,8 @@ func computeSingleCycleSplit(
 		}
 	}
 
-	// Resolve "either" to the first lit environment.
-	if targetEnv == "either" && len(litEnvs) > 0 {
+	// Resolve "any" to the first lit environment.
+	if targetEnv == "any" && len(litEnvs) > 0 {
 		targetEnv = litEnvs[0].Name
 	}
 

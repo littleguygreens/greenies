@@ -51,6 +51,10 @@ type CropRow struct {
 	// ProfitMargin is profit as a percentage of revenue (e.g. 62.5).
 	ProfitMargin float64
 
+	// ProfitPerUnit is the dollar profit per sellable unit (sell price minus
+	// cost per unit, including seed, medium, container, and label costs).
+	ProfitPerUnit float64
+
 	// HasProfit is true if we have enough data to show profitability numbers.
 	HasProfit bool
 }
@@ -89,6 +93,7 @@ func handleCrops(w http.ResponseWriter, r *http.Request) {
 			RevenuePerTray: crop.RoundCents(c.RevenuePerTray()),
 			ProfitPerTray:  crop.RoundCents(c.ProfitPerTray(sc)),
 			ProfitMargin:   crop.RoundCents(c.ProfitMargin(sc)),
+			ProfitPerUnit:  crop.RoundCents(c.ProfitPerUnit(sc)),
 			HasProfit:      c.HasCostingData(),
 		}
 	}

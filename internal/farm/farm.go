@@ -92,8 +92,8 @@ type Cycle struct {
 	// once it leaves the blackout room. Matches the Name field of an
 	// Environment in farm.csv — for example "main_tent" or "test_tent".
 	//
-	// The special value "either" means the grower hadn't decided at plan
-	// time. The snapshot resolves "either" at display time by assigning the
+	// The special value "any" means the grower hadn't decided at plan
+	// time. The snapshot resolves "any" at display time by assigning the
 	// batch to the first lit environment that has available capacity.
 	LitEnvironment string
 

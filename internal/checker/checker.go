@@ -68,7 +68,7 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 	bottomTotal := 0
 
 	// Also collect the lit environments in config order — needed to resolve
-	// "either" cycles (cycles where the grower hadn't picked a tent yet).
+	// "any" cycles (cycles where the grower hadn't picked a tent yet).
 	var litEnvList []farm.Environment
 
 	for _, e := range envs {
@@ -86,20 +86,20 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 		}
 	}
 
-	// ── Step 2: parse all cycle dates and resolve "either" environments ───────
+	// ── Step 2: parse all cycle dates and resolve "any" environments ───────
 
 	// parsedCycle holds a cycle with its dates already converted from strings
 	// into time.Time values (so we don't re-parse on every date we check), and
-	// with "either" replaced by a real environment name.
+	// with "any" replaced by a real environment name.
 	type parsedCycle struct {
 		c           farm.Cycle
 		sow         time.Time
 		moveToLight time.Time
 		harvest     time.Time
-		litEnv      string // always a real env name — never "either"
+		litEnv      string // always a real env name — never "any"
 	}
 
-	// To resolve "either" cycles we use the same cascading-assignment logic as
+	// To resolve "any" cycles we use the same cascading-assignment logic as
 	// the snapshot: assign to the first lit env that has room, falling through
 	// to the next if that one is full, and to the first env (flagging it as a
 	// conflict) if all are full.
@@ -109,9 +109,9 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 	// matches what the user sees in the snapshot display.
 	litUsageForResolution := map[string]int{}
 	for _, c := range cycles {
-		// Pre-count trays for non-"either" cycles so "either" assignments
+		// Pre-count trays for non-"any" cycles so "any" assignments
 		// can cascade around them.
-		if c.LitEnvironment != "either" {
+		if c.LitEnvironment != "any" {
 			litUsageForResolution[c.LitEnvironment] += c.Trays
 		}
 	}
@@ -131,7 +131,7 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 
 		// Resolve the lit environment for this cycle.
 		env := c.LitEnvironment
-		if env == "either" {
+		if env == "any" {
 			// Try each lit env in config order; pick the first with room.
 			assigned := ""
 			for _, e := range litEnvList {

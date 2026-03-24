@@ -201,6 +201,7 @@ func enrichSnapshotFinancials(snap *visualizer.SnapshotData) {
 		row.CostPerTray = crop.RoundCents(c.TotalCostPerTray(sc))
 		row.RevenuePerTray = crop.RoundCents(c.RevenuePerTray())
 		row.ProfitPerTray = crop.RoundCents(c.ProfitPerTray(sc))
+		row.ProfitBatch = crop.RoundCents(c.ProfitPerTray(sc) * float64(row.Trays))
 		row.HasProfit = true
 	}
 

@@ -122,7 +122,7 @@
                 <div class="snap-cycle-dates">
                     <span>sown {{.SowDate}}</span>
                     <span>harvest {{.HarvestDate}}</span>
-                    {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray</span>{{end}}
+                    {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray · {{fmtDollar .ProfitBatch}}/batch</span>{{end}}
                 </div>
             </div>
             {{end}}

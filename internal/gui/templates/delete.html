@@ -23,6 +23,9 @@
 {{define "delete.html"}}
 <h1>Delete Tasks</h1>
 
+<!-- Clear All button — links to the confirmation page at /clear. -->
+<a href="/clear" class="btn btn-danger" style="margin-bottom: 1.5rem; display: inline-block;">Clear All Tasks</a>
+
 {{if .HasTasks}}
     <p>{{.Count}} tasks total. Click the delete button to remove a task.</p>
 

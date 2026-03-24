@@ -35,6 +35,7 @@
                 <th>Yield ({{weightUnit}}/tray)</th>
                 <th>Units/tray</th>
                 <th>Sell $/unit</th>
+                <th>Profit $/unit</th>
                 <th>Cost/tray</th>
                 <th>Profit/tray</th>
                 <th>Margin</th>
@@ -51,6 +52,7 @@
                     <td>{{.YieldGrams}}</td>
                     <td>{{if gt .UnitsPerTray 0.0}}{{printf "%.1f" .UnitsPerTray}}{{else}}—{{end}}</td>
                     <td>{{if gt .UnitSellPrice 0.0}}${{printf "%.2f" .UnitSellPrice}}{{else}}—{{end}}</td>
+                    <td>{{if .HasProfit}}${{printf "%.2f" .ProfitPerUnit}}{{else}}—{{end}}</td>
                     <td>{{if .HasProfit}}${{printf "%.2f" .CostPerTray}}{{else}}—{{end}}</td>
                     <td>{{if .HasProfit}}${{printf "%.2f" .ProfitPerTray}}{{else}}—{{end}}</td>
                     <td>{{if .HasProfit}}{{printf "%.0f" .ProfitMargin}}%{{else}}—{{end}}</td>

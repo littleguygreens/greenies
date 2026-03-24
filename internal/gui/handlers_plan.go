@@ -231,10 +231,10 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	baseHarvest, _ := time.Parse(task.DateFormat, harvestDateStr)
 	baseMoveToLight := baseSow.AddDate(0, 0, found.DarkDays+1)
 
-	// Resolve "either" to the first lit env for conflict checking.
+	// Resolve "any" to the first lit env for conflict checking.
 	envForCycle := litEnv
 	if envForCycle == "" {
-		envForCycle = "either"
+		envForCycle = "any"
 	}
 
 	// Base cycle.
@@ -383,10 +383,10 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 	baseHarvest, _ := time.Parse(task.DateFormat, harvestDateStr)
 	baseMoveToLight := baseSow.AddDate(0, 0, found.DarkDays+1)
 
-	// Resolve the lit environment. Empty or missing defaults to "either".
+	// Resolve the lit environment. Empty or missing defaults to "any".
 	envForCycle := strings.TrimSpace(litEnv)
 	if envForCycle == "" {
-		envForCycle = "either"
+		envForCycle = "any"
 	}
 
 	// ── Build cycle records and task lists ────────────────────────────────

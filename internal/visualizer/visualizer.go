@@ -145,6 +145,10 @@ type CycleRow struct {
 	// ProfitPerTray is revenue minus cost for one tray.
 	ProfitPerTray float64
 
+	// ProfitBatch is ProfitPerTray × Trays — the total profit for the
+	// whole batch of trays in this cycle.
+	ProfitBatch float64
+
 	// HasProfit is true if the crop had enough costing data to calculate.
 	HasProfit bool
 }
@@ -320,17 +324,17 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 		classified = append(classified, classifiedCycle{c, status, sow, mlt, harv})
 	}
 
-	// ── Step 2: resolve "either" lit-stage cycles ─────────────────────────────
+	// ── Step 2: resolve "any" lit-stage cycles ─────────────────────────────
 	//
 	// "Either" means the grower hadn't picked a specific tent at plan time.
-	// We assign each "either" cycle to the first lit environment with enough
+	// We assign each "any" cycle to the first lit environment with enough
 	// free slots, spilling to the next if that one is full.
 
-	// First, count how many slots are already spoken for by non-"either" cycles.
+	// First, count how many slots are already spoken for by non-"any" cycles.
 	// (A cycle in blackout doesn't consume lit slots yet.)
 	litUsage := map[string]int{} // environment name → slots in use
 	for _, cc := range classified {
-		if cc.status == statusLit && cc.cycle.LitEnvironment != "either" {
+		if cc.status == statusLit && cc.cycle.LitEnvironment != "any" {
 			litUsage[cc.cycle.LitEnvironment] += cc.cycle.Trays
 		}
 	}
@@ -344,11 +348,11 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 	}
 
 	// resolvedEnv maps a cycle's CycleID to the env name it was assigned to.
-	// Only populated for "either" cycles — everyone else uses their stored value.
+	// Only populated for "any" cycles — everyone else uses their stored value.
 	resolvedEnv := map[string]string{}
 
 	for _, cc := range classified {
-		if cc.status != statusLit || cc.cycle.LitEnvironment != "either" {
+		if cc.status != statusLit || cc.cycle.LitEnvironment != "any" {
 			continue
 		}
 		// Try each lit env in order, pick the first with room.
@@ -369,9 +373,9 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 	}
 
 	// effectiveEnv returns the lit environment name for a cycle, resolving
-	// "either" using the table we just built.
+	// "any" using the table we just built.
 	effectiveEnv := func(cc classifiedCycle) string {
-		if cc.cycle.LitEnvironment == "either" {
+		if cc.cycle.LitEnvironment == "any" {
 			return resolvedEnv[cc.cycle.CycleID]
 		}
 		return cc.cycle.LitEnvironment
@@ -686,7 +690,7 @@ func buildCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) Cyc
 // colour-coded stage indicators.
 //
 // This does the exact same computation as writeSnapshot() — classifying
-// cycles, resolving "either" environments, counting slots, running the
+// cycles, resolving "any" environments, counting slots, running the
 // conflict checker — but packs the results into a SnapshotData struct
 // instead of printing text.
 //
@@ -718,10 +722,10 @@ func BuildSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 		classified = append(classified, classifiedCycle{c, status, sow, mlt, harv})
 	}
 
-	// ── Step 2: resolve "either" lit environments ────────────────────────
+	// ── Step 2: resolve "any" lit environments ────────────────────────
 	litUsage := map[string]int{}
 	for _, cc := range classified {
-		if cc.status == statusLit && cc.cycle.LitEnvironment != "either" {
+		if cc.status == statusLit && cc.cycle.LitEnvironment != "any" {
 			litUsage[cc.cycle.LitEnvironment] += cc.cycle.Trays
 		}
 	}
@@ -735,7 +739,7 @@ func BuildSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 
 	resolvedEnv := map[string]string{}
 	for _, cc := range classified {
-		if cc.status != statusLit || cc.cycle.LitEnvironment != "either" {
+		if cc.status != statusLit || cc.cycle.LitEnvironment != "any" {
 			continue
 		}
 		assigned := ""
@@ -753,7 +757,7 @@ func BuildSnapshot(envs []farm.Environment, cycles []farm.Cycle, today time.Time
 	}
 
 	effectiveEnv := func(cc classifiedCycle) string {
-		if cc.cycle.LitEnvironment == "either" {
+		if cc.cycle.LitEnvironment == "any" {
 			return resolvedEnv[cc.cycle.CycleID]
 		}
 		return cc.cycle.LitEnvironment
