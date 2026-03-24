@@ -283,13 +283,39 @@
 
     </form>
 
-    <!-- ── Open Terminal button ───────────────────────────────────────── -->
-    <div style="margin-top: 2rem;">
+    <!-- ── System buttons ────────────────────────────────────────────── -->
+    <div style="margin-top: 2rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
         <button class="btn btn-secondary"
                 onclick="fetch('/terminal',{method:'POST'});return false;">
             Open Terminal
         </button>
+
+        {{/*
+            Show the "Install Desktop Shortcut" button on Linux and macOS only.
+            On Linux it creates a .desktop file; on macOS it creates a .app
+            bundle in ~/Applications. On Windows no installer is needed — the
+            grower just double-clicks greenies.exe.
+        */}}
+        {{if or (eq .GOOS "linux") (eq .GOOS "darwin")}}
+        <button class="btn btn-secondary" id="install-btn"
+                onclick="installDesktop()">
+            {{if eq .GOOS "darwin"}}Install App{{else}}Install Desktop Shortcut{{end}}
+        </button>
+        {{end}}
     </div>
+
+    {{if or (eq .GOOS "linux") (eq .GOOS "darwin")}}
+    <p class="task-notes" style="margin-top: 0.5rem;">
+        {{if eq .GOOS "darwin"}}
+            Creates a Greenies.app in ~/Applications so you can launch from
+            Launchpad or Spotlight — no terminal needed.
+        {{else}}
+            Creates a desktop shortcut and app menu entry so you can launch
+            Greenies by double-clicking an icon — no terminal needed.
+        {{end}}
+    </p>
+    <div id="install-result" style="display: none; margin-top: 0.75rem; background: rgba(139, 195, 74, 0.15); border: 1px solid var(--accent); border-radius: 8px; padding: 0.75rem 1.25rem; white-space: pre-line;"></div>
+    {{end}}
 </div>
 
 <!-- ── JavaScript for adding rows ──────────────────────────────────────── -->
@@ -316,6 +342,36 @@ function addInventoryRow() {
         '<td><input type="number" name="inv_capacity" value="0" class="settings-input" min="0" style="width: 5rem;"></td>' +
         '<td><button type="button" class="btn-remove" onclick="this.closest(\'tr\').remove()" title="Remove this item">✕</button></td>';
     tbody.appendChild(tr);
+}
+
+// installDesktop sends a POST to run "greenies install-desktop" and shows
+// the result text below the button.
+function installDesktop() {
+    var btn = document.getElementById('install-btn');
+    var result = document.getElementById('install-result');
+    btn.disabled = true;
+    btn.textContent = 'Installing...';
+    fetch('/install-desktop', {method: 'POST'})
+        .then(function(resp) {
+            return resp.text().then(function(text) {
+                if (resp.ok) {
+                    result.textContent = text;
+                    result.style.display = 'block';
+                    btn.textContent = 'Installed!';
+                } else {
+                    result.textContent = 'Error: ' + text;
+                    result.style.display = 'block';
+                    result.style.borderColor = '#e07070';
+                    result.style.background = 'rgba(224, 112, 112, 0.15)';
+                    btn.textContent = 'Install Failed';
+                    btn.disabled = false;
+                }
+            });
+        })
+        .catch(function() {
+            btn.textContent = 'Install Failed';
+            btn.disabled = false;
+        });
 }
 
 // addSupplyRow creates a new empty row in the Supplies table.

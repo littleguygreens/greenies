@@ -8,6 +8,7 @@ package gui
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -76,6 +77,7 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"Theme":          cfg.Theme,
 		"Units":          cfg.Units,
 		"IrrigationMode": cfg.IrrigationMode,
+		"GOOS":           runtime.GOOS,
 		"Saved":          r.URL.Query().Get("saved") == "1",
 	})
 }
@@ -272,6 +274,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		"Theme":          cfg.Theme,
 		"Units":          cfg.Units,
 		"IrrigationMode": cfg.IrrigationMode,
+		"GOOS":           runtime.GOOS,
 		"Saved":          true,
 	})
 }

@@ -1,6 +1,10 @@
+// Build tag: only compile this file on Linux. Go reads this line and skips the
+// entire file when building for Windows, macOS, or any other operating system.
+//go:build linux
+
 package main
 
-// cmd_install_desktop.go handles the "greenies install-desktop" command.
+// cmd_install_linux.go handles the "greenies install-desktop" command on Linux.
 //
 // It creates a .desktop file so the grower can launch Greenies by
 // double-clicking an icon on their desktop or finding it in the app menu —
@@ -11,8 +15,10 @@ package main
 // program in the background without opening a terminal window. The GUI
 // opens in the browser and the grower never sees a command line.
 //
-// This command only works on Linux. macOS and Windows support is planned
-// for a future release.
+// Each operating system has its own version of this file:
+//   cmd_install_linux.go   — .desktop file (this file)
+//   cmd_install_darwin.go  — .app bundle for macOS
+//   cmd_install_windows.go — not needed (just double-click greenies.exe)
 
 import (
 	_ "embed"

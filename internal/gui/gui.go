@@ -433,6 +433,26 @@ func StartServer(port int) error {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	// ── Install desktop shortcut ───────────────────────────────────
+	// Runs "greenies install-desktop" as a subprocess. On Linux this
+	// creates a .desktop file; on macOS it creates a .app bundle; on
+	// Windows it prints a friendly message (no install needed).
+	mux.HandleFunc("POST /install-desktop", func(w http.ResponseWriter, r *http.Request) {
+		exe, err := os.Executable()
+		if err != nil {
+			http.Error(w, "Could not find greenies binary", http.StatusInternalServerError)
+			return
+		}
+		cmd := exec.Command(exe, "install-desktop")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, "Install failed: "+string(output), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write(output)
+	})
+
 	// Step 3: Create the server and start listening.
 	// We use http.Server (instead of the simpler http.ListenAndServe) so
 	// that we can call server.Shutdown() later — that's what lets us stop
