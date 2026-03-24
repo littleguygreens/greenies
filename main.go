@@ -134,7 +134,7 @@ Commands:
   sync             Push schedule to Google Calendar + Tasks
   delete           Remove a task or entire crop cycle
   clear            Wipe all tasks (asks for confirmation)
-  install-desktop  Create a desktop shortcut (Linux only)
+  install-desktop  Create a desktop shortcut (Linux, macOS, Windows)
   help             Show this help message
 
 Examples:

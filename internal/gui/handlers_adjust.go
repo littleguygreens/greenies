@@ -741,8 +741,20 @@ func buildPreviewRows(before, after []adjustPreviewRow, today time.Time) []adjus
 
 	parseDateDisplay := func(s string) time.Time {
 		t, _ := time.Parse("Mon Jan 02", s)
-		// time.Parse without a year defaults to year 0. Add the current year.
-		return time.Date(today.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		// time.Parse without a year defaults to year 0. We start with the
+		// current year, then adjust for cycles that span December→January:
+		// if the parsed month is more than 6 months away from "today",
+		// it almost certainly belongs to the adjacent year.
+		y := today.Year()
+		monthDiff := int(t.Month()) - int(today.Month())
+		if monthDiff > 6 {
+			// e.g. today is January, parsed month is December → previous year
+			y--
+		} else if monthDiff < -6 {
+			// e.g. today is December, parsed month is January → next year
+			y++
+		}
+		return time.Date(y, t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 	}
 
 	beforeMap := make(map[string]string)
