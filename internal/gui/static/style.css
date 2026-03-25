@@ -959,25 +959,34 @@ input:focus, select:focus, textarea:focus {
 /* ── Adjust page ──────────────────────────────────────────────────────────
    Styles for the cycle adjustment page: cycle picker, preview table, etc. */
 
-/* Each cycle in the picker is a card with a radio button and info */
+/* Each cycle in the picker is a clickable card that links to the edit page */
 .adjust-cycle-row {
     margin-bottom: 0.5rem;
 }
 
-.adjust-cycle-label {
+/* The clickable card link — looks like a card, behaves like a link */
+.adjust-cycle-link {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
     cursor: pointer;
     color: var(--text);
     font-size: 0.9rem;
+    text-decoration: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.adjust-cycle-label input[type="radio"] {
-    width: auto;
-    max-width: none;
-    margin-top: 0.3rem;
-    accent-color: var(--accent);
+.adjust-cycle-link:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* The right-pointing arrow on each card */
+.adjust-cycle-arrow {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
 }
 
 .adjust-cycle-info {
@@ -993,6 +1002,35 @@ input:focus, select:focus, textarea:focus {
 .adjust-cycle-dates {
     color: var(--text-secondary);
     font-size: 0.85rem;
+}
+
+/* Summary card on the per-cycle edit page */
+.adjust-cycle-summary {
+    margin-bottom: 1.25rem;
+}
+
+.adjust-summary-table {
+    width: auto;
+    border-collapse: collapse;
+}
+
+.adjust-summary-table td {
+    padding: 0.2rem 0.75rem 0.2rem 0;
+    border: none;
+    font-size: 0.9rem;
+}
+
+.adjust-summary-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Greyed-out note for disabled operation buttons */
+.adjust-disabled-note {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-style: italic;
 }
 
 /* Hint text below the anchor section */

@@ -41,8 +41,9 @@ type adjustCycleRow struct {
 
 // adjustPreviewRow is one row in the before/after side-by-side table.
 type adjustPreviewRow struct {
-	DateDisplay string // e.g. "Mon Mar 09"
-	BeforeLabel string // e.g. "Day 3 (dark)" — empty string means "---"
+	Date        time.Time // the actual calendar date (used for merging before/after)
+	DateDisplay string    // e.g. "Mon Mar 09" (for the template)
+	BeforeLabel string    // e.g. "Day 3 (dark)" — empty string means "---"
 	AfterLabel  string
 	IsToday     bool // true if this row is today's date
 }
@@ -111,6 +112,68 @@ func handleAdjustPage(w http.ResponseWriter, r *http.Request) {
 		"ActiveCycles":   active,
 		"UpcomingCycles": upcoming,
 		"HasCycles":      len(active) > 0 || len(upcoming) > 0,
+	})
+}
+
+// handleAdjustCyclePage renders GET /adjust/cycle?id=XXX — the per-cycle
+// adjustment page. The grower clicked a specific cycle on the /adjust list
+// and landed here. This page shows the cycle's current state and the
+// adjustment form.
+func handleAdjustCyclePage(w http.ResponseWriter, r *http.Request) {
+	cycleID := r.URL.Query().Get("id")
+	if cycleID == "" {
+		http.Redirect(w, r, "/adjust", http.StatusSeeOther)
+		return
+	}
+
+	cycles, err := farm.LoadCycles()
+	if err != nil {
+		http.Redirect(w, r, "/adjust", http.StatusSeeOther)
+		return
+	}
+
+	// Find the requested cycle by its unique ID.
+	var chosen *farm.Cycle
+	for i := range cycles {
+		if cycles[i].CycleID == cycleID {
+			chosen = &cycles[i]
+			break
+		}
+	}
+	if chosen == nil {
+		http.Redirect(w, r, "/adjust", http.StatusSeeOther)
+		return
+	}
+
+	sow, _ := time.Parse(task.DateFormat, chosen.SowDate)
+	mtl, _ := time.Parse(task.DateFormat, chosen.MoveToLightDate)
+	harv, _ := time.Parse(task.DateFormat, chosen.HarvestDate)
+	today := task.Today()
+
+	// Figure out what day of the cycle we are on and what stage.
+	dayNum := 0
+	stage := "upcoming"
+	inBlackout := today.Before(mtl)
+	if !today.Before(sow) && !today.After(harv) {
+		dayNum = int(today.Sub(sow).Hours()/24) + 1
+		stage = "dark"
+		if today.Equal(harv) {
+			stage = "harvest day"
+		} else if !today.Before(mtl) {
+			stage = "light"
+		}
+	}
+
+	renderPage(w, "adjust_cycle.html", map[string]any{
+		"CycleID":        cycleID,
+		"CropName":       task.Capitalize(chosen.CropName),
+		"Trays":          chosen.Trays,
+		"SowDisplay":     sow.Format("Mon Jan 02"),
+		"HarvestDisplay": harv.Format("Mon Jan 02"),
+		"MTLDisplay":     mtl.Format("Mon Jan 02"),
+		"DayNum":         dayNum,
+		"Stage":          stage,
+		"InBlackout":     inBlackout,
 	})
 }
 
@@ -722,6 +785,7 @@ func buildGUICycleView(sow, mtl, harvest time.Time) []adjustPreviewRow {
 			label = fmt.Sprintf("Day %d (light)", dayNum)
 		}
 		result = append(result, adjustPreviewRow{
+			Date:        d,
 			DateDisplay: d.Format("Mon Jan 02"),
 			BeforeLabel: label,
 		})
@@ -732,65 +796,50 @@ func buildGUICycleView(sow, mtl, harvest time.Time) []adjustPreviewRow {
 // buildPreviewRows merges the "before" and "after" cycle views into a single
 // list of rows, aligned by calendar date. Dates that exist in one view but
 // not the other get an empty label (rendered as "---" in the template).
+//
+// Uses the real time.Time stored in each row's .Date field — no string
+// parsing needed, which avoids the year-guessing bug that plagued the old
+// version.
 func buildPreviewRows(before, after []adjustPreviewRow, today time.Time) []adjustPreviewRow {
-	// Parse dates back so we can find the union range.
-	type dateLabel struct {
-		date  time.Time
-		label string
-	}
-
-	parseDateDisplay := func(s string) time.Time {
-		t, _ := time.Parse("Mon Jan 02", s)
-		// time.Parse without a year defaults to year 0. We start with the
-		// current year, then adjust for cycles that span December→January:
-		// if the parsed month is more than 6 months away from "today",
-		// it almost certainly belongs to the adjacent year.
-		y := today.Year()
-		monthDiff := int(t.Month()) - int(today.Month())
-		if monthDiff > 6 {
-			// e.g. today is January, parsed month is December → previous year
-			y--
-		} else if monthDiff < -6 {
-			// e.g. today is December, parsed month is January → next year
-			y++
-		}
-		return time.Date(y, t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
-	}
-
+	// Build lookup maps keyed by "2006-01-02" so we can merge the two
+	// timelines into one table.
 	beforeMap := make(map[string]string)
 	var startDate, endDate time.Time
 	for i, r := range before {
-		d := parseDateDisplay(r.DateDisplay)
-		beforeMap[d.Format(task.DateFormat)] = r.BeforeLabel
+		key := r.Date.Format(task.DateFormat)
+		beforeMap[key] = r.BeforeLabel
 		if i == 0 {
-			startDate = d
-			endDate = d
+			startDate = r.Date
+			endDate = r.Date
 		}
-		if d.Before(startDate) {
-			startDate = d
+		if r.Date.Before(startDate) {
+			startDate = r.Date
 		}
-		if d.After(endDate) {
-			endDate = d
+		if r.Date.After(endDate) {
+			endDate = r.Date
 		}
 	}
 
 	afterMap := make(map[string]string)
 	for _, r := range after {
-		d := parseDateDisplay(r.DateDisplay)
+		key := r.Date.Format(task.DateFormat)
 		// The "after" rows have the label in BeforeLabel from buildGUICycleView.
-		afterMap[d.Format(task.DateFormat)] = r.BeforeLabel
-		if d.Before(startDate) {
-			startDate = d
+		afterMap[key] = r.BeforeLabel
+		if r.Date.Before(startDate) {
+			startDate = r.Date
 		}
-		if d.After(endDate) {
-			endDate = d
+		if r.Date.After(endDate) {
+			endDate = r.Date
 		}
 	}
 
+	// Walk day-by-day from the earliest date to the latest, looking up
+	// labels in each map.
 	var rows []adjustPreviewRow
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		key := d.Format(task.DateFormat)
 		rows = append(rows, adjustPreviewRow{
+			Date:        d,
 			DateDisplay: d.Format("Mon Jan 02"),
 			BeforeLabel: beforeMap[key],
 			AfterLabel:  afterMap[key],

@@ -1,21 +1,10 @@
 {{/*
-    adjust.html — the cycle adjustment page.
+    adjust.html — the cycle picker page.
 
-    This is the GUI equivalent of "greenies adjust" in the terminal. Instead
-    of answering questions one at a time, the grower sees the full list of
-    cycles, picks one, chooses their anchor and adjustment type, fills in the
-    parameters, and clicks "Preview" to see a before/after comparison.
+    The grower sees a list of active and upcoming cycles. Clicking any cycle
+    card navigates to a dedicated edit page for that cycle (/adjust/cycle?id=…).
 
-    The flow:
-      1. Pick a cycle from the active/upcoming list
-      2. Choose anchor: sow (changes ripple forward) or harvest (changes ripple backward)
-      3. Choose what to adjust: blackout days, light days, tray count, or cancel
-      4. Fill in the parameters (add/remove + how many days, or new tray count)
-      5. Click "Preview" -> htmx sends the form to POST /adjust/preview
-      6. The server returns a before/after table as an HTML fragment
-      7. Click "Confirm" in the preview -> POST /adjust/confirm applies the change
-
-    Data passed from the handler (handleAdjustPage in handlers.go):
+    Data passed from the handler (handleAdjustPage in handlers_adjust.go):
       .ActiveCycles   — list of adjustCycleRow structs (active cycles)
       .UpcomingCycles — list of adjustCycleRow structs (upcoming, within 7 days)
       .HasCycles      — true if there is at least one cycle to adjust
@@ -28,142 +17,36 @@
     <p class="empty">No active or upcoming cycles to adjust.</p>
     <p class="empty">Active cycles appear here once sown and before harvest. Upcoming cycles appear if they start within 7 days.</p>
 {{else}}
-    <!-- The whole form — cycle picker + adjustment options + preview target.
-         htmx sends it to POST /adjust/preview when the grower clicks Preview. -->
-    <form hx-post="/adjust/preview"
-          hx-target="#adjust-preview"
-          hx-swap="innerHTML">
+    <p class="adjust-hint">Click a cycle to adjust it.</p>
 
-        <!-- ── Cycle picker ─────────────────────────────────────────────── -->
-        {{if .ActiveCycles}}
-        <h2>Active cycles</h2>
-        {{range .ActiveCycles}}
-            <div class="task-card adjust-cycle-row">
-                <label class="adjust-cycle-label">
-                    <input type="radio" name="cycle_id" value="{{.CycleID}}" required>
-                    <div class="adjust-cycle-info">
-                        <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
-                        <span class="adjust-cycle-dates">
-                            sown {{.SowDisplay}} &middot; harvest {{.HarvestDisplay}} &middot; Day {{.DayNum}} ({{.Stage}})
-                        </span>
-                    </div>
-                </label>
+    {{if .ActiveCycles}}
+    <h2>Active cycles</h2>
+    {{range .ActiveCycles}}
+        <a href="/adjust/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
+            <div class="adjust-cycle-info">
+                <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                <span class="adjust-cycle-dates">
+                    sown {{.SowDisplay}} &middot; harvest {{.HarvestDisplay}} &middot; Day {{.DayNum}} ({{.Stage}})
+                </span>
             </div>
-        {{end}}
-        {{end}}
+            <span class="adjust-cycle-arrow">&rsaquo;</span>
+        </a>
+    {{end}}
+    {{end}}
 
-        {{if .UpcomingCycles}}
-        <h2>Upcoming cycles (starting within 7 days)</h2>
-        {{range .UpcomingCycles}}
-            <div class="task-card adjust-cycle-row">
-                <label class="adjust-cycle-label">
-                    <input type="radio" name="cycle_id" value="{{.CycleID}}" required>
-                    <div class="adjust-cycle-info">
-                        <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
-                        <span class="adjust-cycle-dates">
-                            sowing {{.SowDisplay}} &middot; harvest {{.HarvestDisplay}} &middot; in {{.DaysUntil}} day(s)
-                        </span>
-                    </div>
-                </label>
+    {{if .UpcomingCycles}}
+    <h2>Upcoming cycles (starting within 7 days)</h2>
+    {{range .UpcomingCycles}}
+        <a href="/adjust/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
+            <div class="adjust-cycle-info">
+                <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                <span class="adjust-cycle-dates">
+                    sowing {{.SowDisplay}} &middot; harvest {{.HarvestDisplay}} &middot; in {{.DaysUntil}} day(s)
+                </span>
             </div>
-        {{end}}
-        {{end}}
-
-        <!-- ── Anchor selection ─────────────────────────────────────────── -->
-        <h2>Anchor</h2>
-        <p class="adjust-hint">The anchor is the date that stays fixed. Changes ripple away from it.</p>
-        <div class="form-group">
-            <div class="radio-group">
-                <label class="radio-label">
-                    <input type="radio" name="anchor" value="sow" checked>
-                    Sow date (changes ripple forward toward harvest)
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="anchor" value="harvest">
-                    Harvest date (changes ripple backward toward sow)
-                </label>
-            </div>
-        </div>
-
-        <!-- ── Operation selection ──────────────────────────────────────── -->
-        <h2>What to adjust</h2>
-        <div class="form-group">
-            <div class="radio-group adjust-op-group">
-                <label class="radio-label">
-                    <input type="radio" name="operation" value="blackout" checked
-                           onclick="document.getElementById('days-fields').style.display='block'; document.getElementById('retray-field').style.display='none';">
-                    Blackout days
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="operation" value="light"
-                           onclick="document.getElementById('days-fields').style.display='block'; document.getElementById('retray-field').style.display='none';">
-                    Light days
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="operation" value="retray"
-                           onclick="document.getElementById('days-fields').style.display='none'; document.getElementById('retray-field').style.display='block';">
-                    Tray count
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="operation" value="cancel"
-                           onclick="document.getElementById('days-fields').style.display='none'; document.getElementById('retray-field').style.display='none';">
-                    Cancel cycle
-                </label>
-            </div>
-        </div>
-
-        <!-- ── Parameters for blackout/light adjustment ─────────────────── -->
-        <div id="days-fields">
-            <div class="form-group">
-                <label>Direction</label>
-                <div class="radio-group">
-                    <label class="radio-label">
-                        <input type="radio" name="direction" value="add" checked>
-                        Add days
-                    </label>
-                    <label class="radio-label">
-                        <input type="radio" name="direction" value="remove">
-                        Remove days
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="days">How many days?</label>
-                <input type="number" name="days" id="days" min="1" value="1" style="max-width:120px;">
-            </div>
-        </div>
-
-        <!-- ── Parameters for retray ────────────────────────────────────── -->
-        <div id="retray-field" style="display:none;">
-            <div class="form-group">
-                <label for="new_trays">New tray count</label>
-                <input type="number" name="new_trays" id="new_trays" min="1" value="4" style="max-width:120px;">
-            </div>
-        </div>
-
-        <!-- ── Cascade + crops.csv options ──────────────────────────────── -->
-        <div id="days-fields-options" class="adjust-options">
-            <div class="form-group">
-                <label class="adjust-checkbox-label">
-                    <input type="checkbox" name="cascade" value="yes">
-                    Also apply this change to all other active cycles of the same crop
-                </label>
-            </div>
-            <div class="form-group">
-                <label class="adjust-checkbox-label">
-                    <input type="checkbox" name="update_csv" value="yes">
-                    Update the crops.csv template permanently
-                </label>
-            </div>
-        </div>
-
-        <!-- ── Preview button ───────────────────────────────────────────── -->
-        <button type="submit" class="btn btn-primary">Preview</button>
-    </form>
-
-    <!-- The preview appears here when the grower clicks "Preview".
-         htmx replaces the contents of this div with the server's response. -->
-    <div id="adjust-preview"></div>
+            <span class="adjust-cycle-arrow">&rsaquo;</span>
+        </a>
+    {{end}}
+    {{end}}
 {{end}}
 {{end}}
