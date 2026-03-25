@@ -72,6 +72,12 @@ type Config struct {
 	//
 	// Valid values: "flood" (default) or "tray_pairs".
 	IrrigationMode string `json:"irrigation_mode"`
+
+	// FlashyGUI enables the "flashy" visual overhaul of the GUI. When
+	// true, a CSS class "flashy" is added to <body> which activates
+	// refined shadows, gradients, transitions, and a modernised swim-lane
+	// calendar. When false (the default), the original clean look is used.
+	FlashyGUI bool `json:"flashy_gui"`
 }
 
 // IsImperial returns true when the grower has chosen the imperial unit

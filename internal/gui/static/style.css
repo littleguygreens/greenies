@@ -244,6 +244,8 @@ body.lowercase a {
     flex: 1;
     padding: 2rem;
     max-width: 900px;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 /* ── Page headings ─────────────────────────────────────────────────────── */
@@ -435,10 +437,32 @@ input:focus, select:focus, textarea:focus {
    Used for the crop library and harvest log. Simple bordered table with
    alternating row colours for readability. */
 .data-table {
-    width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
     margin-top: 0.75rem;
+    padding-bottom: 0.5rem;
     font-size: 0.9rem;
+    display: block;
+    overflow-x: auto;
+
+    /* Thin themed scrollbar for Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+/* Thin themed scrollbar for Chrome / Edge / Safari */
+.data-table::-webkit-scrollbar {
+    height: 6px;
+}
+.data-table::-webkit-scrollbar-track {
+    background: transparent;
+}
+.data-table::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+.data-table::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
 .data-table th {
@@ -1100,12 +1124,8 @@ input:focus, select:focus, textarea:focus {
         align-self: flex-start;
     }
 
-    /* Data tables: wrap in a horizontally scrollable container so they
-       do not break the page layout on narrow screens. */
+    /* Data tables: slightly smaller font on narrow screens. */
     .data-table {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
         font-size: 0.8rem;
     }
 
@@ -1690,3 +1710,792 @@ input:focus, select:focus, textarea:focus {
 .snap-profit-negative {
     color: #e74c3c;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLASHY GUI — aesthetic overhaul (toggled in Settings)
+   ═══════════════════════════════════════════════════════════════════════════
+   Every rule below is scoped under body.flashy so it only applies when the
+   "Flashy GUI" checkbox is enabled in Settings. To remove this feature
+   entirely, delete from this comment to the end of the file and remove the
+   FlashyGUI config field + settings checkbox.
+
+   What's different:
+     - Refined depth and shadows on cards and surfaces
+     - Swimlane calendar modernised (taller rows, softer borders, glow today)
+     - Smoother transitions on interactive elements
+     - Better nav hover states and active indicator
+     - Polished buttons, inputs, and progress bars
+     - Tighter typography hierarchy
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Flashy theme variables ──────────────────────────────────────────────
+   Extra variables that layer on top of the existing palette. Defined on
+   body.flashy so they only exist when the toggle is on. */
+body.flashy {
+    --shadow-sm:       0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
+    --shadow-md:       0 4px 12px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.2);
+    --shadow-lg:       0 8px 24px rgba(0,0,0,0.35);
+    --glow-accent:     0 0 12px rgba(139,195,74,0.25);
+    --glow-today:      0 0 8px rgba(139,195,74,0.3);
+    --radius-sm:       4px;
+    --radius-md:       8px;
+    --radius-lg:       12px;
+    --transition-fast: 0.15s ease;
+    --transition-med:  0.25s ease;
+    --surface-hover:   #2a2a2a;
+    --nav-active-bg:   rgba(139,195,74,0.1);
+}
+
+body.light.flashy {
+    --shadow-sm:       0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md:       0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.05);
+    --shadow-lg:       0 8px 24px rgba(0,0,0,0.1);
+    --glow-accent:     0 0 12px rgba(85,139,47,0.15);
+    --glow-today:      0 0 8px rgba(85,139,47,0.2);
+    --surface-hover:   #ececec;
+    --nav-active-bg:   rgba(85,139,47,0.08);
+}
+
+/* ── Flashy Navigation ───────────────────────────────────────────────── */
+
+body.flashy .nav {
+    box-shadow: 1px 0 8px rgba(0,0,0,0.15);
+    transition: width 0.25s ease, padding 0.25s ease, box-shadow 0.25s ease;
+}
+
+body.flashy .nav-title {
+    letter-spacing: 0.03em;
+    font-size: 1.25rem;
+    border-bottom: none;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+body.flashy .nav-links {
+    gap: 2px;
+}
+
+body.flashy .nav a {
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast), color var(--transition-fast),
+                padding-left var(--transition-fast);
+    position: relative;
+    font-weight: 500;
+}
+
+body.flashy .nav a:hover {
+    background: var(--nav-active-bg);
+    color: var(--accent);
+    padding-left: 0.9rem;
+}
+
+body.flashy .nav a.active {
+    background: var(--nav-active-bg);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Subtle left accent bar on active nav link */
+body.flashy .nav a.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+}
+
+body.flashy .nav-toggle {
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast), background var(--transition-fast),
+                transform var(--transition-fast);
+}
+
+body.flashy .nav-toggle:hover {
+    transform: scale(1.1);
+}
+
+/* ── Flashy Page headings ────────────────────────────────────────────── */
+
+body.flashy h1 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    border-bottom-color: var(--border-subtle);
+    padding-bottom: 0.6rem;
+}
+
+body.flashy h2 {
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    margin: 1.75rem 0 0.75rem;
+}
+
+/* ── Flashy Buttons ──────────────────────────────────────────────────── */
+
+body.flashy .btn {
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast), color var(--transition-fast),
+                box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+body.flashy .btn-primary {
+    box-shadow: var(--shadow-sm);
+}
+
+body.flashy .btn-primary:hover {
+    box-shadow: var(--glow-accent);
+    transform: translateY(-1px);
+}
+
+body.flashy .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+body.flashy .btn-secondary {
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), color var(--transition-fast),
+                background var(--transition-fast);
+}
+
+body.flashy .btn-secondary:hover {
+    background: var(--nav-active-bg);
+}
+
+body.flashy .btn-active {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+body.flashy .btn-danger {
+    box-shadow: var(--shadow-sm);
+    transition: background var(--transition-fast), box-shadow var(--transition-fast),
+                transform var(--transition-fast);
+}
+
+body.flashy .btn-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(231,76,60,0.3);
+}
+
+body.flashy .btn-danger:active {
+    transform: translateY(0);
+}
+
+/* ── Flashy Form inputs ──────────────────────────────────────────────── */
+
+body.flashy input,
+body.flashy select,
+body.flashy textarea {
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+body.flashy input:focus,
+body.flashy select:focus,
+body.flashy textarea:focus {
+    box-shadow: 0 0 0 3px rgba(139,195,74,0.15);
+}
+
+body.light.flashy input:focus,
+body.light.flashy select:focus,
+body.light.flashy textarea:focus {
+    box-shadow: 0 0 0 3px rgba(85,139,47,0.12);
+}
+
+/* ── Flashy Task cards ───────────────────────────────────────────────── */
+
+body.flashy .task-card {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-med), transform var(--transition-med);
+    border-color: transparent;
+}
+
+body.flashy .task-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+/* ── Flashy Day cards (calendar page) ────────────────────────────────── */
+
+body.flashy .day-heading {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* ── Flashy Data tables ──────────────────────────────────────────────── */
+
+body.flashy .data-table {
+    border-radius: var(--radius-md);
+    overflow: auto;
+}
+
+body.flashy .data-table th {
+    background: var(--surface);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+body.lowercase.flashy .data-table th {
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+}
+
+body.flashy .data-table tbody tr {
+    transition: background var(--transition-fast);
+}
+
+body.flashy .data-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+/* ── Flashy Toggle bar ───────────────────────────────────────────────── */
+
+body.flashy .toggle-bar {
+    gap: 0.35rem;
+}
+
+body.flashy .toggle-bar .btn {
+    border-radius: var(--radius-md);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLASHY SWIMLANE CALENDAR
+   ═══════════════════════════════════════════════════════════════════════════
+   Renders crop stages as connected bars (like Google Calendar all-day events):
+     - Same-stage days merge into one continuous bar with rounded ends
+     - Angled chevrons at stage transitions (soak→dark, dark→light, etc.)
+     - Pointed arrows when a stage wraps past the edge of a week
+   The underlying table structure and label mechanics are untouched. */
+
+/* ── Flashy Legend ────────────────────────────────────────────────────── */
+
+body.flashy .mcal-legend {
+    gap: 1.75rem;
+    margin: 0.75rem 0 1.25rem 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+body.lowercase.flashy .mcal-legend {
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
+}
+
+body.flashy .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+
+/* ── Flashy Week container ───────────────────────────────────────────── */
+
+body.flashy .mcal-week {
+    margin-bottom: 0.5rem;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    /* Extra horizontal padding gives room for week-edge arrows that poke
+       out 10px past the first/last cells. Overflow must be visible so
+       the arrow pseudo-elements aren't clipped at the container edge. */
+    padding: 2px 14px;
+    overflow: visible;
+}
+
+/* ── Flashy Table ────────────────────────────────────────────────────── */
+
+/* No horizontal gaps so same-stage cells merge into one bar.
+   2px vertical gap keeps crop rows visually separated. */
+body.flashy .mcal-table {
+    border-collapse: separate;
+    border-spacing: 0 2px;
+}
+
+/* ── Flashy Day headers ──────────────────────────────────────────────── */
+
+body.flashy .mcal-day-header {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+body.lowercase.flashy .mcal-day-header {
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+body.flashy .mcal-day-header .mcal-link {
+    padding: 0.4rem 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+body.flashy .mcal-day-header .mcal-link:hover {
+    background: var(--nav-active-bg);
+}
+
+body.flashy .mcal-date-num {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    line-height: 1.2;
+}
+
+/* ── Flashy Cells ────────────────────────────────────────────────────── */
+
+body.flashy .mcal-cell {
+    background: var(--bg);
+    border: 1px solid transparent;
+    height: 32px;
+    border-radius: 0;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+/* Empty cells get a very subtle border on hover */
+body.flashy .mcal-cell:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest):hover {
+    border-color: var(--border);
+}
+
+/* ── Flashy Stage colours ────────────────────────────────────────────── */
+/* Each stage stores its flat colour in --stage-color so the chevron and
+   arrow pseudo-elements can reference it without repeating hex values. */
+
+body.flashy .mcal-soak {
+    background: #1565c0;
+    --stage-color-start: #1565c0;
+    --stage-color: #1565c0;
+    border-color: transparent;
+}
+
+body.flashy .mcal-dark {
+    background: #558b2f;
+    --stage-color-start: #558b2f;
+    --stage-color: #558b2f;
+    border-color: transparent;
+}
+
+body.flashy .mcal-light {
+    background: #8bc34a;
+    --stage-color-start: #8bc34a;
+    --stage-color: #8bc34a;
+    border-color: transparent;
+}
+
+body.flashy .mcal-harvest {
+    background: #fbc02d;
+    --stage-color-start: #fbc02d;
+    --stage-color: #fbc02d;
+    border-color: transparent;
+}
+
+/* ── Connected bar — position-based rounding ─────────────────────────── */
+/* Only the first and last cells of a same-stage run get rounded corners,
+   so multiple days merge into one continuous coloured bar. */
+
+body.flashy .mcal-pos-solo  { border-radius: 6px; }
+body.flashy .mcal-pos-start { border-radius: 6px 0 0 6px; }
+body.flashy .mcal-pos-end   { border-radius: 0 6px 6px 0; }
+body.flashy .mcal-pos-mid   { border-radius: 0; }
+
+/* ── Chevron at stage transitions ────────────────────────────────────── */
+/* When one stage ends and a different stage begins (e.g. dark→light),
+   the ending cell gets a right-pointing arrow that overlaps into the
+   next cell — like a forward-leaning progress bar. */
+
+body.flashy .mcal-transition {
+    position: relative;
+    z-index: 2;
+}
+
+body.flashy .mcal-transition::after {
+    content: '';
+    position: absolute;
+    right: -7px;
+    top: 0;
+    bottom: 0;
+    width: 14px;
+    clip-path: polygon(0 0, 50% 50%, 0 100%);
+    background: var(--stage-color);
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* ── Week-edge continuation arrows ───────────────────────────────────
+   When a stage continues past the visible week, a pentagon-shaped
+   pseudo-element overlaps 8px INTO the cell (flat edges that hide the
+   square corners) then tapers 8px past the cell into an arrow point.
+   Total width: 16px — left half is a rectangle, right half is a triangle.
+   The cell's own background stays visible to the left of the overlap. */
+
+body.flashy .mcal-cont-right {
+    position: relative;
+    z-index: 2;
+}
+
+body.flashy .mcal-cont-right::after {
+    content: '';
+    position: absolute;
+    right: -10px;
+    top: -1px;
+    bottom: 0;
+    width: 17px;
+    background: var(--stage-color);
+    clip-path: polygon(0 0, 50% 0, 100% 50%, 50% 100%, 0 100%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+body.flashy .mcal-cont-left {
+    position: relative;
+    z-index: 2;
+}
+
+body.flashy .mcal-cont-left::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: -1px;
+    bottom: 0;
+    width: 17px;
+    background: var(--stage-color);
+    clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%, 0 50%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* ── Flashy Labels ───────────────────────────────────────────────────── */
+
+/* The cell that contains the label needs to stack above its siblings so
+   the absolutely-positioned label text isn't painted over by later cells
+   in the same row. Each positioned <td> creates its own stacking context,
+   so z-index on the label alone can't escape — we need z-index on the <td>. */
+body.flashy .mcal-cell:has(.mcal-label) {
+    position: relative;
+    z-index: 5;
+}
+
+body.flashy .mcal-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* ── Flashy Row separator ────────────────────────────────────────────── */
+
+body.flashy .mcal-row td {
+    border-bottom: none;
+}
+
+/* ── Flashy Column hover ─────────────────────────────────────────────── */
+
+body.flashy .mcal-col-hover {
+    box-shadow: inset 0 0 0 100px rgba(139, 195, 74, 0.12);
+}
+
+/* ── Flashy Today highlight — glow instead of hard border ────────────── */
+
+body.flashy .mcal-day-header.mcal-highlight {
+    background: transparent;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    color: var(--accent);
+}
+
+body.flashy .mcal-day-header.mcal-highlight .mcal-link {
+    background: var(--nav-active-bg);
+    border-radius: var(--radius-sm);
+}
+
+body.flashy .mcal-day-header.mcal-highlight .mcal-date-num {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+body.flashy .mcal-cell.mcal-highlight {
+    border-left: none;
+    border-right: none;
+    box-shadow: inset 0 0 0 100px rgba(139,195,74,0.08);
+}
+
+body.flashy .mcal-cell.mcal-highlight:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest) {
+    background: rgba(139,195,74,0.06);
+    border: 1px solid rgba(139,195,74,0.2);
+}
+
+body.light.flashy .mcal-cell.mcal-highlight {
+    box-shadow: inset 0 0 0 100px rgba(85,139,47,0.06);
+}
+
+body.light.flashy .mcal-cell.mcal-highlight:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest) {
+    background: rgba(85,139,47,0.06);
+    border: 1px solid rgba(85,139,47,0.15);
+}
+
+body.flashy .mcal-table tbody tr:last-child .mcal-cell.mcal-highlight {
+    border-bottom: none;
+}
+
+/* ── Flashy Outside-month days ───────────────────────────────────────── */
+
+body.flashy .mcal-outside {
+    opacity: 0.25;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLASHY SNAPSHOT CARDS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body.flashy .snap-env-card {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+    padding: 1rem 1.25rem;
+    transition: box-shadow var(--transition-med);
+}
+
+body.flashy .snap-env-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+body.flashy .snap-env-name {
+    font-size: 1.05rem;
+    letter-spacing: -0.005em;
+}
+
+/* ── Flashy Progress bars ────────────────────────────────────────────── */
+
+body.flashy .snap-progress-track {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border-subtle);
+}
+
+body.flashy .snap-progress-fill {
+    border-radius: 3px;
+}
+
+body.flashy .snap-progress-blackout {
+    background: linear-gradient(90deg, #4a7a26, #558b2f);
+}
+
+body.flashy .snap-progress-lit {
+    background: linear-gradient(90deg, #7cb342, #8bc34a);
+}
+
+body.flashy .snap-progress-inventory {
+    background: linear-gradient(90deg, #7cb342, #8bc34a);
+}
+
+/* ── Flashy Cycle cards ──────────────────────────────────────────────── */
+
+body.flashy .snap-cycle-card {
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.85rem;
+    transition: background var(--transition-fast);
+    border-color: transparent;
+}
+
+body.flashy .snap-cycle-card:hover {
+    background: var(--surface-hover);
+}
+
+/* ── Flashy Stage badges ─────────────────────────────────────────────── */
+
+body.flashy .snap-stage {
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.6rem;
+}
+body.lowercase.flashy .snap-stage {
+    text-transform: lowercase;
+}
+
+/* ── Flashy Section titles ───────────────────────────────────────────── */
+
+body.flashy .snap-section-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+body.lowercase.flashy .snap-section-title {
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+    border-bottom-color: var(--border-subtle);
+}
+
+body.flashy .snap-harvest-card {
+    border-left: 3px solid #f9a825;
+    border-radius: var(--radius-md);
+}
+
+/* ── Flashy Inventory cards ──────────────────────────────────────────── */
+
+body.flashy .snap-inventory-card {
+    border-radius: var(--radius-md);
+    border-color: transparent;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-med);
+}
+
+body.flashy .snap-inventory-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+/* ── Flashy Financial card ───────────────────────────────────────────── */
+
+body.flashy .snap-financial-card {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+    padding: 1rem 1.25rem;
+}
+
+/* ── Flashy Conflict box ─────────────────────────────────────────────── */
+
+body.flashy .snap-conflicts {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 12px rgba(231,76,60,0.1);
+}
+
+/* ── Flashy Plan page ────────────────────────────────────────────────── */
+
+body.flashy .plan-preview {
+    border-top-color: var(--border-subtle);
+}
+
+body.flashy .plan-conflicts {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 10px rgba(243,156,18,0.1);
+}
+
+body.flashy .plan-success {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+    background: var(--surface);
+}
+
+body.flashy .plan-success .btn {
+    margin-right: 0.75rem;
+}
+
+/* ── Flashy Error box ────────────────────────────────────────────────── */
+
+body.flashy .error-box {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 12px rgba(231,76,60,0.08);
+}
+
+/* ── Flashy Clear warning ────────────────────────────────────────────── */
+
+body.flashy .clear-warning {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 12px rgba(231,76,60,0.08);
+}
+
+/* ── Flashy Trial elements ───────────────────────────────────────────── */
+
+body.flashy .trial-optional-section {
+    border-radius: var(--radius-md);
+}
+
+body.flashy .trial-status {
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+body.lowercase.flashy .trial-status {
+    text-transform: lowercase;
+}
+
+body.flashy .trial-day-block {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+}
+
+body.flashy .trial-outcome-form {
+    border-radius: var(--radius-md);
+}
+
+/* ── Flashy Adjust page ──────────────────────────────────────────────── */
+
+body.flashy .adjust-options {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+}
+
+/* ── Flashy Pre block ────────────────────────────────────────────────── */
+
+body.flashy pre {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+}
+
+/* ── Flashy Harvest page ─────────────────────────────────────────────── */
+
+body.flashy .harvest-logged {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border-color: transparent;
+}
+
+/* ── Flashy htmx indicator ───────────────────────────────────────────── */
+
+body.flashy .htmx-indicator {
+    opacity: 0;
+    transition: opacity var(--transition-med);
+}
+
+body.flashy .htmx-indicator.htmx-request {
+    opacity: 1;
+    display: block;
+}
+
+/* ── Flashy Responsive overrides ─────────────────────────────────────── */
+
+@media (max-width: 700px) {
+    body.flashy .nav {
+        box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    }
+
+    body.flashy .mcal-week {
+        border-radius: var(--radius-md);
+        padding: 1px 12px;
+    }
+
+    body.flashy .mcal-cell {
+        height: 28px;
+    }
+
+    body.flashy .snap-env-card {
+        padding: 0.6rem 0.85rem;
+        border-radius: var(--radius-md);
+    }
+
+    body.flashy .snap-financial-card {
+        border-radius: var(--radius-md);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   END FLASHY GUI
+   ═══════════════════════════════════════════════════════════════════════════ */

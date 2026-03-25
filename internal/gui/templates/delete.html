@@ -24,11 +24,19 @@
 <h1>Delete Tasks</h1>
 
 <!-- Clear All button — links to the confirmation page at /clear. -->
-<a href="/clear" class="btn btn-danger" style="margin-bottom: 1.5rem; display: inline-block;">Clear All Tasks</a>
+<a href="/clear" class="btn btn-danger" style="display: inline-block;">Clear All Tasks</a>
+
+<hr style="margin: 1.5rem 0; border: none; border-top: 1px solid var(--border);">
+
+<!-- Month navigation -->
+<h2 style="margin-bottom: 0.5rem;">{{.MonthLabel}}</h2>
+<div class="toggle-bar" style="margin-bottom: 1.5rem;">
+    <a href="/delete?year={{.PrevYear}}&month={{.PrevMonth}}" class="btn btn-secondary">← Previous</a>
+    <a href="/delete" class="btn btn-active">This Month</a>
+    <a href="/delete?year={{.NextYear}}&month={{.NextMonth}}" class="btn btn-secondary">Next →</a>
+</div>
 
 {{if .HasTasks}}
-    <p>{{.Count}} tasks total. Click the delete button to remove a task.</p>
-
     {{range .Days}}
         <div class="day-card">
             <div class="day-heading">{{.DateHeading}}</div>
@@ -78,7 +86,7 @@
         </div>
     {{end}}
 {{else}}
-    <p class="empty">No tasks to delete. The calendar is empty.</p>
+    <p class="empty">No tasks this month.</p>
 {{end}}
 {{end}}
 

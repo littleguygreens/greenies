@@ -168,6 +168,9 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			// Compute stage-position classes for connected-bar rendering.
+			computeStagePositions(&row.Cells, ci.DayStage, weekStart)
+
 			// Place one centered label per row across all active cells.
 			placeRowLabel(&row.Cells, ci.CropName, ci.Trays, ci.SowDate, ci.HarvestDate)
 

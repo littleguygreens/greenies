@@ -244,6 +244,9 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 			}
 		}
 
+		// Compute stage-position classes for connected-bar rendering.
+		computeStagePositions(&row.Cells, ci.DayStage, weekStart)
+
 		// Place one centered label per row across all active cells.
 		placeRowLabel(&row.Cells, ci.CropName, ci.Trays, ci.SowDate, ci.HarvestDate)
 
@@ -253,6 +256,70 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 	}
 
 	return week, dayLabels
+}
+
+// computeStagePositions examines a 7-cell row and sets PosClass on each
+// cell with CSS classes describing where it sits within its contiguous
+// same-stage run. The flashy CSS uses these to render connected bars
+// (no gaps between same-stage days), chevron arrows at stage transitions,
+// and pointed arrows when a stage wraps past the edge of the week.
+//
+// It checks the day before and after the visible week (via the DayStage
+// map) so it knows whether the first/last cells continue off-screen.
+func computeStagePositions(cells *[7]monthCell, dayStage map[string]string, weekStart time.Time) {
+	for i := 0; i < 7; i++ {
+		if cells[i].Stage == "" {
+			continue
+		}
+
+		// What stage is on the day before this cell?
+		var prevStage string
+		if i > 0 {
+			prevStage = cells[i-1].Stage
+		} else {
+			prevDay := weekStart.AddDate(0, 0, -1)
+			prevStage = dayStage[prevDay.Format(task.DateFormat)]
+		}
+
+		// What stage is on the day after this cell?
+		var nextStage string
+		if i < 6 {
+			nextStage = cells[i+1].Stage
+		} else {
+			nextDay := weekStart.AddDate(0, 0, 7)
+			nextStage = dayStage[nextDay.Format(task.DateFormat)]
+		}
+
+		sameAsPrev := prevStage == cells[i].Stage
+		sameAsNext := nextStage == cells[i].Stage
+
+		// Position within the same-stage run.
+		var cls string
+		if !sameAsPrev && !sameAsNext {
+			cls = "mcal-pos-solo"
+		} else if !sameAsPrev {
+			cls = "mcal-pos-start"
+		} else if !sameAsNext {
+			cls = "mcal-pos-end"
+		} else {
+			cls = "mcal-pos-mid"
+		}
+
+		// Week-edge continuation arrows.
+		if i == 0 && sameAsPrev {
+			cls += " mcal-cont-left"
+		}
+		if i == 6 && sameAsNext {
+			cls += " mcal-cont-right"
+		}
+
+		// Stage transition chevron — different non-empty stage to the right.
+		if i < 6 && nextStage != "" && nextStage != cells[i].Stage {
+			cls += " mcal-transition"
+		}
+
+		cells[i].PosClass = cls
+	}
 }
 
 // monthCell holds the display info for one day-cell in the month calendar grid.
@@ -295,6 +362,20 @@ type monthCell struct {
 	// 3–5 of the week, the first cell gets Span=3, the others get Span=0.
 	// Used by CSS to size the label so it doesn't overflow into other rows.
 	Span int
+
+	// PosClass holds CSS classes that describe this cell's position within
+	// its contiguous same-stage run. Used by the flashy CSS to render
+	// connected bars, chevron transitions, and week-edge arrows.
+	//
+	// Possible classes (space-separated):
+	//   mcal-pos-start  — first cell of a same-stage run
+	//   mcal-pos-mid    — middle cell (same stage on both sides)
+	//   mcal-pos-end    — last cell of a same-stage run
+	//   mcal-pos-solo   — a run of exactly one cell
+	//   mcal-cont-left  — stage continues from before the visible week
+	//   mcal-cont-right — stage continues past the visible week
+	//   mcal-transition — a different non-empty stage follows to the right
+	PosClass string
 }
 
 // monthCycleRow is one swim-lane row in a week section. It represents one

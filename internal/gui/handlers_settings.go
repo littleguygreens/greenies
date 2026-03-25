@@ -77,6 +77,7 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"Theme":          cfg.Theme,
 		"Units":          cfg.Units,
 		"IrrigationMode": cfg.IrrigationMode,
+		"FlashyGUI":      cfg.FlashyGUI,
 		"GOOS":           runtime.GOOS,
 		"Saved":          r.URL.Query().Get("saved") == "1",
 	})
@@ -230,6 +231,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cfg.IrrigationMode = "flood"
 	}
+	cfg.FlashyGUI = r.FormValue("flashy_gui") == "1"
 	_ = config.Save(cfg)
 
 	// Save to farm.csv.
@@ -274,6 +276,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		"Theme":          cfg.Theme,
 		"Units":          cfg.Units,
 		"IrrigationMode": cfg.IrrigationMode,
+		"FlashyGUI":      cfg.FlashyGUI,
 		"GOOS":           runtime.GOOS,
 		"Saved":          true,
 	})

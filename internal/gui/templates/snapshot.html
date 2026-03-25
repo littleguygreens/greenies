@@ -74,7 +74,7 @@
             <tr class="mcal-row">
                 <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
                 {{range .Cells}}
-                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}" data-date="{{.DateStr}}">
+                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
                             {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
                         </a>

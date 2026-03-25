@@ -17,14 +17,9 @@
 {{define "crops.html"}}
 <h1>Crop Library</h1>
 
-<!-- Link to the "Add New Crop" form -->
-<p><a href="/crops/new" class="btn btn-primary btn-small">Add New Crop</a></p>
-
 {{if .Error}}
     <p class="empty">{{.Error}}</p>
 {{else if .HasCrops}}
-    <p>{{.Count}} varieties</p>
-
     <table class="data-table">
         <!-- Table header — one column per key number, plus profitability -->
         <thead>
@@ -61,6 +56,9 @@
             {{end}}
         </tbody>
     </table>
+
+    <!-- Link to the "Add New Crop" form — below the table with breathing room -->
+    <p style="margin-top: 1.5rem;"><a href="/crops/new" class="btn btn-primary btn-small">Add New Crop</a></p>
 {{else}}
     <p class="empty">No crops in the library yet. Add varieties to crops.csv to get started.</p>
 {{end}}

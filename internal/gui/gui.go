@@ -225,6 +225,7 @@ func renderPage(w http.ResponseWriter, name string, data any) {
 		"Content":   template.HTML(buf.String()),
 		"Lowercase": cfg.Lowercase,
 		"Theme":     cfg.Theme,
+		"FlashyGUI": cfg.FlashyGUI,
 	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Layout error: %v", err), http.StatusInternalServerError)

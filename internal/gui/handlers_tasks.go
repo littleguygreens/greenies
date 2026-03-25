@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/farm"
@@ -49,15 +50,41 @@ func handleDeletePage(w http.ResponseWriter, r *http.Request) {
 		allTasks = []task.Task{}
 	}
 
-	// Sort tasks by date so the page shows them in chronological order.
-	sort.Slice(allTasks, func(i, j int) bool {
-		return allTasks[i].Date < allTasks[j].Date
+	// Determine the displayed month — defaults to the current month.
+	// Supports ?year=2026&month=4 query params for navigation.
+	now := task.Today()
+	year, month := now.Year(), now.Month()
+	if y := r.URL.Query().Get("year"); y != "" {
+		if parsed, err := strconv.Atoi(y); err == nil {
+			year = parsed
+		}
+	}
+	if m := r.URL.Query().Get("month"); m != "" {
+		if parsed, err := strconv.Atoi(m); err == nil && parsed >= 1 && parsed <= 12 {
+			month = time.Month(parsed)
+		}
+	}
+
+	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	startStr := firstOfMonth.Format(task.DateFormat)
+	endStr := lastOfMonth.Format(task.DateFormat)
+
+	// Filter tasks to just the selected month, then sort by date.
+	var monthTasks []task.Task
+	for _, t := range allTasks {
+		if t.Date >= startStr && t.Date <= endStr {
+			monthTasks = append(monthTasks, t)
+		}
+	}
+	sort.Slice(monthTasks, func(i, j int) bool {
+		return monthTasks[i].Date < monthTasks[j].Date
 	})
 
 	// Group tasks by date — one deleteDay per unique date, in order.
 	dayMap := map[string]*deleteDay{}
 	var dayOrder []string
-	for _, t := range allTasks {
+	for _, t := range monthTasks {
 		if _, exists := dayMap[t.Date]; !exists {
 			heading := t.Date // fallback
 			if parsed, err := time.Parse(task.DateFormat, t.Date); err == nil {
@@ -80,10 +107,19 @@ func handleDeletePage(w http.ResponseWriter, r *http.Request) {
 		days = append(days, *dayMap[date])
 	}
 
+	// Navigation: previous and next month.
+	prevMonth := firstOfMonth.AddDate(0, -1, 0)
+	nextMonth := firstOfMonth.AddDate(0, 1, 0)
+
 	renderPage(w, "delete.html", map[string]any{
-		"Days":     days,
-		"HasTasks": len(allTasks) > 0,
-		"Count":    len(allTasks),
+		"MonthLabel": firstOfMonth.Format("January 2006"),
+		"Days":       days,
+		"HasTasks":   len(monthTasks) > 0,
+		"Count":      len(monthTasks),
+		"PrevYear":   prevMonth.Year(),
+		"PrevMonth":  int(prevMonth.Month()),
+		"NextYear":   nextMonth.Year(),
+		"NextMonth":  int(nextMonth.Month()),
 	})
 }
 
