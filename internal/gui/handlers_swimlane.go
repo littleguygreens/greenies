@@ -25,6 +25,7 @@ import (
 // pre-computed once and then used by both the full-month calendar and the
 // snapshot-week mini calendar so the stage-assignment logic lives in one place.
 type swimCycleInfo struct {
+	CycleID     string            // unique cycle identifier — threaded to the template for linking
 	CropName    string
 	Trays       int
 	SowDate     string            // YYYY-MM-DD — used by label builder for date display
@@ -85,6 +86,7 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 		}
 
 		result = append(result, swimCycleInfo{
+			CycleID:     c.CycleID,
 			CropName:    c.CropName,
 			Trays:       c.Trays,
 			SowDate:     c.SowDate,
@@ -220,6 +222,7 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 	// Build a swim-lane row for each cycle that has activity this week.
 	for _, ci := range allCycleInfo {
 		row := monthCycleRow{
+			CycleID:  ci.CycleID,
 			CropName: ci.CropName,
 			Trays:    ci.Trays,
 		}
@@ -381,6 +384,10 @@ type monthCell struct {
 // monthCycleRow is one swim-lane row in a week section. It represents one
 // crop cycle's activity across 7 days (Monday to Sunday).
 type monthCycleRow struct {
+	// CycleID is the unique cycle identifier — used to link the crop label
+	// to the per-cycle adjust page (/adjust/cycle?id=XXX).
+	CycleID string
+
 	// CropName is the variety label shown in the left column.
 	CropName string
 

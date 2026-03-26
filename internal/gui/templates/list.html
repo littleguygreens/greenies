@@ -67,7 +67,7 @@
         <tbody>
             {{range .Rows}}
             <tr class="mcal-row">
-                <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
+                <td class="mcal-crop-label"><a href="/adjust/cycle?id={{.CycleID}}" class="mcal-crop-link">{{.CropName}} {{.Trays}}x</a></td>
                 {{range .Cells}}
                     <td class="mcal-cell{{if not .InMonth}} mcal-outside{{end}}{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
@@ -94,13 +94,21 @@
         <div class="day-heading">{{.DateHeading}}</div>
         {{if .HasTasks}}
             {{range .Tasks}}
+                {{if .CycleID}}
+                <a href="/adjust/cycle?id={{.CycleID}}" class="task-card task-card-link">
+                {{else}}
                 <div class="task-card">
+                {{end}}
                     <div class="task-title">{{.Title}}</div>
                     {{if .Notes}}
                         <div class="task-notes">{{.Notes}}</div>
                     {{end}}
                     <div class="task-id">ID: {{.ID}}</div>
+                {{if .CycleID}}
+                </a>
+                {{else}}
                 </div>
+                {{end}}
             {{end}}
         {{else}}
             <p class="empty-day">(no tasks)</p>

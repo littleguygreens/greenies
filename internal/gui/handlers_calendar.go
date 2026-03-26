@@ -144,6 +144,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 		// Check each cycle — does it have any activity this week?
 		for _, ci := range allCycleInfo {
 			row := monthCycleRow{
+				CycleID:  ci.CycleID,
 				CropName: ci.CropName,
 				Trays:    ci.Trays,
 			}

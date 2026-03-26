@@ -109,6 +109,10 @@ type EnvSection struct {
 // CycleRow holds the display data for one active crop cycle (one batch of
 // trays). This is the structured version of what printCycleRow() prints.
 type CycleRow struct {
+	// CycleID is the unique identifier for this cycle — used by the GUI to
+	// link cycle cards to the per-cycle adjust page (/adjust/cycle?id=XXX).
+	CycleID string
+
 	// CropName is the human-readable crop name like "Sunnies" (capitalised).
 	CropName string
 
@@ -674,6 +678,7 @@ func buildCycleRow(c farm.Cycle, today, sow, moveToLight, harvest time.Time) Cyc
 	}
 
 	return CycleRow{
+		CycleID:     c.CycleID,
 		CropName:    task.Capitalize(c.CropName),
 		Trays:       c.Trays,
 		DayNum:      dayNum,

@@ -291,6 +291,20 @@ pre {
     margin-bottom: 0.5rem;
 }
 
+/* Task cards that belong to a cycle are clickable links to the adjust page */
+.task-card-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.task-card-link:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
 .task-title {
     color: var(--text);
     font-weight: 600;
@@ -1319,6 +1333,18 @@ input:focus, select:focus, textarea:focus {
     display: none;
 }
 
+/* Link inside the crop label column — inherits the cell text colour and
+   lights up on hover. Only visible if the crop label column is shown. */
+.mcal-crop-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.mcal-crop-link:hover {
+    text-decoration: underline;
+    color: var(--accent);
+}
+
 /* Day-of-week headers (Mon, Tue, etc.) with the date number below */
 .mcal-day-header {
     background: var(--surface);
@@ -1543,6 +1569,20 @@ input:focus, select:focus, textarea:focus {
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.4rem;
+}
+
+/* Make cycle cards clickable links to the per-cycle adjust page */
+.snap-cycle-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.snap-cycle-link:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* Header row: crop name + tray count on the left, stage badge on right. */

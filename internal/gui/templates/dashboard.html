@@ -58,7 +58,7 @@
         <tbody>
             {{range .SwimWeek.Rows}}
             <tr class="mcal-row">
-                <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
+                <td class="mcal-crop-label"><a href="/adjust/cycle?id={{.CycleID}}" class="mcal-crop-link">{{.CropName}} {{.Trays}}x</a></td>
                 {{range .Cells}}
                     <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
@@ -96,7 +96,7 @@
             </div>
 
             {{range .Cycles}}
-            <div class="snap-cycle-card">
+            <a href="/adjust/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
                 <div class="snap-cycle-header">
                     <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
                     <span class="snap-stage snap-stage-{{.Stage}}">{{.StageLabel}}</span>
@@ -106,7 +106,7 @@
                     <span>harvest {{.HarvestDate}}</span>
                     {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray · {{fmtDollar .ProfitBatch}}/batch</span>{{end}}
                 </div>
-            </div>
+            </a>
             {{end}}
         {{end}}
     </div>
@@ -117,7 +117,7 @@
     <div class="snap-section">
         <h3 class="snap-section-title snap-harvest-title">Due for harvest today</h3>
         {{range .Snapshot.HarvestToday}}
-        <div class="snap-cycle-card snap-harvest-card">
+        <a href="/adjust/cycle?id={{.CycleID}}" class="snap-cycle-card snap-harvest-card snap-cycle-link">
             <div class="snap-cycle-header">
                 <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
                 <span class="snap-stage snap-stage-harvest">{{.StageLabel}}</span>
@@ -125,7 +125,7 @@
             <div class="snap-cycle-dates">
                 <span>harvest {{.HarvestDate}}</span>
             </div>
-        </div>
+        </a>
         {{end}}
     </div>
     {{end}}
@@ -135,14 +135,14 @@
     <div class="snap-section">
         <h3 class="snap-section-title">Upcoming (next 7 days)</h3>
         {{range .Snapshot.Upcoming}}
-        <div class="snap-cycle-card">
+        <a href="/adjust/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
             <div class="snap-cycle-header">
                 <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
             </div>
             <div class="snap-cycle-dates">
                 <span>sow {{.SowDate}}</span>
             </div>
-        </div>
+        </a>
         {{end}}
     </div>
     {{end}}
