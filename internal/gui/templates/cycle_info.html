@@ -1,0 +1,138 @@
+{{/*
+    cycle_info.html — the cycle information page.
+
+    This is the "baseball card" for a single crop cycle. It shows everything
+    the grower would want to know about one batch of trays: key dates, current
+    stage, financials (if costing data exists), and a day-by-day task timeline.
+
+    At the bottom there are two action buttons: Adjust and Delete.
+
+    Data passed from the handler (handleCycleInfoPage in handlers_cycle.go):
+      .CycleID        — the cycle's unique ID
+      .CropName       — e.g. "Sunnies"
+      .Trays          — tray count
+      .LitEnv         — human-friendly lit environment name
+
+      .SowDisplay     — e.g. "Mon Mar 09"
+      .MTLDisplay     — e.g. "Mon Mar 14"
+      .HarvDisplay    — e.g. "Mon Mar 18"
+
+      .DayNum         — which day of the cycle today is (0 if upcoming/completed)
+      .TotalDays      — total days in the cycle
+      .Stage          — "dark", "light", "harvest day", "upcoming", or "completed"
+
+      .ExpectedGrams  — expected harvest weight (0 if not set)
+      .HasYield       — true if expected grams > 0
+
+      .Days           — list of cycleInfoDay structs (the task timeline)
+      .HasDays        — true if there are any days
+
+      .HasFinancials  — true if costing data exists
+      (plus all the financial fields — see handler for full list)
+*/}}
+
+{{define "cycle_info.html"}}
+<p style="margin-bottom:0.75rem;">
+    <a href="/" class="btn btn-secondary btn-sm">&larr; Dashboard</a>
+</p>
+
+<h1>{{.CropName}} {{.Trays}}x</h1>
+
+<!-- ── Status banner ────────────────────────────────────────────────── -->
+<!-- A quick at-a-glance summary of where this cycle is right now. -->
+{{if eq .Stage "upcoming"}}
+    <div class="cycle-status cycle-status-upcoming">Upcoming — not yet started</div>
+{{else if eq .Stage "completed"}}
+    <div class="cycle-status cycle-status-completed">Completed</div>
+{{else}}
+    <div class="cycle-status cycle-status-{{.Stage}}">
+        Day {{.DayNum}} of {{.TotalDays}} — {{.Stage}}
+    </div>
+{{end}}
+
+<!-- ── Key dates ────────────────────────────────────────────────────── -->
+<div class="task-card">
+    <h2 style="margin-top:0;">Key Dates</h2>
+    <table class="adjust-summary-table">
+        <tr><td class="adjust-summary-label">Sow</td><td>{{.SowDisplay}}</td></tr>
+        <tr><td class="adjust-summary-label">Move to light</td><td>{{.MTLDisplay}}</td></tr>
+        <tr><td class="adjust-summary-label">Harvest</td><td>{{.HarvDisplay}}</td></tr>
+        <tr><td class="adjust-summary-label">Lit environment</td><td>{{.LitEnv}}</td></tr>
+        {{if .HasYield}}
+        <tr><td class="adjust-summary-label">Expected yield</td><td>{{.ExpectedGrams}} {{weightUnit}}</td></tr>
+        {{end}}
+    </table>
+</div>
+
+<!-- ── Financials ───────────────────────────────────────────────────── -->
+{{if .HasFinancials}}
+<div class="task-card">
+    <h2 style="margin-top:0;">Financials</h2>
+
+    <h3 style="margin-top:0.5rem;">Per tray</h3>
+    <table class="adjust-summary-table">
+        <tr><td class="adjust-summary-label">Seed cost</td><td>{{fmtDollar .SeedCostPerTray}}</td></tr>
+        <tr><td class="adjust-summary-label">Medium cost</td><td>{{fmtDollar .MediumCostPerTray}}</td></tr>
+        <tr><td class="adjust-summary-label">Packaging cost</td><td>{{fmtDollar .PackagingCostPerTray}}</td></tr>
+        <tr><td class="adjust-summary-label"><strong>Total cost</strong></td><td><strong>{{fmtDollar .TotalCostPerTray}}</strong></td></tr>
+        <tr><td class="adjust-summary-label">Revenue</td><td>{{fmtDollar .RevenuePerTray}}</td></tr>
+        <tr><td class="adjust-summary-label">Profit</td><td class="{{if gt .ProfitPerTray 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}">{{fmtDollar .ProfitPerTray}}</td></tr>
+    </table>
+
+    <h3>Batch total ({{.Trays}} trays)</h3>
+    <table class="adjust-summary-table">
+        <tr><td class="adjust-summary-label">Sellable units</td><td>{{.SellableUnits}}</td></tr>
+        <tr><td class="adjust-summary-label">Total cost</td><td>{{fmtDollar .BatchCost}}</td></tr>
+        <tr><td class="adjust-summary-label">Total revenue</td><td>{{fmtDollar .BatchRevenue}}</td></tr>
+        <tr><td class="adjust-summary-label"><strong>Batch profit</strong></td><td class="{{if gt .BatchProfit 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}"><strong>{{fmtDollar .BatchProfit}}</strong></td></tr>
+        <tr><td class="adjust-summary-label">Profit margin</td><td>{{printf "%.1f" .ProfitMargin}}%</td></tr>
+    </table>
+</div>
+{{end}}
+
+<!-- ── Task timeline ────────────────────────────────────────────────── -->
+{{if .HasDays}}
+<div class="task-card">
+    <h2 style="margin-top:0;">Task Timeline</h2>
+
+    {{range .Days}}
+    <div class="cycle-day {{if .IsToday}}cycle-day-today{{end}} {{if .IsPast}}cycle-day-past{{end}}">
+        <div class="cycle-day-header">
+            <span class="cycle-day-num">Day {{.DayNum}}</span>
+            <span class="cycle-day-date">{{.Date}}</span>
+            <span class="snap-stage snap-stage-{{.Stage}}">{{.Stage}}</span>
+            {{if .IsToday}}<span class="cycle-today-badge">today</span>{{end}}
+        </div>
+        {{if .HasTasks}}
+            {{range .Tasks}}
+            <div class="cycle-day-task">
+                <div class="cycle-day-task-title">{{.Title}}</div>
+                {{if .Notes}}<div class="cycle-day-task-notes">{{.Notes}}</div>{{end}}
+            </div>
+            {{end}}
+        {{else}}
+            <div class="cycle-day-task cycle-day-empty">(no tasks)</div>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+{{end}}
+
+<!-- ── Action buttons ───────────────────────────────────────────────── -->
+<div class="cycle-actions">
+    <a href="/adjust/cycle?id={{.CycleID}}" class="btn btn-primary">Adjust</a>
+    <button class="btn btn-danger" onclick="document.getElementById('cycle-delete-confirm').style.display='block'; this.style.display='none';">Delete</button>
+</div>
+
+<!-- ── Delete confirmation ──────────────────────────────────────────── -->
+<!-- Hidden by default. Clicking "Delete" shows this confirmation panel
+     so the grower can't accidentally wipe a cycle with one click. -->
+<div id="cycle-delete-confirm" class="cycle-delete-confirm" style="display:none;">
+    <p><strong>Are you sure?</strong> This will delete all {{.TotalDays}} tasks in this cycle. This cannot be undone.</p>
+    <form method="POST" action="/cycle/delete">
+        <input type="hidden" name="cycle_id" value="{{.CycleID}}">
+        <button type="submit" class="btn btn-danger">Yes, delete this cycle</button>
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('cycle-delete-confirm').style.display='none'; document.querySelector('.cycle-actions .btn-danger').style.display='';">Cancel</button>
+    </form>
+</div>
+{{end}}

@@ -393,6 +393,9 @@ func StartServer(port int) error {
 	mux.HandleFunc("GET /trial/compare", handleTrialCompare)
 	mux.HandleFunc("GET /trial/compare-pick", handleTrialComparePicker)
 
+	mux.HandleFunc("GET /cycle", handleCycleInfoPage)
+	mux.HandleFunc("POST /cycle/delete", handleCycleDelete)
+
 	mux.HandleFunc("GET /adjust", handleAdjustPage)
 	mux.HandleFunc("GET /adjust/cycle", handleAdjustCyclePage)
 	mux.HandleFunc("POST /adjust/preview", handleAdjustPreview)
