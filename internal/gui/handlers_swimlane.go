@@ -309,11 +309,15 @@ func computeStagePositions(cells *[7]monthCell, dayStage map[string]string, week
 			cls = "mcal-pos-mid"
 		}
 
-		// Week-edge continuation arrows.
-		if i == 0 && sameAsPrev {
+		// Week-edge continuation arrows. We show an arrow whenever the
+		// cycle continues past the edge of the visible week — even if the
+		// stage changes at the boundary (e.g. blackout ends Saturday,
+		// light begins Sunday). The arrow colour comes from *this* cell's
+		// stage, so each side of the boundary gets its own colour.
+		if i == 0 && prevStage != "" {
 			cls += " mcal-cont-left"
 		}
-		if i == 6 && sameAsNext {
+		if i == 6 && nextStage != "" {
 			cls += " mcal-cont-right"
 		}
 
