@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/config"
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/task"
@@ -398,6 +399,120 @@ type monthCycleRow struct {
 	// Cells holds exactly 7 entries, one per day (Monday index 0 through
 	// Sunday index 6). Each cell is either coloured by stage or empty.
 	Cells [7]monthCell
+}
+
+// buildAdjustSwimlane builds swimlane week data for the adjust preview.
+//
+// It takes a (possibly adjusted) cycle list and builds a mini calendar
+// covering the weeks between rangeStart and rangeEnd. The highlightID
+// parameter marks which cycle row should be visually highlighted — this
+// is the cycle being adjusted, so the grower can see it in context.
+//
+// Returns the weeks, the day labels (Mon–Sun or Sun–Sat), and the week
+// start preference string so the template can render the grid.
+func buildAdjustSwimlane(cycles []farm.Cycle, highlightID string, rangeStart, rangeEnd, today time.Time) ([]monthWeek, [7]string) {
+	// Load crop library for soak settings.
+	cropMap := map[string]crop.Crop{}
+	if cropsSource, err := crop.GetSource(); err == nil {
+		if allCrops, err := cropsSource.LoadCrops(); err == nil {
+			for _, cr := range allCrops {
+				cropMap[cr.Name] = cr
+			}
+		}
+	}
+
+	// Week start preference from config.
+	cfg, _ := config.Load()
+	weekStartDay := cfg.WeekStart
+	if weekStartDay != "mon" {
+		weekStartDay = "sun"
+	}
+
+	var firstWeekday time.Weekday
+	dayLabels := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	if weekStartDay == "sun" {
+		firstWeekday = time.Sunday
+		dayLabels = [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
+	} else {
+		firstWeekday = time.Monday
+	}
+
+	// Align rangeStart to the start of its calendar week.
+	for rangeStart.Weekday() != firstWeekday {
+		rangeStart = rangeStart.AddDate(0, 0, -1)
+	}
+
+	// Align rangeEnd to the end of its calendar week.
+	lastWeekday := time.Saturday
+	if weekStartDay == "mon" {
+		lastWeekday = time.Sunday
+	}
+	for rangeEnd.Weekday() != lastWeekday {
+		rangeEnd = rangeEnd.AddDate(0, 0, 1)
+	}
+
+	// Pre-compute daily stage maps for all cycles.
+	allCycleInfo := buildCycleStages(cycles, cropMap)
+
+	// Build one week section per calendar week in the range.
+	var weeks []monthWeek
+
+	for weekStart := rangeStart; !weekStart.After(rangeEnd); weekStart = weekStart.AddDate(0, 0, 7) {
+		week := monthWeek{}
+
+		// 7 column headers.
+		for i := 0; i < 7; i++ {
+			d := weekStart.AddDate(0, 0, i)
+			week.Headers[i] = monthDayHeader{
+				DayNum:        d.Day(),
+				InMonth:       true, // always "in month" for the preview
+				IsHighlighted: d.Equal(today),
+				DateStr:       d.Format(task.DateFormat),
+			}
+		}
+
+		// One row per cycle with activity this week.
+		for _, ci := range allCycleInfo {
+			row := monthCycleRow{
+				CycleID:  ci.CycleID,
+				CropName: ci.CropName,
+				Trays:    ci.Trays,
+			}
+			hasActivity := false
+
+			for i := 0; i < 7; i++ {
+				d := weekStart.AddDate(0, 0, i)
+				ds := d.Format(task.DateFormat)
+				stage := ci.DayStage[ds]
+
+				row.Cells[i] = monthCell{
+					DayNum:        d.Day(),
+					Stage:         stage,
+					Trays:         ci.Trays,
+					InMonth:       true,
+					IsHighlighted: d.Equal(today),
+					DateStr:       ds,
+				}
+
+				if stage != "" {
+					hasActivity = true
+				}
+			}
+
+			computeStagePositions(&row.Cells, ci.DayStage, weekStart)
+			placeRowLabel(&row.Cells, ci.CropName, ci.Trays, ci.SowDate, ci.HarvestDate)
+
+			if hasActivity {
+				week.Rows = append(week.Rows, row)
+			}
+		}
+
+		if len(week.Rows) > 0 {
+			weeks = append(weeks, week)
+		}
+	}
+
+	return weeks, dayLabels
 }
 
 // monthDayHeader holds the info for one column header in a week row.

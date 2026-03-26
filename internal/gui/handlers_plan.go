@@ -280,12 +280,45 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	header := fmt.Sprintf("%s — %d %s — %s %s",
 		task.Capitalize(found.Name), trays, trayWord, anchorLabel, dateStr)
 
+	// ── Build swimlane preview ────────────────────────────────────────
+	// Show the new cycle(s) in context alongside existing crops on a mini
+	// swimlane calendar, just like the adjust preview does. Each temporary
+	// cycle gets a throwaway ID so the template can highlight it.
+	highlightIDs := map[string]bool{}
+	for i := range tempCycles {
+		id := fmt.Sprintf("plan-preview-%d", i)
+		tempCycles[i].CycleID = id
+		highlightIDs[id] = true
+	}
+
+	// Combine existing cycles with the planned ones for the swimlane.
+	existingForSwim, _ := farm.LoadCycles()
+	swimAll := append(existingForSwim, tempCycles...)
+
+	// Date range: earliest sow to latest harvest across all planned cycles.
+	rangeStart := baseSow
+	rangeEnd := baseHarvest
+	for _, tc := range tempCycles {
+		if s, err := time.Parse(task.DateFormat, tc.SowDate); err == nil && s.Before(rangeStart) {
+			rangeStart = s
+		}
+		if h, err := time.Parse(task.DateFormat, tc.HarvestDate); err == nil && h.After(rangeEnd) {
+			rangeEnd = h
+		}
+	}
+
+	swimWeeks, swimDayLabels := buildAdjustSwimlane(swimAll, "", rangeStart, rangeEnd, task.Today())
+
 	renderFragment(w, "plan_preview.html", map[string]any{
 		"Header":       header,
 		"Days":         days,
 		"Conflicts":    conflicts,
 		"HasConflicts": len(conflicts) > 0,
 		"TotalCycles":  totalCycles,
+		// Swimlane preview data.
+		"SwimWeeks":    swimWeeks,
+		"SwimDayLabels": swimDayLabels,
+		"HighlightIDs": highlightIDs,
 		// Hidden form fields passed through to the confirm handler.
 		"FormCrop":      cropName,
 		"FormTrays":     strconv.Itoa(trays),

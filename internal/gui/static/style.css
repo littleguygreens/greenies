@@ -1096,6 +1096,36 @@ input:focus, select:focus, textarea:focus {
     margin-left: 0.25rem;
 }
 
+/* ── Adjust preview swimlane ─────────────────────────────────────────────
+   The adjusted cycle's row gets a highlight so it stands out from the
+   other crops in the mini calendar. Uses a coloured left border as the
+   primary indicator, with a subtle background wash for extra visibility. */
+/* The adjusted row gets a green outline so the grower can instantly spot
+   which crop is being changed among all the other swim-lane rows. CSS
+   outline wraps the entire <tr> without affecting cell layout or fighting
+   with the hidden crop-label column. */
+/* Dark mode: white outline (contrast against dark bg and green bars). */
+.mcal-row-adjusted {
+    outline: 3px solid #ffffff;
+    outline-offset: -1px;
+}
+
+/* Light mode: black outline. */
+body.light .mcal-row-adjusted {
+    outline: 3px solid #000000;
+}
+
+/* The day-by-day detail is collapsed by default — just a clickable toggle. */
+.adjust-detail-toggle {
+    margin-top: 1rem;
+}
+.adjust-detail-toggle summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 0.25rem 0;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────────
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */
@@ -2460,6 +2490,24 @@ body.light.flashy .mcal-cell.mcal-highlight:not(.mcal-soak):not(.mcal-dark):not(
 
 body.flashy .mcal-table tbody tr:last-child .mcal-cell.mcal-highlight {
     border-bottom: none;
+}
+
+/* ── Flashy adjust preview swimlane ─────────────────────────────────── */
+/* In flashy mode the adjusted cycle row gets a subtle glow border
+   instead of the flat background wash used in standard mode. */
+/* In flashy mode the adjusted row gets a glow outline instead of a
+   plain border — matches the flashy aesthetic. */
+/* Flashy dark: white outline with a soft glow. */
+body.flashy .mcal-row-adjusted {
+    outline: 3px solid #ffffff;
+    outline-offset: -1px;
+    filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
+}
+
+/* Flashy light: black outline with a subtle shadow. */
+body.light.flashy .mcal-row-adjusted {
+    outline: 3px solid #000000;
+    filter: drop-shadow(0 0 4px rgba(0,0,0,0.3));
 }
 
 /* ── Flashy Outside-month days ───────────────────────────────────────── */

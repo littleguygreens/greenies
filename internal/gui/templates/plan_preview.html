@@ -29,7 +29,58 @@
     <div class="plan-preview">
         <h2>{{.Header}}</h2>
 
-        <!-- Schedule table — one row per day in the cycle -->
+        <!-- Swimlane calendar — shows how the new cycle fits in -->
+        {{if .SwimWeeks}}
+            {{$dayLabels := .SwimDayLabels}}
+            {{$highlightIDs := .HighlightIDs}}
+            <div class="mcal-legend" style="margin-top:0;">
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:#1565c0;"></span> Soak
+                </span>
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:#558b2f;"></span> Blackout
+                </span>
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:#8bc34a;"></span> Light
+                </span>
+                <span class="legend-item">
+                    <span class="legend-swatch" style="background:#f9a825;"></span> Harvest
+                </span>
+            </div>
+            {{range .SwimWeeks}}
+            <div class="mcal-week">
+                <table class="mcal-table">
+                    <thead>
+                        <tr>
+                            <th class="mcal-crop-header"></th>
+                            {{range $i, $h := .Headers}}
+                                <th class="mcal-day-header{{if $h.IsHighlighted}} mcal-highlight{{end}}" data-date="{{$h.DateStr}}">
+                                    {{index $dayLabels $i}}
+                                    <span class="mcal-date-num">{{$h.DayNum}}</span>
+                                </th>
+                            {{end}}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Rows}}
+                        <tr class="mcal-row{{if index $highlightIDs .CycleID}} mcal-row-adjusted{{end}}">
+                            <td class="mcal-crop-label">{{.CropName}} {{.Trays}}x</td>
+                            {{range .Cells}}
+                                <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
+                                    {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
+                                </td>
+                            {{end}}
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{end}}
+        {{end}}
+
+        <!-- Schedule table — day-by-day detail in a collapsible toggle -->
+        <details class="adjust-detail-toggle">
+            <summary>Day-by-day detail</summary>
         <table class="data-table">
             <thead>
                 <tr>
@@ -50,6 +101,7 @@
                 {{end}}
             </tbody>
         </table>
+        </details>
 
         {{if .HasConflicts}}
             <!-- Conflict warnings — same data the CLI shows before asking

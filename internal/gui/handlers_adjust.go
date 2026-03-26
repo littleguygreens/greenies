@@ -410,11 +410,48 @@ func handleAdjustPreview(w http.ResponseWriter, r *http.Request) {
 		conflicts = checker.Check(farmEnvs, tempCycles)
 	}
 
+	// ── Build swimlane preview ────────────────────────────────────────
+	// Show the adjusted cycle in context alongside all other crops on a
+	// mini swimlane calendar. We use the same temporary cycle list that
+	// the conflict checker used (with the adjusted dates applied).
+	//
+	// The date range covers whichever is wider — the old or new cycle
+	// span — so the grower can see the full before-and-after picture.
+
+	// Build the temporary cycle list for the swimlane (same idea as the
+	// conflict checker above, but we need it whether or not farm config
+	// loaded successfully).
+	swimCycles := make([]farm.Cycle, len(cycles))
+	copy(swimCycles, cycles)
+	for i := range swimCycles {
+		if swimCycles[i].CycleID == cycleID {
+			swimCycles[i].SowDate = newSow.Format(task.DateFormat)
+			swimCycles[i].MoveToLightDate = newMTL.Format(task.DateFormat)
+			swimCycles[i].HarvestDate = newHarv.Format(task.DateFormat)
+			break
+		}
+	}
+
+	// Date range: earliest sow to latest harvest across old and new dates.
+	rangeStart := sow
+	if newSow.Before(rangeStart) {
+		rangeStart = newSow
+	}
+	rangeEnd := harv
+	if newHarv.After(rangeEnd) {
+		rangeEnd = newHarv
+	}
+
+	swimWeeks, swimDayLabels := buildAdjustSwimlane(swimCycles, cycleID, rangeStart, rangeEnd, today)
+
 	data := map[string]any{
-		"Header":       header,
-		"Rows":         rows,
-		"Conflicts":    conflicts,
-		"HasConflicts": len(conflicts) > 0,
+		"Header":           header,
+		"Rows":             rows,
+		"Conflicts":        conflicts,
+		"HasConflicts":     len(conflicts) > 0,
+		"SwimWeeks":        swimWeeks,
+		"SwimDayLabels":    swimDayLabels,
+		"HighlightCycleID": cycleID,
 	}
 	for k, v := range formBase {
 		data[k] = v
