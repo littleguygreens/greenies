@@ -67,24 +67,16 @@
 <!-- ── Financials ───────────────────────────────────────────────────── -->
 {{if .HasFinancials}}
 <div class="task-card">
-    <h2 style="margin-top:0;">Financials</h2>
+    <h2 style="margin-top:0;">Financials ({{.Trays}} trays)</h2>
 
-    <h3 style="margin-top:0.5rem;">Per tray</h3>
     <table class="adjust-summary-table">
-        <tr><td class="adjust-summary-label">Seed cost</td><td>{{fmtDollar .SeedCostPerTray}}</td></tr>
-        <tr><td class="adjust-summary-label">Medium cost</td><td>{{fmtDollar .MediumCostPerTray}}</td></tr>
-        <tr><td class="adjust-summary-label">Packaging cost</td><td>{{fmtDollar .PackagingCostPerTray}}</td></tr>
-        <tr><td class="adjust-summary-label"><strong>Total cost</strong></td><td><strong>{{fmtDollar .TotalCostPerTray}}</strong></td></tr>
-        <tr><td class="adjust-summary-label">Revenue</td><td>{{fmtDollar .RevenuePerTray}}</td></tr>
-        <tr><td class="adjust-summary-label">Profit</td><td class="{{if gt .ProfitPerTray 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}">{{fmtDollar .ProfitPerTray}}</td></tr>
-    </table>
-
-    <h3>Batch total ({{.Trays}} trays)</h3>
-    <table class="adjust-summary-table">
-        <tr><td class="adjust-summary-label">Sellable units</td><td>{{.SellableUnits}}</td></tr>
-        <tr><td class="adjust-summary-label">Total cost</td><td>{{fmtDollar .BatchCost}}</td></tr>
-        <tr><td class="adjust-summary-label">Total revenue</td><td>{{fmtDollar .BatchRevenue}}</td></tr>
-        <tr><td class="adjust-summary-label"><strong>Batch profit</strong></td><td class="{{if gt .BatchProfit 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}"><strong>{{fmtDollar .BatchProfit}}</strong></td></tr>
+        <tr><td class="adjust-summary-label">Seed cost</td><td>{{fmtDollar .BatchSeedCost}}</td></tr>
+        <tr><td class="adjust-summary-label">Medium cost</td><td>{{fmtDollar .BatchMediumCost}}</td></tr>
+        <tr><td class="adjust-summary-label">Packaging cost</td><td>{{fmtDollar .BatchPackagingCost}} ({{.SellableUnits}} units)</td></tr>
+        <tr><td class="adjust-summary-label"><strong>Total cost</strong></td><td><strong>{{fmtDollar .BatchCost}}</strong></td></tr>
+        <tr><td class="adjust-summary-label">Revenue</td><td>{{fmtDollar .BatchRevenue}}</td></tr>
+        <tr><td class="adjust-summary-label"><strong>Profit</strong></td><td class="{{if gt .BatchProfit 0.0}}snap-profit-positive{{else}}snap-profit-negative{{end}}"><strong>{{fmtDollar .BatchProfit}}</strong></td></tr>
+        <tr><td class="adjust-summary-label">Profit per tray</td><td>{{fmtDollar .ProfitPerTray}}</td></tr>
         <tr><td class="adjust-summary-label">Profit margin</td><td>{{printf "%.1f" .ProfitMargin}}%</td></tr>
     </table>
 </div>

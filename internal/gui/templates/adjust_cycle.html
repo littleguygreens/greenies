@@ -145,4 +145,20 @@
 <!-- The preview appears here when the grower clicks "Preview".
      htmx replaces the contents of this div with the server's response. -->
 <div id="adjust-preview"></div>
+
+<!-- ── Delete button ──────────────────────────────────────────────── -->
+<!-- Separate from the adjust form above. Clicking "Delete" reveals a
+     confirmation panel so the grower can't accidentally wipe a cycle. -->
+<hr style="margin-top:2rem; border:none; border-top:1px solid #e0e0e0;">
+<div class="cycle-actions">
+    <button class="btn btn-danger" onclick="document.getElementById('adjust-delete-confirm').style.display='block'; this.style.display='none';">Delete this cycle</button>
+</div>
+<div id="adjust-delete-confirm" class="cycle-delete-confirm" style="display:none;">
+    <p><strong>Are you sure?</strong> This will delete all tasks in this cycle. This cannot be undone.</p>
+    <form method="POST" action="/cycle/delete">
+        <input type="hidden" name="cycle_id" value="{{.CycleID}}">
+        <button type="submit" class="btn btn-danger">Yes, delete this cycle</button>
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('adjust-delete-confirm').style.display='none'; document.querySelector('.cycle-actions .btn-danger').style.display='';">Cancel</button>
+    </form>
+</div>
 {{end}}

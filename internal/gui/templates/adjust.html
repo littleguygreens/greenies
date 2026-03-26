@@ -2,7 +2,7 @@
     adjust.html — the cycle picker page.
 
     The grower sees a list of active and upcoming cycles. Clicking any cycle
-    card navigates to a dedicated edit page for that cycle (/cycle?id=…).
+    card navigates to a dedicated edit page for that cycle (/adjust/cycle?id=…).
 
     Data passed from the handler (handleAdjustPage in handlers_adjust.go):
       .ActiveCycles   — list of adjustCycleRow structs (active cycles)
@@ -22,7 +22,7 @@
     {{if .ActiveCycles}}
     <h2>Active cycles</h2>
     {{range .ActiveCycles}}
-        <a href="/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
+        <a href="/adjust/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
             <div class="adjust-cycle-info">
                 <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
                 <span class="adjust-cycle-dates">
@@ -37,7 +37,7 @@
     {{if .UpcomingCycles}}
     <h2>Upcoming cycles (starting within 7 days)</h2>
     {{range .UpcomingCycles}}
-        <a href="/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
+        <a href="/adjust/cycle?id={{.CycleID}}" class="task-card adjust-cycle-row adjust-cycle-link">
             <div class="adjust-cycle-info">
                 <span class="adjust-cycle-name">{{.CropName}} {{.Trays}}x</span>
                 <span class="adjust-cycle-dates">

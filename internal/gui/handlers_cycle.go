@@ -160,13 +160,18 @@ func handleCycleInfoPage(w http.ResponseWriter, r *http.Request) {
 
 	// ── Financials ───────────────────────────────────────────────────────
 	// Look up the crop definition so we can calculate cost/revenue/profit.
+	//
+	// The info page shows batch-level numbers (total for all trays in this
+	// cycle) rather than per-tray numbers, because that's how the grower
+	// actually thinks about costs:
+	//   - Seed cost   = (seed cost per bag ÷ bag weight) × grams per tray × trays
+	//   - Medium cost = litres per tray × trays × cost per litre
+	//   - Packaging   = (container cost + label cost) × sellable units
 	var hasFinancials bool
-	var seedCostPerTray, mediumCostPerTray, packagingCostPerTray float64
-	var totalCostPerTray, revenuePerTray, profitPerTray float64
+	var batchSeedCost, batchMediumCost, batchPackagingCost float64
 	var batchCost, batchRevenue, batchProfit float64
-	var profitMargin float64
+	var profitPerTray, profitMargin float64
 	var sellableUnits int
-	var unitsPerTray float64
 
 	source, err := crop.GetSource()
 	if err == nil {
@@ -178,19 +183,23 @@ func handleCycleInfoPage(w http.ResponseWriter, r *http.Request) {
 					if c.HasCostingData() {
 						sc := supply.LoadSupplyCosts()
 						hasFinancials = true
+						trays := float64(chosen.Trays)
 
-						seedCostPerTray = crop.RoundCents(c.SeedCostPerTray())
-						mediumCostPerTray = crop.RoundCents(c.MediumCostPerTray(sc))
-						packagingCostPerTray = crop.RoundCents(c.PackagingCostPerTray(sc))
-						totalCostPerTray = crop.RoundCents(c.TotalCostPerTray(sc))
-						revenuePerTray = crop.RoundCents(c.RevenuePerTray())
-						profitPerTray = crop.RoundCents(c.ProfitPerTray(sc))
-						unitsPerTray = c.UnitsPerTray()
+						// Seed: per-tray cost × number of trays.
+						batchSeedCost = crop.RoundCents(c.SeedCostPerTray() * trays)
+
+						// Medium: litres per tray × trays × cost per litre.
+						batchMediumCost = crop.RoundCents(c.MediumLitres * trays * sc.MediumPerLitre)
+
+						// Packaging: cost per unit × total sellable units.
 						sellableUnits = c.SellableUnits(chosen.Trays)
+						batchPackagingCost = crop.RoundCents(
+							float64(sellableUnits) * (sc.ContainerEach + sc.LabelEach))
 
-						batchCost = crop.RoundCents(totalCostPerTray * float64(chosen.Trays))
+						batchCost = crop.RoundCents(batchSeedCost + batchMediumCost + batchPackagingCost)
 						batchRevenue = crop.RoundCents(float64(sellableUnits) * c.UnitSellPrice)
 						batchProfit = crop.RoundCents(batchRevenue - batchCost)
+						profitPerTray = crop.RoundCents(c.ProfitPerTray(sc))
 						profitMargin = crop.RoundCents(c.ProfitMargin(sc))
 					}
 					break
@@ -225,20 +234,17 @@ func handleCycleInfoPage(w http.ResponseWriter, r *http.Request) {
 		"Days":    days,
 		"HasDays": len(days) > 0,
 
-		// Financials
-		"HasFinancials":        hasFinancials,
-		"SeedCostPerTray":      seedCostPerTray,
-		"MediumCostPerTray":    mediumCostPerTray,
-		"PackagingCostPerTray": packagingCostPerTray,
-		"TotalCostPerTray":     totalCostPerTray,
-		"RevenuePerTray":       revenuePerTray,
-		"ProfitPerTray":        profitPerTray,
-		"UnitsPerTray":         unitsPerTray,
-		"SellableUnits":        sellableUnits,
-		"BatchCost":            batchCost,
-		"BatchRevenue":         batchRevenue,
-		"BatchProfit":          batchProfit,
-		"ProfitMargin":         profitMargin,
+		// Financials (batch-level)
+		"HasFinancials":     hasFinancials,
+		"BatchSeedCost":     batchSeedCost,
+		"BatchMediumCost":   batchMediumCost,
+		"BatchPackagingCost": batchPackagingCost,
+		"SellableUnits":     sellableUnits,
+		"BatchCost":         batchCost,
+		"BatchRevenue":      batchRevenue,
+		"BatchProfit":       batchProfit,
+		"ProfitPerTray":     profitPerTray,
+		"ProfitMargin":      profitMargin,
 	})
 }
 
