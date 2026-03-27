@@ -2316,28 +2316,24 @@ body.flashy .mcal-cell:hover {
 
 body.flashy .mcal-soak {
     background: #1565c0;
-    --stage-color-start: #1565c0;
     --stage-color: #1565c0;
     border-color: transparent;
 }
 
 body.flashy .mcal-dark {
     background: #558b2f;
-    --stage-color-start: #558b2f;
     --stage-color: #558b2f;
     border-color: transparent;
 }
 
 body.flashy .mcal-light {
     background: #8bc34a;
-    --stage-color-start: #8bc34a;
     --stage-color: #8bc34a;
     border-color: transparent;
 }
 
 body.flashy .mcal-harvest {
     background: #fbc02d;
-    --stage-color-start: #fbc02d;
     --stage-color: #fbc02d;
     border-color: transparent;
 }
@@ -2395,11 +2391,11 @@ body.flashy .mcal-cont-right::after {
     right: -10px;
     top: 0;
     bottom: 0;
-    width: 12px;
+    width: 20px;
     background: var(--stage-color);
-    /* Pentagon: 2px flat edge on the left (tucks under the cell to close
-       any sub-pixel gap), then tapers to a point on the right. */
-    clip-path: polygon(0 0, 2px 0, 100% 50%, 2px 100%, 0 100%);
+    /* Pentagon: 10px flat edge on the left (tucks under the cell to hide
+       rounded corners and close sub-pixel gaps), then tapers to a point. */
+    clip-path: polygon(0 0, 10px 0, 100% 50%, 10px 100%, 0 100%);
     z-index: 2;
     pointer-events: none;
 }
@@ -2415,11 +2411,11 @@ body.flashy .mcal-cont-left::before {
     left: -10px;
     top: 0;
     bottom: 0;
-    width: 12px;
+    width: 20px;
     background: var(--stage-color);
-    /* Pentagon mirrored: 2px flat edge on the right (tucks under the cell),
-       tapers to a point on the left. */
-    clip-path: polygon(calc(100% - 2px) 0, 100% 0, 100% 100%, calc(100% - 2px) 100%, 0 50%);
+    /* Pentagon mirrored: 10px flat edge on the right (tucks under the cell
+       to hide rounded corners and close sub-pixel gaps), tapers left. */
+    clip-path: polygon(calc(100% - 10px) 0, 100% 0, 100% 100%, calc(100% - 10px) 100%, 0 50%);
     z-index: 2;
     pointer-events: none;
 }
@@ -2506,18 +2502,15 @@ body.flashy .mcal-table tbody tr:last-child .mcal-cell.mcal-highlight {
 }
 
 /* ── Flashy adjust preview swimlane ─────────────────────────────────── */
-/* In flashy mode the adjusted cycle row gets a subtle glow border
-   instead of the flat background wash used in standard mode. */
-/* In flashy mode the adjusted row gets a glow outline instead of a
-   plain border — matches the flashy aesthetic. */
-/* Flashy dark: white outline with a soft glow. */
+/* In flashy mode the adjusted cycle row gets a glow outline instead of
+   the flat background wash used in standard mode. Dark theme uses a
+   white glow, light theme uses a black shadow — see override below. */
 body.flashy .mcal-row-adjusted {
     outline: 3px solid #ffffff;
     outline-offset: -1px;
     filter: drop-shadow(0 0 4px rgba(255,255,255,0.4));
 }
 
-/* Flashy light: black outline with a subtle shadow. */
 body.light.flashy .mcal-row-adjusted {
     outline: 3px solid #000000;
     filter: drop-shadow(0 0 4px rgba(0,0,0,0.3));
