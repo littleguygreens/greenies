@@ -2296,15 +2296,18 @@ body.flashy .mcal-date-num {
 
 body.flashy .mcal-cell {
     background: var(--bg);
-    border: 1px solid transparent;
+    border: none;
     height: 32px;
     border-radius: 0;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition: background var(--transition-fast), outline-color var(--transition-fast);
 }
 
-/* Empty cells get a very subtle border on hover */
-body.flashy .mcal-cell:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest):hover {
-    border-color: var(--border);
+/* Outline on hover — visible on both empty and filled cells. Outline
+   draws on top of backgrounds and doesn't affect layout, so it won't
+   shift the cell or interfere with arrow positioning. */
+body.flashy .mcal-cell:hover {
+    outline: 1px solid var(--border);
+    outline-offset: -1px;
 }
 
 /* ── Flashy Stage colours ────────────────────────────────────────────── */
@@ -2372,11 +2375,14 @@ body.flashy .mcal-transition::after {
 }
 
 /* ── Week-edge continuation arrows ───────────────────────────────────
-   When a stage continues past the visible week, a pentagon-shaped
-   pseudo-element overlaps 8px INTO the cell (flat edges that hide the
-   square corners) then tapers 8px past the cell into an arrow point.
-   Total width: 16px — left half is a rectangle, right half is a triangle.
-   The cell's own background stays visible to the left of the overlap. */
+   When a stage continues past the visible week, a triangle sits at the
+   cell edge pointing outward to say "this bar keeps going."
+
+   The cells have no border (outline is used for hover instead), so
+   the padding box IS the full visible cell. The pseudo-element
+   stretches to match with top: 0; bottom: 0 — no pixel offsets
+   needed. A percentage-based clip-path cuts it into a triangle
+   that scales to any cell height without mobile overrides. */
 
 body.flashy .mcal-cont-right {
     position: relative;
@@ -2387,11 +2393,13 @@ body.flashy .mcal-cont-right::after {
     content: '';
     position: absolute;
     right: -10px;
-    top: -1px;
+    top: 0;
     bottom: 0;
-    width: 17px;
+    width: 12px;
     background: var(--stage-color);
-    clip-path: polygon(0 0, 50% 0, 100% 50%, 50% 100%, 0 100%);
+    /* Pentagon: 2px flat edge on the left (tucks under the cell to close
+       any sub-pixel gap), then tapers to a point on the right. */
+    clip-path: polygon(0 0, 2px 0, 100% 50%, 2px 100%, 0 100%);
     z-index: 2;
     pointer-events: none;
 }
@@ -2405,11 +2413,13 @@ body.flashy .mcal-cont-left::before {
     content: '';
     position: absolute;
     left: -10px;
-    top: -1px;
+    top: 0;
     bottom: 0;
-    width: 17px;
+    width: 12px;
     background: var(--stage-color);
-    clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%, 0 50%);
+    /* Pentagon mirrored: 2px flat edge on the right (tucks under the cell),
+       tapers to a point on the left. */
+    clip-path: polygon(calc(100% - 2px) 0, 100% 0, 100% 100%, calc(100% - 2px) 100%, 0 50%);
     z-index: 2;
     pointer-events: none;
 }
@@ -2469,14 +2479,14 @@ body.flashy .mcal-day-header.mcal-highlight .mcal-date-num {
 }
 
 body.flashy .mcal-cell.mcal-highlight {
-    border-left: none;
-    border-right: none;
+    border: none;
     box-shadow: inset 0 0 0 100px rgba(139,195,74,0.08);
 }
 
 body.flashy .mcal-cell.mcal-highlight:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest) {
     background: rgba(139,195,74,0.06);
-    border: 1px solid rgba(139,195,74,0.2);
+    outline: 1px solid rgba(139,195,74,0.2);
+    outline-offset: -1px;
 }
 
 body.light.flashy .mcal-cell.mcal-highlight {
@@ -2485,11 +2495,14 @@ body.light.flashy .mcal-cell.mcal-highlight {
 
 body.light.flashy .mcal-cell.mcal-highlight:not(.mcal-soak):not(.mcal-dark):not(.mcal-light):not(.mcal-harvest) {
     background: rgba(85,139,47,0.06);
-    border: 1px solid rgba(85,139,47,0.15);
+    outline: 1px solid rgba(85,139,47,0.15);
+    outline-offset: -1px;
 }
 
+/* Kill the base-theme last-row border that would otherwise leak through
+   (its specificity includes tr:last-child, so we need to match that). */
 body.flashy .mcal-table tbody tr:last-child .mcal-cell.mcal-highlight {
-    border-bottom: none;
+    border: none;
 }
 
 /* ── Flashy adjust preview swimlane ─────────────────────────────────── */
