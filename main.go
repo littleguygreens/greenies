@@ -122,7 +122,7 @@ Usage:
   greenies <command>      Run a specific CLI command
 
 Commands:
-  gui              Open the browser-based dashboard
+  gui              Open the browser-based GUI
   list             Show upcoming tasks (week or month view)
   plan             Schedule a new crop cycle
   snapshot         Live farm view — slots, active cycles, conflicts

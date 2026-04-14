@@ -1,5 +1,5 @@
 {{/*
-    dashboard.html — the home page of the GUI.
+    today.html — the home page of the GUI.
 
     Shows two sections:
       1. Today's farm snapshot (styled cards with progress bars)
@@ -9,7 +9,7 @@
     they open the GUI — the same info as running "greenies snapshot"
     and "greenies list" in the terminal, but rendered with styled HTML.
 
-    Data passed from the handler (handleDashboard in handlers.go):
+    Data passed from the handler (handleToday in handlers_dashboard.go):
       .Today     — formatted date string like "Sunday, 15 March 2026"
       .Snapshot  — a visualizer.SnapshotData struct with all the farm data
       .SwimWeek  — a monthWeek struct with one week of swim-lane data
@@ -19,7 +19,7 @@
       .HasTasks  — true if there are tasks today
 */}}
 
-{{define "dashboard.html"}}
+{{define "today.html"}}
 <h1>{{.Today}}</h1>
 
 <!-- ── Swim-lane week calendar ────────────────────────────────────────── -->
@@ -71,6 +71,23 @@
         </tbody>
     </table>
 </div>
+{{end}}
+
+<!-- ── Today's tasks ──────────────────────────────────────────────────── -->
+<h2>Today's Tasks</h2>
+{{if .HasTasks}}
+    <div class="today-tasks-grid">
+    {{range .Tasks}}
+        <div class="task-card">
+            <div class="task-title">{{.Title}}</div>
+            {{if .Notes}}
+                <div class="task-notes">{{.Notes}}</div>
+            {{end}}
+        </div>
+    {{end}}
+    </div>
+{{else}}
+    <p class="empty">No tasks scheduled for today.</p>
 {{end}}
 
 <!-- ── Farm snapshot ──────────────────────────────────────────────────── -->
@@ -207,21 +224,4 @@
     <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
 {{end}}
 
-<!-- ── Today's tasks ──────────────────────────────────────────────────── -->
-<h2>Today's Tasks</h2>
-{{if .HasTasks}}
-    <!-- range is Go's template version of a "for each" loop.
-         It walks through the list of tasks one at a time. -->
-    {{range .Tasks}}
-        <div class="task-card">
-            <div class="task-title">{{.Title}}</div>
-            {{if .Notes}}
-                <div class="task-notes">{{.Notes}}</div>
-            {{end}}
-            <div class="task-id">ID: {{.ID}}</div>
-        </div>
-    {{end}}
-{{else}}
-    <p class="empty">No tasks scheduled for today.</p>
-{{end}}
 {{end}}

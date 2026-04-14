@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"  // for sync.Mutex — a lock that prevents two things from reading/writing at the same time
 	"time"
@@ -183,6 +184,22 @@ func loadTemplates() error {
 	var err error
 	templates, err = template.New("").Funcs(funcMap).ParseFS(templateFiles, "templates/*.html")
 	return err
+}
+
+// handleSplit renders the split-view page — a minimal container with two
+// side-by-side iframes, each loading a normal Greenies page independently.
+// It bypasses the usual layout.html (which adds the sidebar nav) because
+// the split.html template is its own complete page.
+func handleSplit(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := config.Load()
+	err := templates.ExecuteTemplate(w, "split.html", map[string]any{
+		"Lowercase": cfg.Lowercase,
+		"Theme":     cfg.Theme,
+		"FlashyGUI": cfg.FlashyGUI,
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Template error: %v", err), http.StatusInternalServerError)
+	}
 }
 
 // renderPage sends a complete HTML page to the browser by combining the
@@ -363,7 +380,7 @@ func StartServer(port int) error {
 	// GET = the browser is asking to see a page.
 	// POST = the browser is sending data (form submission, button click).
 
-	mux.HandleFunc("GET /{$}", handleDashboard)
+	mux.HandleFunc("GET /{$}", handleToday)
 	mux.HandleFunc("GET /snapshot", handleSnapshot)
 	mux.HandleFunc("GET /list", handleCalendar)
 	mux.HandleFunc("GET /crops", handleCrops)
@@ -403,6 +420,41 @@ func StartServer(port int) error {
 
 	mux.HandleFunc("GET /settings", handleSettingsPage)
 	mux.HandleFunc("POST /settings", handleSettingsUpdate)
+
+	mux.HandleFunc("GET /split", handleSplit)
+
+	// ── Window preference endpoints ──────────────────────────────────────
+	// Called by JavaScript to persist split-view and window-size preferences
+	// across launches. Values are saved to config.json and read at startup.
+
+	// POST /api/split-view?enabled=true|false
+	mux.HandleFunc("POST /api/split-view", func(w http.ResponseWriter, r *http.Request) {
+		cfg, err := config.Load()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		cfg.SplitView = r.URL.Query().Get("enabled") == "true"
+		config.Save(cfg)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// POST /api/window-size?w=1200&h=800
+	mux.HandleFunc("POST /api/window-size", func(w http.ResponseWriter, r *http.Request) {
+		cfg, err := config.Load()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if ww, err2 := strconv.Atoi(r.URL.Query().Get("w")); err2 == nil && ww > 0 {
+			cfg.WindowWidth = ww
+		}
+		if hh, err2 := strconv.Atoi(r.URL.Query().Get("h")); err2 == nil && hh > 0 {
+			cfg.WindowHeight = hh
+		}
+		config.Save(cfg)
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync-pull", handleSyncPull)
@@ -542,33 +594,59 @@ func openTerminal() {
 // If neither Chromium nor Chrome is installed, it falls back to xdg-open,
 // which opens the URL in whatever the default browser is (with full browser
 // chrome — address bar, tabs, etc.).
-func openBrowser(url string) {
+func openBrowser(baseURL string) {
+	// Load saved window preferences — split view and window dimensions.
+	cfg, _ := config.Load()
+
+	// If the grower last used split view, open /split directly so they
+	// land straight back in the layout they were using.
+	url := baseURL
+	if cfg.SplitView {
+		url = baseURL + "/split"
+	}
+
 	switch runtime.GOOS {
 	case "linux":
 		// Try Chromium-based browsers first — they support the --app flag
 		// which gives us a clean, borderless window.
-		// exec.LookPath checks if a program is installed by searching the
-		// system PATH (the list of directories where programs live).
 		for _, browser := range []string{"chromium-browser", "chromium", "google-chrome", "google-chrome-stable"} {
 			path, err := exec.LookPath(browser)
 			if err == nil {
-				// Found a Chromium-based browser — launch in app mode.
-				// --app=URL opens the page in a standalone window with no
-				// browser chrome. It looks like a native desktop application.
-				cmd := exec.Command(path, "--app="+url)
+				// Use a dedicated profile directory for Greenies so that
+				// Chromium's saved window-placement state never interferes.
+				// This is an isolated directory (~/.greenies/chromium-profile)
+				// that doesn't touch the grower's normal Chromium profile.
+				// With a fresh or greenies-only profile, --window-size is
+				// honoured on first launch and Chromium saves the correct
+				// state for all subsequent launches.
+				home, _ := os.UserHomeDir()
+				profileDir := home + "/.greenies/chromium-profile"
+
+				args := []string{
+					"--app=" + url,
+					"--user-data-dir=" + profileDir,
+				}
+				if cfg.WindowWidth > 0 && cfg.WindowHeight > 0 {
+					args = append(args, fmt.Sprintf("--window-size=%d,%d", cfg.WindowWidth, cfg.WindowHeight))
+				}
+				cmd := exec.Command(path, args...)
 				_ = cmd.Start()
 				return
 			}
 		}
-		// No Chromium found — fall back to opening in the default browser.
-		// This will have the normal address bar and tabs, but still works.
+		// No Chromium found — fall back to the default browser (no app mode).
 		cmd := exec.Command("xdg-open", url)
 		_ = cmd.Start()
 	case "darwin":
-		// macOS: try Chrome app mode, fall back to "open" (default browser).
 		path, err := exec.LookPath("google-chrome")
 		if err == nil {
-			cmd := exec.Command(path, "--app="+url)
+			home, _ := os.UserHomeDir()
+			profileDir := home + "/.greenies/chromium-profile"
+			args := []string{"--app=" + url, "--user-data-dir=" + profileDir}
+			if cfg.WindowWidth > 0 && cfg.WindowHeight > 0 {
+				args = append(args, fmt.Sprintf("--window-size=%d,%d", cfg.WindowWidth, cfg.WindowHeight))
+			}
+			cmd := exec.Command(path, args...)
 			_ = cmd.Start()
 			return
 		}
@@ -578,6 +656,4 @@ func openBrowser(url string) {
 		cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 		_ = cmd.Start()
 	}
-	// On unsupported OS or if everything fails, the URL is printed in the
-	// terminal for the user to copy manually.
 }

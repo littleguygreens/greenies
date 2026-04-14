@@ -18,17 +18,31 @@ import (
 
 // buildTask creates a single calendar task from one day in a crop cycle.
 // This is the shared core used by all three scheduling functions below.
-func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cycleID string) (task.Task, error) {
+//
+// seedGrams is the crop's seed weight per tray (from crop.Crop.SeedGrams).
+// When the day's task instructions mention "measure seed", the phrase is
+// expanded to include the total seed weight — e.g. "measure 2000g seed" for
+// 8 trays of a crop with 250g/tray. Pass 0 to skip this substitution.
+func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cycleID string, seedGrams int) (task.Task, error) {
 	// Title format: "Sunnies 12x dark" — crop name, tray count, stage.
 	title := fmt.Sprintf("%s %dx %s", task.Capitalize(cropName), trays, day.Stage)
 
 	// Notes include tray count and that day's task instructions.
 	trayWord := task.TrayWord(trays)
+	taskText := day.Tasks
+
+	// Expand "measure seed" → "measure Xg seed" so the grower knows exactly
+	// how much seed to weigh out without needing to calculate it themselves.
+	if seedGrams > 0 && strings.Contains(taskText, "measure seed") {
+		totalGrams := trays * seedGrams
+		taskText = strings.ReplaceAll(taskText, "measure seed", fmt.Sprintf("measure %dg seed", totalGrams))
+	}
+
 	var notes string
-	if strings.TrimSpace(day.Tasks) == "" {
+	if strings.TrimSpace(taskText) == "" {
 		notes = fmt.Sprintf("%d %s · %s", trays, trayWord, task.NoTasksNote)
 	} else {
-		notes = fmt.Sprintf("%d %s · %s", trays, trayWord, day.Tasks)
+		notes = fmt.Sprintf("%d %s · %s", trays, trayWord, taskText)
 	}
 
 	t, err := task.New(title, dateStr, notes)
@@ -94,7 +108,7 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 			CropDay: day,
 		})
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -148,7 +162,7 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 			CropDay: day,
 		})
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -204,7 +218,7 @@ func ScheduleFromDay(c crop.Crop, sowDate string, fromDayNum int, trays int, cyc
 		date := sow.AddDate(0, 0, daysFromSow)
 		dateStr := date.Format(task.DateFormat)
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
 		if err != nil {
 			return nil, err
 		}

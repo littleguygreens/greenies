@@ -74,6 +74,19 @@
                 // so there's no visible flicker.
                 document.documentElement.classList.add('nav-start-collapsed');
             }
+
+            // Save the window size whenever it changes so next launch opens
+            // at the same size. Only do this in the top-level window — iframes
+            // in split view would report the pane size, not the outer window.
+            if (window === window.parent) {
+                var resizeTimer;
+                window.addEventListener('resize', function() {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(function() {
+                        fetch('/api/window-size?w=' + window.outerWidth + '&h=' + window.outerHeight, { method: 'POST' });
+                    }, 800);
+                });
+            }
         })();
 
         // Once the page is fully loaded, move the collapsed state from the
@@ -85,6 +98,34 @@
                 // Remove the flash-prevention class — the nav element's own
                 // class handles it from here on.
                 document.documentElement.classList.remove('nav-start-collapsed');
+            }
+
+            // ── Split-pane detection ──────────────────────────────────
+            // If we're running inside an iframe (i.e. in split view), swap
+            // the "Split view" link for "Exit split view" in the nav-bottom.
+            if (window !== window.parent) {
+                var splitLink = document.getElementById('nav-split-link');
+                var exitLink  = document.getElementById('nav-exit-split');
+                if (splitLink) splitLink.style.display = 'none';
+                if (exitLink)  exitLink.style.display  = '';
+            }
+
+            // ── Right split-pane nav ──────────────────────────────────
+            // When this page is loaded inside the right iframe of the split
+            // view, the URL contains "?pane=right". We add a CSS class to
+            // flip the nav to the right side, and rewrite every nav link to
+            // carry the parameter forward so it persists as the grower
+            // navigates within the pane. Links with target="_top" (like the
+            // exit link) are skipped — they navigate the outer window.
+            if (window.location.search.includes('pane=right')) {
+                document.body.classList.add('nav-right');
+                document.querySelectorAll('.nav a:not([target="_top"])').forEach(function(a) {
+                    try {
+                        var url = new URL(a.href);
+                        url.searchParams.set('pane', 'right');
+                        a.href = url.toString();
+                    } catch(e) {}
+                });
             }
 
             // ── Column hover highlight ─────────────────────────────────
@@ -136,7 +177,7 @@
             <!-- nav-links wraps all the clickable links so the toggle
                  button can show/hide them as a single group. -->
             <div class="nav-links" id="nav-links">
-                <a href="/">Dashboard</a>
+                <a href="/">Today</a>
                 <a href="/list">Calendar</a>
                 <a href="/snapshot">Snapshot</a>
                 <a href="/crops">Crops</a>
@@ -147,6 +188,16 @@
                 <a href="/delete">Delete</a>
                 <a href="/sync">Sync</a>
                 <a href="/settings">Settings</a>
+            </div>
+            <!-- Spacer pushes the split button to the bottom of the sidebar -->
+            <div class="nav-spacer"></div>
+            <!-- Split view / Exit split view — only one is visible at a time.
+                 JS below detects whether we're inside an iframe (split mode)
+                 and swaps which link is shown. -->
+            <div class="nav-bottom">
+                <a href="/split" id="nav-split-link">&#x229E; Split view</a>
+                <!-- target="_top" navigates the outer window, not just this pane -->
+                <a href="/" target="_top" id="nav-exit-split" style="display:none;" onclick="fetch('/api/split-view?enabled=false',{method:'POST'})">&#x229E; Exit split view</a>
             </div>
         </nav>
 

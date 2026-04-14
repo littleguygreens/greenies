@@ -20,6 +20,8 @@
    When the user switches to light mode, body.light overrides these values
    and the entire page repaints automatically — no JavaScript needed. */
 :root {
+    /* Tell the browser to use dark-themed system UI (scrollbars, inputs, etc.) */
+    color-scheme: dark;
     --bg:              #1a1a1a;   /* page background (near black)                 */
     --surface:         #242424;   /* cards, sidebar, inputs (dark grey)            */
     --border:          #333333;   /* borders between sections (medium grey)        */
@@ -39,6 +41,7 @@
    Applied when the user selects "Light" on the Settings page. The class
    is set on <body> by the layout template based on config.json Theme. */
 body.light {
+    color-scheme: light;
     --bg:              #f5f5f5;
     --surface:         #ffffff;
     --border:          #d0d0d0;
@@ -113,6 +116,12 @@ body.lowercase a {
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    /* Stick the nav to the top of the viewport so it stays in place while
+       the page content scrolls. height: 100vh keeps it exactly one screen
+       tall — no taller, no shorter. */
+    position: sticky;
+    top: 0;
+    height: 100vh;
     /* Smooth slide when collapsing/expanding. "transition" animates the
        width change over 0.2 seconds so it doesn't just snap. */
     transition: width 0.2s ease, padding 0.2s ease;
@@ -239,6 +248,52 @@ body.lowercase a {
     display: none;
 }
 
+/* ── Right-pane nav ────────────────────────────────────────────────────────
+   When loaded in the right split pane (?pane=right), the nav moves to the
+   right side of the page and text is right-justified. The layout is simply
+   reversed — the nav slides to the right, content to the left. */
+body.nav-right .app {
+    flex-direction: row-reverse;
+}
+
+/* Border moves from right edge to left edge */
+body.nav-right .nav {
+    border-right: none;
+    border-left: 1px solid var(--border);
+}
+
+/* Flip the header so the ☰ toggle sits on the left and the title on the right */
+body.nav-right .nav-header {
+    flex-direction: row-reverse;
+}
+
+body.nav-right .nav-toggle {
+    margin-left: 0;
+    margin-right: 0.5rem;
+}
+
+/* Right-justify all nav link text and the title */
+body.nav-right .nav-title,
+body.nav-right .nav a,
+body.nav-right .nav-bottom {
+    text-align: right;
+}
+
+/* ── Nav bottom section ────────────────────────────────────────────────────
+   Holds the split view button, pinned to the bottom of the sidebar.
+   A top border separates it visually from the main nav links above. */
+.nav-bottom {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+/* Hide along with the rest of the nav links when collapsed */
+.nav-collapsed .nav-bottom,
+.nav-start-collapsed .nav .nav-bottom {
+    display: none;
+}
+
 /* ── Main content area ─────────────────────────────────────────────────── */
 .content {
     flex: 1;
@@ -321,6 +376,21 @@ pre {
     font-size: 0.75rem;
     margin-top: 0.25rem;
     font-family: monospace;
+}
+
+/* ── Today page task grid ───────────────────────────────────────────────────
+   Displays today's tasks in two columns so more fit on screen at once.
+   Cards inside the grid get tighter padding than the standard task card. */
+.today-tasks-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.today-tasks-grid .task-card {
+    padding: 0.4rem 0.6rem;
+    margin-bottom: 0;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -1130,18 +1200,25 @@ body.light .mcal-row-adjusted {
    On small screens (phones, tablets), stack the nav on top instead of
    on the side. */
 @media (max-width: 700px) {
-    /* Stack the layout vertically: nav on top, content below. */
-    .app {
+    /* Stack the layout vertically: nav on top, content below.
+       The extra selector covers the right-pane variant, which has higher
+       specificity and would otherwise keep row-reverse on narrow screens. */
+    .app,
+    body.nav-right .app {
         flex-direction: column;
     }
 
-    /* Nav becomes a horizontal bar at the top of the screen. */
+    /* Nav becomes a horizontal bar at the top of the screen.
+       Reset the sticky/fixed-height behaviour from the desktop rule —
+       a top bar just flows normally in the page. */
     .nav {
         width: 100% !important;
         border-right: none;
         border-bottom: 1px solid var(--border);
         padding: 0.5rem 0.75rem !important;
         transition: none;
+        position: static;
+        height: auto;
     }
 
     .nav-header {

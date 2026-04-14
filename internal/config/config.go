@@ -78,6 +78,16 @@ type Config struct {
 	// refined shadows, gradients, transitions, and a modernised swim-lane
 	// calendar. When false (the default), the original clean look is used.
 	FlashyGUI bool `json:"flashy_gui"`
+
+	// SplitView remembers whether the grower had the GUI open in split-pane
+	// mode. When true, the server opens /split instead of / on the next launch.
+	SplitView bool `json:"split_view"`
+
+	// WindowWidth and WindowHeight remember the last window size the grower
+	// used. When non-zero, the browser is launched with --window-size=W,H so
+	// it opens at the same size as before.
+	WindowWidth  int `json:"window_width"`
+	WindowHeight int `json:"window_height"`
 }
 
 // IsImperial returns true when the grower has chosen the imperial unit

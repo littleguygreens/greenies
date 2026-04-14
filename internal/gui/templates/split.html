@@ -1,0 +1,76 @@
+{{/*
+    split.html — the split-view container page.
+
+    This is a complete, standalone HTML page (it does NOT use layout.html).
+    It displays two iframes side by side, each showing a normal Greenies page.
+    The grower can navigate within each pane independently — clicking a nav
+    link in the left pane only changes the left pane, and vice versa.
+
+    The "Exit split view" link in the toolbar navigates the outer window back
+    to the normal single-page dashboard.
+*/}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenies — Split view</title>
+    <!-- Same fonts and stylesheet as the rest of the app -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        // Keep the server alive — same heartbeat as the regular layout.
+        // The iframes also send heartbeats, but this one ensures the server
+        // stays up even if both iframes haven't loaded yet.
+        setInterval(function() { fetch("/heartbeat"); }, 2000);
+
+        // Tell the server that split view is active so next launch opens here.
+        fetch('/api/split-view?enabled=true', { method: 'POST' });
+
+        // Save the window size whenever it changes so next launch opens
+        // at the same size. Debounced — only fires after resizing stops.
+        var resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                fetch('/api/window-size?w=' + window.outerWidth + '&h=' + window.outerHeight, { method: 'POST' });
+            }, 800);
+        });
+    </script>
+    <style>
+        /* Remove default body spacing so iframes fill the full viewport */
+        body { margin: 0; padding: 0; overflow: hidden; }
+
+        /* The two iframes fill the entire viewport side by side */
+        .split-frames {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Each pane takes an equal share of the width */
+        .split-frame {
+            flex: 1;
+            border: none;
+            min-width: 0;
+        }
+
+        /* A thin divider between the two panes */
+        .split-frame:first-child {
+            border-right: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body class="{{if .Lowercase}}lowercase {{end}}{{if eq .Theme "light"}}light {{end}}{{if .FlashyGUI}}flashy{{end}}">
+    <!-- The two panes — each loads a full Greenies page independently -->
+    <div class="split-frames">
+            <!-- Left pane: Dashboard by default -->
+            <iframe class="split-frame" src="/"></iframe>
+            <!-- Right pane: Calendar by default. The ?pane=right parameter
+                 tells the layout to flip the nav to the right side and
+                 rewrites nav links to carry it forward on each navigation. -->
+            <iframe class="split-frame" src="/list?pane=right"></iframe>
+    </div>
+</body>
+</html>

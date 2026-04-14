@@ -434,10 +434,6 @@ func buildDescription(t task.Task) string {
 		parts = append(parts, t.Notes)
 	}
 
-	if t.CycleID != "" {
-		parts = append(parts, "Cycle ID: "+t.CycleID)
-	}
-
 	parts = append(parts, "Scheduled by Greenies")
 
 	return strings.Join(parts, "\n")

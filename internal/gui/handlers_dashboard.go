@@ -1,6 +1,6 @@
-// handlers_dashboard.go — Dashboard and Snapshot page handlers.
+// handlers_dashboard.go — Today and Snapshot page handlers.
 //
-// These are the two most-visited pages in the GUI. The dashboard is the home
+// These are the two most-visited pages in the GUI. The Today page is the home
 // page that greets the grower when they open the browser. The snapshot page
 // shows a detailed view of the farm on any given date.
 package gui
@@ -21,10 +21,10 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dashboard
+// Today
 // ─────────────────────────────────────────────────────────────────────────────
 
-// handleDashboard renders the home page at "/".
+// handleToday renders the home page at "/".
 //
 // It shows two things:
 //  1. Today's farm snapshot (what's growing, what needs attention)
@@ -33,7 +33,7 @@ import (
 // This gives the grower a quick overview the moment they open the GUI —
 // the same information they'd get from running "greenies snapshot" and
 // "greenies list" in the terminal, but all on one page.
-func handleDashboard(w http.ResponseWriter, r *http.Request) {
+func handleToday(w http.ResponseWriter, r *http.Request) {
 	today := task.Today()
 	todayStr := today.Format(task.DateFormat)
 
@@ -65,8 +65,8 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		todayTasks = calendar.TasksForDate(allTasks, todayStr)
 	}
 
-	// Send the data to the dashboard template for rendering.
-	renderPage(w, "dashboard.html", map[string]any{
+	// Send the data to the today template for rendering.
+	renderPage(w, "today.html", map[string]any{
 		"Today":     today.Format("Monday, 2 January 2006"),
 		"TodayDate": todayStr,
 		"Snapshot":  snap,
