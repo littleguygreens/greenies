@@ -101,6 +101,16 @@ type eligibleCycle struct {
 	HasExpected     bool   // true if ExpectedGrams > 0
 }
 
+// harvestGroup collects all cycles that share the same harvest date.
+// The harvest page renders one group per date, with a heading and a card
+// per cycle underneath, so the grower can see everything due on a given
+// day at a glance.
+type harvestGroup struct {
+	DateDisplay string          // human-readable heading, e.g. "Mar 15"
+	DateSort    string          // YYYY-MM-DD — used for sorting groups
+	Cycles      []eligibleCycle // all cycles due on this date
+}
+
 // handleHarvestPage renders the harvest logging page at GET /harvest.
 //
 // It works like "greenies harvest" — finds all cycles whose harvest date has
@@ -162,9 +172,23 @@ func handleHarvestPage(w http.ResponseWriter, r *http.Request) {
 		return eligible[i].HarvestDateSort > eligible[j].HarvestDateSort
 	})
 
+	// Group cycles by harvest date. We walk the sorted slice and start a
+	// new group each time the date changes — because the slice is already
+	// sorted, all cycles for the same date are consecutive.
+	var groups []harvestGroup
+	for _, c := range eligible {
+		if len(groups) == 0 || groups[len(groups)-1].DateSort != c.HarvestDateSort {
+			groups = append(groups, harvestGroup{
+				DateDisplay: c.HarvestDate,
+				DateSort:    c.HarvestDateSort,
+			})
+		}
+		groups[len(groups)-1].Cycles = append(groups[len(groups)-1].Cycles, c)
+	}
+
 	renderPage(w, "harvest.html", map[string]any{
-		"Eligible":    eligible,
-		"HasEligible": len(eligible) > 0,
+		"Groups":    groups,
+		"HasGroups": len(groups) > 0,
 	})
 }
 

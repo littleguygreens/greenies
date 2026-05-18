@@ -393,6 +393,31 @@ pre {
     margin-bottom: 0;
 }
 
+/* Stage group headings inside the Today page task list.
+   These sit between the "Today's Tasks" h2 and each grid of cards,
+   labelling the grow stage (Sow, Blackout, Light, Harvest). They're
+   intentionally small and subdued so they guide the eye without competing
+   with the task cards themselves. */
+.task-stage-heading {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 0.8rem 0 0.3rem 0;
+}
+
+/* No top margin on the very first stage heading — it sits flush under the h2. */
+.task-stage-heading:first-of-type {
+    margin-top: 0;
+}
+
+/* In lowercase mode the uppercase transform must be explicitly overridden,
+   because the heading's own text-transform: uppercase wins over the body rule. */
+body.lowercase .task-stage-heading {
+    text-transform: lowercase;
+}
+
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .btn {
     display: inline-block;
@@ -1393,6 +1418,36 @@ body.light .mcal-row-adjusted {
    each week, every crop cycle gets its own swim-lane row. Cells are coloured
    by stage so the grower can see what's soaking, in blackout, on light, or
    ready to harvest at a glance. */
+
+/* ── Swim-lane cell dropdown menu ────────────────────────────────────────────
+   A small popup that appears when the grower clicks a coloured cell, offering
+   a choice between viewing the daily snapshot or going to the crop cycle page.
+   Positioned with JS near the click point; hidden by default. */
+.mcal-dropdown {
+    position: fixed;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 160px;
+    overflow: hidden;
+    display: none;
+}
+
+.mcal-dropdown-item {
+    display: block;
+    padding: 0.5rem 0.85rem;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.mcal-dropdown-item:hover {
+    background: var(--surface-alt, var(--border));
+    color: var(--text);
+}
 
 /* Legend — the small colour key above the swim-lane grid */
 .mcal-legend {

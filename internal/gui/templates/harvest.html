@@ -22,35 +22,94 @@
 
 {{define "harvest.html"}}
 <h1>Log Harvest</h1>
-<a href="/harvestlog" class="btn btn-secondary" style="margin-bottom: 1.5rem; display: inline-block;">View Harvest Log</a>
 
-{{if .HasEligible}}
-    <p>These cycles are ready to log. Click "Log harvest" to record actual trays and yield.</p>
+<!-- Dismissal logic — stores dismissed cycle IDs in browser localStorage so
+     they stay hidden across page reloads and the midnight auto-refresh.
+     After 30 days the cycles naturally expire from the eligible list, so
+     the stored IDs become harmless leftovers that never match anything. -->
+<script>
+(function() {
+    var KEY = 'greenies_dismissed_harvests';
 
-    {{range .Eligible}}
-        <!-- Each cycle card has an ID so htmx can target it after logging.
-             When the grower submits the form, the success message replaces
-             this card — the logged cycle disappears from the list. -->
-        <div class="task-card harvest-card" id="harvest-{{.CycleID}}">
-            <div class="harvest-info">
-                <div>
-                    <div class="task-title">{{.CropName}} — {{.Trays}} {{.TrayWord}}</div>
-                    <div class="task-notes">
-                        Harvest date: {{.HarvestDate}}
+    function getDismissed() {
+        try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+        catch(e) { return []; }
+    }
+
+    // dismissHarvest hides a single card and remembers its ID.
+    window.dismissHarvest = function(cycleID) {
+        var list = getDismissed();
+        if (list.indexOf(cycleID) === -1) list.push(cycleID);
+        localStorage.setItem(KEY, JSON.stringify(list));
+        var card = document.getElementById('harvest-' + cycleID);
+        if (card) card.style.display = 'none';
+        // If no cards remain visible, show the empty state message.
+        var visible = document.querySelectorAll('.harvest-card:not([style*="display: none"])');
+        if (visible.length === 0) {
+            var empty = document.getElementById('harvest-empty');
+            if (empty) empty.style.display = '';
+        }
+    };
+
+    // dismissAllHarvests hides every card currently on the page.
+    window.dismissAllHarvests = function() {
+        document.querySelectorAll('.harvest-card').forEach(function(card) {
+            window.dismissHarvest(card.id.replace('harvest-', ''));
+        });
+    };
+
+    // On page load, hide any cards that were previously dismissed.
+    document.addEventListener('DOMContentLoaded', function() {
+        getDismissed().forEach(function(id) {
+            var card = document.getElementById('harvest-' + id);
+            if (card) card.style.display = 'none';
+        });
+        // Check if everything ended up hidden and show the empty state if so.
+        var visible = document.querySelectorAll('.harvest-card:not([style*="display: none"])');
+        if (visible.length === 0) {
+            var empty = document.getElementById('harvest-empty');
+            if (empty) empty.style.display = '';
+        }
+    });
+})();
+</script>
+
+<div style="display:flex; gap:0.75rem; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap;">
+    <a href="/harvestlog" class="btn btn-secondary">View Harvest Log</a>
+    {{if .HasGroups}}
+        <button class="btn btn-secondary" onclick="dismissAllHarvests()">Dismiss all</button>
+    {{end}}
+</div>
+
+{{if .HasGroups}}
+    {{range .Groups}}
+        <h3 class="task-stage-heading">{{.DateDisplay}}</h3>
+
+        {{range .Cycles}}
+            <!-- Each cycle card has an ID so htmx can target it after logging.
+                 When the grower submits the form, the success message replaces
+                 this card — the logged cycle disappears from the list. -->
+            <div class="task-card harvest-card" id="harvest-{{.CycleID}}">
+                <div class="harvest-info">
+                    <div>
+                        <div class="task-title">{{.CropName}} — {{.Trays}} {{.TrayWord}}</div>
                         {{if .HasExpected}}
-                            — expected: {{.ExpectedGrams}}{{weightUnit}}
+                            <div class="task-notes">expected: {{.ExpectedGrams}}{{weightUnit}}</div>
                         {{end}}
                     </div>
+                    <!-- Action buttons — "Log harvest" expands the form,
+                         "Dismiss" hides this card without logging anything. -->
+                    <div class="harvest-toggle-btn" style="display:flex; gap:0.5rem; align-items:center;">
+                        <button class="btn btn-primary btn-small"
+                                onclick="var card=this.closest('.harvest-card'); card.querySelector('.harvest-form').classList.remove('harvest-form-hidden'); this.closest('.harvest-toggle-btn').classList.add('harvest-form-hidden');">
+                            Log harvest
+                        </button>
+                        <button class="btn btn-secondary btn-small"
+                                onclick="dismissHarvest('{{.CycleID}}')">
+                            Dismiss
+                        </button>
+                    </div>
                 </div>
-                <!-- "Log harvest" button — visible by default. Clicking it
-                     shows the form and hides this button. -->
-                <div class="harvest-toggle-btn">
-                    <button class="btn btn-primary btn-small"
-                            onclick="var card=this.closest('.harvest-card'); card.querySelector('.harvest-form').classList.remove('harvest-form-hidden'); this.closest('.harvest-toggle-btn').classList.add('harvest-form-hidden');">
-                        Log harvest
-                    </button>
-                </div>
-            </div>
 
             <!-- Inline logging form — hidden until the grower clicks
                  "Log harvest". The form posts to /harvest via htmx. On
@@ -88,10 +147,19 @@
                     </button>
                 </div>
             </form>
-        </div>
+            </div>
+        {{end}}
     {{end}}
+    <!-- Shown by JS when all cards have been dismissed on a page that
+         did have eligible cycles. Hidden by default since the cards are
+         visible when the page first loads. -->
+    <p class="empty" id="harvest-empty" style="display:none;">
+        All pending harvests dismissed.
+        <a href="/harvestlog">View harvest log</a>
+    </p>
 {{else}}
-    <p class="empty">No recent harvests to log.</p>
+    <p class="empty" id="harvest-empty">No recent harvests to log.</p>
+
     <p class="empty">Cycles are eligible for 30 days after their harvest date.
         <a href="/harvestlog">View harvest log</a></p>
 {{end}}

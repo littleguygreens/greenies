@@ -185,6 +185,10 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	if err != nil {
 		return Crop{}, err
 	}
+	saturateMl, err := parseInt("saturate_ml")
+	if err != nil {
+		return Crop{}, err
+	}
 	darkDays, err := parseInt("dark_days")
 	if err != nil {
 		return Crop{}, err
@@ -243,7 +247,8 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 		OvernightSoak: parseBool("overnight_soak"),
 		SoakHours:     soakHours,
 		SeedGrams:     seedGrams,
-		MediumLitres:    mediumLitres,
+		MediumLitres:  mediumLitres,
+		SaturateMl:    saturateMl,
 		DarkDays:      darkDays,
 		LightDays:     lightDays,
 		YieldGrams:    yieldGrams,
@@ -552,7 +557,7 @@ func WriteCrops(path string, crops []Crop) error {
 	header := []string{
 		"name", "day", "stage", "tasks",
 		"overnight_soak", "soak_hours", "seed_grams",
-		"medium_litres", "dark_days", "light_days", "yield_grams",
+		"medium_litres", "saturate_ml", "dark_days", "light_days", "yield_grams",
 		"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 	}
 	if err := w.Write(header); err != nil {
@@ -592,6 +597,7 @@ func WriteCrops(path string, crops []Crop) error {
 				row[col["seed_grams"]] = strconv.Itoa(c.SeedGrams)
 
 				row[col["medium_litres"]] = FormatFloat(c.MediumLitres)
+				row[col["saturate_ml"]] = strconv.Itoa(c.SaturateMl)
 
 				row[col["dark_days"]] = strconv.Itoa(c.DarkDays)
 				row[col["light_days"]] = strconv.Itoa(c.LightDays)

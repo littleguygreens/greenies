@@ -63,6 +63,12 @@ type Crop struct {
 	// Defaults to 1 if not specified in the CSV.
 	MediumLitres float64
 
+	// SaturateMl is how many millilitres of water are used to saturate the
+	// growing medium on sow day. This varies by crop variety — denser seeds
+	// or deeper medium need more water. Used to expand the "saturate dirt"
+	// step in the task notes so the grower doesn't need to look it up.
+	SaturateMl int
+
 	// DarkDays is how many days the crop spends in the dark room.
 	// (Dark and blackout refer to the same stage.)
 	DarkDays int

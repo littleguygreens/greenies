@@ -139,6 +139,11 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 		mediumLitres = v
 	}
 
+	saturateMl := 0
+	if v, err := strconv.Atoi(r.FormValue("saturate_ml")); err == nil && v > 0 {
+		saturateMl = v
+	}
+
 	yieldGrams := 0
 	if v, err := strconv.Atoi(r.FormValue("yield_grams")); err == nil {
 		yieldGrams = v
@@ -229,7 +234,8 @@ func parseCropForm(r *http.Request) (crop.Crop, []crop.CropDay, string) {
 		OvernightSoak:      overnightSoak,
 		SoakHours:          soakHours,
 		SeedGrams:          seedGrams,
-		MediumLitres:         mediumLitres,
+		MediumLitres:       mediumLitres,
+		SaturateMl:         saturateMl,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         yieldGrams,

@@ -110,20 +110,32 @@
                 </form>
             </div>
 
-            <!-- Option B: Create a brand new Sheet -->
+            <!-- Option B: Create a brand new Sheet (blank or with demo data) -->
             <p class="task-notes">
-                Or create a new Sheet from scratch. This makes a spreadsheet called
-                "greenies" in your Google Drive and uploads your local data.
+                Or create a new Sheet from scratch. Choose a blank sheet to start
+                with your own data, or include a demo schedule to see how a full
+                month looks straight away.
             </p>
 
-            <button id="sheets-setup-btn"
-                    class="btn btn-primary"
-                    hx-post="/sheets-setup"
-                    hx-target="#sheets-setup-area"
-                    hx-swap="innerHTML"
-                    hx-disabled-elt="this">
-                Create New Sheet
-            </button>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <button id="sheets-setup-btn"
+                        class="btn btn-secondary"
+                        hx-post="/sheets-setup"
+                        hx-target="#sheets-setup-area"
+                        hx-swap="innerHTML"
+                        hx-disabled-elt="this">
+                    Create Blank Sheet
+                </button>
+
+                <button id="sheets-demo-btn"
+                        class="btn btn-primary"
+                        hx-post="/sheets-demo-setup"
+                        hx-target="#sheets-setup-area"
+                        hx-swap="innerHTML"
+                        hx-disabled-elt="this">
+                    Create Sheet with Demo Data
+                </button>
+            </div>
 
             <div id="sheets-setup-spinner" style="display: none; margin-top: 1.5rem;">
                 <p>Creating Google Sheet and uploading data...</p>
@@ -131,10 +143,13 @@
 
             <script>
                 (function() {
-                    var btn = document.getElementById("sheets-setup-btn");
                     var spinner = document.getElementById("sheets-setup-spinner");
-                    btn.addEventListener("htmx:beforeRequest", function() {
-                        spinner.style.display = "block";
+                    ["sheets-setup-btn", "sheets-demo-btn"].forEach(function(id) {
+                        var btn = document.getElementById(id);
+                        if (!btn) return;
+                        btn.addEventListener("htmx:beforeRequest", function() {
+                            spinner.style.display = "block";
+                        });
                     });
                 })();
             </script>

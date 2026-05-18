@@ -226,60 +226,16 @@ The layout is defined in a configuration file — never hardcoded.
 
 ## Roadmap
 
-### Phase 1 — The Calendar Foundation ✅ COMPLETE
-- Text-based calendar with day-view and week-view display
-- Add, edit, delete, and clear tasks manually
-- Data persisted to `~/.greenies/tasks.json`
-- Exporter interface in place for future output destinations
+### Phases 1–8 ✅ COMPLETE (shipped in v1.0 and v1.1)
 
-### Phase 2 — Crop Cycles on the Calendar
-- Crop library stored as a CSV file (editable in Google Sheets)
-- Schedule a full crop cycle from a crop + start date
-- Four planning modes: forward/backward, fixed trays/yield-driven
-- Extensible crop parameter data structure
-
-### Phase 3 — Farm Visualizer
-- Model physical farm layout (configurable shelves and slots)
-- Live text view of every tray slot: what's growing, when planted, harvest due
-
-### Phase 4 — Conflict Checker
-- Tray capacity conflict alerts
-- Timing conflict alerts
-- Schedule ripple awareness
-- Harvest log (persistent record of every harvest with expected vs actual yield)
-
-### Phase 5 — Google Calendar Integration
-- OAuth2 authentication (browser-based, no passwords stored)
-- Export crop cycles and tasks as Google Calendar events
-- **Architecture note (flagged in Phase 1 review):** The `Exporter` interface in
-  `internal/export/exporter.go` is defined but not yet wired into the live display
-  flow — `main.go` calls `calendar.PrintDay` directly rather than going through the
-  interface. Before building the Google Calendar exporter, connect the interface to
-  the display path so that swapping output destinations actually works end-to-end.
-
-### Phase 6 — Crop Trialing
-- Trial crops with temporary parameters
-- Observation log per active trial tray
-- Promote or discard trials
-
-### Phase 7 — Mid-Cycle Tray Adjustments
-- Edit parameters for individual active trays without touching the crop template
-- Automatic schedule ripple-forward after any adjustment
-- Conflict checker re-runs automatically
-
-### Phase 8 — Graphical User Interface (GUI)
-- Browser-based GUI on top of existing scheduling logic
-- Core views: calendar, farm visualizer, crop library, active trays
-- CLI remains fully functional alongside the GUI
-- **Architecture note (from Phase 5):** Google Calendar and every major open source
-  calendar app shuffles overlapping all-day events into shared rows — there is no
-  way to get a fixed swim-lane view (one row per crop variety) from any standard
-  calendar app. The right solution is a custom calendar view built with
-  **DayPilot Lite** (free, open source, Apache licensed JavaScript component —
-  https://javascript.daypilot.org/open-source/). Its Scheduler component renders
-  a true Gantt-style timeline: time on the X axis, crop varieties as fixed rows
-  on the Y axis, stage blocks as horizontal bars that never shuffle. This should
-  be the calendar view in the Phase 8 GUI.
+- **Phase 1** — Text-based calendar, day/week view, add/edit/delete tasks, data persisted to `~/.greenies/tasks.json`, Exporter interface stubbed
+- **Phase 2** — Crop library in CSV (editable via Google Sheets), full crop cycle scheduling, four planning modes (forward/backward, fixed trays/yield-driven)
+- **Phase 3** — Farm visualizer: configurable shelves and slots, live text view of every tray slot
+- **Phase 4** — Conflict checker: tray capacity and timing alerts, schedule ripple awareness, harvest log
+- **Phase 5** — Google Calendar integration: OAuth2 browser-based auth, export crop cycles and tasks as calendar events
+- **Phase 6** — Crop trialing: temporary parameters, observation log per trial tray, promote or discard
+- **Phase 7** — Mid-cycle tray adjustments: edit individual active trays, automatic schedule ripple-forward, conflict checker re-runs
+- **Phase 8** — Browser-based GUI (DayPilot Lite Gantt calendar, farm visualizer, crop library, active trays); CLI remains fully functional
 
 ### Phase 9 — Future Features (optional)
 - **Individually addressable slot records** — track which specific physical slot

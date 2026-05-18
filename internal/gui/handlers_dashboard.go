@@ -24,6 +24,56 @@ import (
 // Today
 // ─────────────────────────────────────────────────────────────────────────────
 
+// taskGroup holds all the tasks belonging to one grow stage.
+// Used by groupTasksByStage to split today's task list into labelled sections.
+type taskGroup struct {
+	Label string      // display heading shown in the UI, e.g. "Blackout"
+	Tasks []task.Task // all tasks that belong to this stage
+}
+
+// groupTasksByStage splits a flat task list into groups in the order a grower
+// works through their day: sow → blackout → light → harvest. Any manually
+// created tasks that don't follow the scheduled title format go into an "Other"
+// group at the end. Empty groups are omitted so the page stays tidy.
+//
+// How stage detection works: the scheduler always formats task titles as
+// "Cropname Nx stage" (e.g. "Sunnies 2x dark"), so the last word of the title
+// is the stage name. This avoids the need to store an extra field on every task.
+func groupTasksByStage(tasks []task.Task) []taskGroup {
+	// Fill one bucket per stage as we walk the task list.
+	buckets := map[string][]task.Task{}
+	for _, t := range tasks {
+		words := strings.Fields(t.Title)
+		stage := "other"
+		if len(words) > 0 {
+			last := strings.ToLower(words[len(words)-1])
+			switch last {
+			case "sow", "dark", "light", "harvest":
+				stage = last
+			}
+		}
+		buckets[stage] = append(buckets[stage], t)
+	}
+
+	// Define the order and display labels for each group.
+	// "other" catches manually-created tasks that don't follow the title format.
+	order := []struct{ key, label string }{
+		{"sow", "Sow"},
+		{"dark", "Blackout"},
+		{"light", "Light"},
+		{"harvest", "Harvest"},
+		{"other", "Other"},
+	}
+
+	var groups []taskGroup
+	for _, o := range order {
+		if len(buckets[o.key]) > 0 {
+			groups = append(groups, taskGroup{Label: o.label, Tasks: buckets[o.key]})
+		}
+	}
+	return groups
+}
+
 // handleToday renders the home page at "/".
 //
 // It shows two things:
@@ -65,16 +115,20 @@ func handleToday(w http.ResponseWriter, r *http.Request) {
 		todayTasks = calendar.TasksForDate(allTasks, todayStr)
 	}
 
+	// Group today's tasks by grow stage (sow → blackout → light → harvest)
+	// so the Today page shows them in the natural order of a grower's day.
+	taskGroups := groupTasksByStage(todayTasks)
+
 	// Send the data to the today template for rendering.
 	renderPage(w, "today.html", map[string]any{
-		"Today":     today.Format("Monday, 2 January 2006"),
-		"TodayDate": todayStr,
-		"Snapshot":  snap,
-		"SwimWeek":  swimWeek,
-		"DayLabels": dayLabels,
-		"HasSwim":   len(swimWeek.Rows) > 0,
-		"Tasks":     todayTasks,
-		"HasTasks":  len(todayTasks) > 0,
+		"Today":      today.Format("Monday, 2 January 2006"),
+		"TodayDate":  todayStr,
+		"Snapshot":   snap,
+		"SwimWeek":   swimWeek,
+		"DayLabels":  dayLabels,
+		"HasSwim":    len(swimWeek.Rows) > 0,
+		"TaskGroups": taskGroups,
+		"HasTasks":   len(todayTasks) > 0,
 	})
 }
 

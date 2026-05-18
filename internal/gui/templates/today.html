@@ -22,6 +22,26 @@
 {{define "today.html"}}
 <h1>{{.Today}}</h1>
 
+<!-- ── Today's tasks ──────────────────────────────────────────────────── -->
+<h2>Today's Tasks</h2>
+{{if .HasTasks}}
+    {{range .TaskGroups}}
+        <h3 class="task-stage-heading">{{.Label}}</h3>
+        <div class="today-tasks-grid">
+        {{range .Tasks}}
+            <div class="task-card">
+                <div class="task-title">{{.Title}}</div>
+                {{if .Notes}}
+                    <div class="task-notes">{{trimTrayPrefix .Notes}}</div>
+                {{end}}
+            </div>
+        {{end}}
+        </div>
+    {{end}}
+{{else}}
+    <p class="empty">No tasks scheduled for today.</p>
+{{end}}
+
 <!-- ── Swim-lane week calendar ────────────────────────────────────────── -->
 {{if .HasSwim}}
 <div class="mcal-legend">
@@ -57,11 +77,16 @@
         </thead>
         <tbody>
             {{range .SwimWeek.Rows}}
+            {{$cycleID := .CycleID}}
             <tr class="mcal-row">
                 <td class="mcal-crop-label"><a href="/cycle?id={{.CycleID}}" class="mcal-crop-link">{{.CropName}} {{.Trays}}x</a></td>
                 {{range .Cells}}
                     <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
+                        {{if .Stage}}
+                        <a href="#" class="mcal-link" onclick="showMcalMenu(event,'/snapshot?date={{.DateStr}}','/cycle?id={{$cycleID}}')">
+                        {{else}}
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
+                        {{end}}
                             {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
                         </a>
                     </td>
@@ -71,23 +96,6 @@
         </tbody>
     </table>
 </div>
-{{end}}
-
-<!-- ── Today's tasks ──────────────────────────────────────────────────── -->
-<h2>Today's Tasks</h2>
-{{if .HasTasks}}
-    <div class="today-tasks-grid">
-    {{range .Tasks}}
-        <div class="task-card">
-            <div class="task-title">{{.Title}}</div>
-            {{if .Notes}}
-                <div class="task-notes">{{.Notes}}</div>
-            {{end}}
-        </div>
-    {{end}}
-    </div>
-{{else}}
-    <p class="empty">No tasks scheduled for today.</p>
 {{end}}
 
 <!-- ── Farm snapshot ──────────────────────────────────────────────────── -->

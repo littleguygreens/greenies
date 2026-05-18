@@ -74,6 +74,22 @@ var funcMap = template.FuncMap{
 	// Example in a template: {{join .Tasks ", "}}
 	"join": strings.Join,
 
+	// "trimTrayPrefix" removes the leading tray count from a task's notes.
+	// Scheduled task notes are stored as "N tray(s) · actual instructions"
+	// (e.g. "2 trays · top water, rotate stack"). On the Today page the tray
+	// count is already visible in the card title ("Sunnies 2x dark"), so we
+	// strip the prefix to avoid repeating it. The raw notes are left unchanged
+	// in storage — this only affects what is displayed.
+	"trimTrayPrefix": func(notes string) string {
+		// Find the " · " divider and return only what comes after it.
+		// If the divider isn't present (e.g. a manually-created task),
+		// return the notes unchanged.
+		if idx := strings.Index(notes, " · "); idx != -1 {
+			return notes[idx+3:]
+		}
+		return notes
+	},
+
 	// Math helpers for templates. Go templates can't do arithmetic, but we
 	// need it to calculate progress bar widths (e.g. "48 out of 64 = 75%").
 	//
@@ -135,6 +151,7 @@ var funcMap = template.FuncMap{
 		cfg, _ := config.Load()
 		return cfg.VolumeLabel()
 	},
+
 	// "lgWeightMult" returns 1000 (metric: g→kg) or 16 (imperial: oz→lb).
 	"lgWeightMult": func() int {
 		cfg, _ := config.Load()
@@ -461,6 +478,7 @@ func StartServer(port int) error {
 	mux.HandleFunc("POST /sync-push", handleSyncPush)
 	mux.HandleFunc("POST /google-signin", handleGoogleSignIn)
 	mux.HandleFunc("POST /sheets-setup", handleSheetsSetup)
+	mux.HandleFunc("POST /sheets-demo-setup", handleSheetsDemoSetup)
 	mux.HandleFunc("POST /sheets-link", handleSheetsLink)
 
 	// ── OAuth callback ──────────────────────────────────────────────

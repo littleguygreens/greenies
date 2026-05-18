@@ -66,11 +66,16 @@
         </thead>
         <tbody>
             {{range .Rows}}
+            {{$cycleID := .CycleID}}
             <tr class="mcal-row">
                 <td class="mcal-crop-label"><a href="/cycle?id={{.CycleID}}" class="mcal-crop-link">{{.CropName}} {{.Trays}}x</a></td>
                 {{range .Cells}}
                     <td class="mcal-cell{{if not .InMonth}} mcal-outside{{end}}{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
+                        {{if .Stage}}
+                        <a href="#" class="mcal-link" onclick="showMcalMenu(event,'/snapshot?date={{.DateStr}}','/cycle?id={{$cycleID}}')">
+                        {{else}}
                         <a href="/snapshot?date={{.DateStr}}" class="mcal-link">
+                        {{end}}
                             {{if .Label}}<span class="mcal-label" style="--span:{{.Span}}">{{.Label}}</span>{{else}}&nbsp;{{end}}
                         </a>
                     </td>
@@ -114,4 +119,15 @@
         {{end}}
     </div>
 {{end}}
+
+<script>
+    // Scroll the current week into the centre of the viewport when the page
+    // loads, so the grower lands on today rather than the start of the month.
+    document.addEventListener('DOMContentLoaded', function() {
+        var highlight = document.querySelector('.mcal-highlight');
+        if (highlight) {
+            highlight.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+</script>
 {{end}}

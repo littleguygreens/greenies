@@ -53,6 +53,27 @@
     <script>
         setInterval(function() { fetch("/heartbeat"); }, 2000);
 
+        // ── Midnight refresh ──────────────────────────────────────────────
+        // When greenies is used as an always-on heads-up display, the "today"
+        // page would show the wrong day if left open past midnight. This timer
+        // fires at exactly midnight and reloads the page. The fresh page load
+        // immediately schedules the next midnight timer, so it keeps working
+        // indefinitely without the grower touching anything.
+        //
+        // How it works: "new Date()" gives us the current moment. We then
+        // create a second Date set to midnight tonight (hour 24 = the start of
+        // tomorrow). Subtracting the two gives milliseconds until midnight.
+        // setTimeout waits that long, then calls location.reload().
+        (function scheduleMidnightRefresh() {
+            var now      = new Date();
+            var midnight = new Date(now);
+            midnight.setHours(24, 0, 0, 0); // 24:00:00 is the same as the next day's 00:00:00
+            var msUntilMidnight = midnight - now;
+            setTimeout(function() {
+                window.location.reload();
+            }, msUntilMidnight);
+        })();
+
         // ── Nav toggle ───────────────────────────────────────────────────
         // Collapse or expand the navigation sidebar. The state is saved in
         // localStorage (a small browser storage area that persists between
@@ -209,5 +230,37 @@
             {{.Content}}
         </main>
     </div>
+
+    <!-- ── Swim-lane cell dropdown ────────────────────────────────────────── -->
+    <!-- Single shared dropdown reused by every swim-lane cell click.
+         JS fills in the URLs and positions it near the cursor each time. -->
+    <div id="mcal-menu" class="mcal-dropdown">
+        <a class="mcal-dropdown-item" id="mcal-menu-snapshot" href="#">View snapshot</a>
+        <a class="mcal-dropdown-item" id="mcal-menu-cycle" href="#">View crop cycle</a>
+    </div>
+
+    <script>
+        // showMcalMenu is called when the grower clicks a coloured swim-lane cell.
+        // It positions the dropdown near the click and fills in the two links.
+        function showMcalMenu(e, snapshotUrl, cycleUrl) {
+            e.preventDefault();
+            e.stopPropagation();
+            var menu = document.getElementById('mcal-menu');
+            document.getElementById('mcal-menu-snapshot').href = snapshotUrl;
+            document.getElementById('mcal-menu-cycle').href    = cycleUrl;
+            // Position near the cursor, keeping inside the viewport.
+            var x = e.clientX, y = e.clientY;
+            menu.style.display = 'block';
+            if (x + menu.offsetWidth  > window.innerWidth)  x = window.innerWidth  - menu.offsetWidth  - 8;
+            if (y + menu.offsetHeight > window.innerHeight) y = window.innerHeight - menu.offsetHeight - 8;
+            menu.style.left = x + 'px';
+            menu.style.top  = y + 'px';
+        }
+        // Close the dropdown when clicking anywhere else on the page.
+        document.addEventListener('click', function() {
+            var menu = document.getElementById('mcal-menu');
+            if (menu) menu.style.display = 'none';
+        });
+    </script>
 </body>
 </html>

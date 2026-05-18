@@ -23,7 +23,7 @@ import (
 // When the day's task instructions mention "measure seed", the phrase is
 // expanded to include the total seed weight — e.g. "measure 2000g seed" for
 // 8 trays of a crop with 250g/tray. Pass 0 to skip this substitution.
-func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cycleID string, seedGrams int) (task.Task, error) {
+func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cycleID string, seedGrams int, saturateMl int) (task.Task, error) {
 	// Title format: "Sunnies 12x dark" — crop name, tray count, stage.
 	title := fmt.Sprintf("%s %dx %s", task.Capitalize(cropName), trays, day.Stage)
 
@@ -36,6 +36,19 @@ func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cyc
 	if seedGrams > 0 && strings.Contains(taskText, "measure seed") {
 		totalGrams := trays * seedGrams
 		taskText = strings.ReplaceAll(taskText, "measure seed", fmt.Sprintf("measure %dg seed", totalGrams))
+	}
+
+	// Expand "sow seed" → "sow seed - Xg/tray" so the grower can see the
+	// per-tray seed rate at a glance without looking it up in the crop library.
+	// Uses per-tray rate (not total) because sowing is done tray by tray.
+	if seedGrams > 0 && strings.Contains(taskText, "sow seed") {
+		taskText = strings.ReplaceAll(taskText, "sow seed", fmt.Sprintf("sow seed - %dg/tray", seedGrams))
+	}
+
+	// Expand "saturate dirt" → "saturate dirt - XmL" so the grower knows
+	// exactly how much water to use without looking it up per variety.
+	if saturateMl > 0 && strings.Contains(taskText, "saturate dirt") {
+		taskText = strings.ReplaceAll(taskText, "saturate dirt", fmt.Sprintf("saturate dirt - %dmL", saturateMl))
 	}
 
 	var notes string
@@ -108,7 +121,7 @@ func Schedule(c crop.Crop, harvestDate string, trays int) ([]ScheduledDay, []tas
 			CropDay: day,
 		})
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams, c.SaturateMl)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -162,7 +175,7 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 			CropDay: day,
 		})
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams, c.SaturateMl)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -218,7 +231,7 @@ func ScheduleFromDay(c crop.Crop, sowDate string, fromDayNum int, trays int, cyc
 		date := sow.AddDate(0, 0, daysFromSow)
 		dateStr := date.Format(task.DateFormat)
 
-		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams)
+		t, err := buildTask(c.Name, day, dateStr, trays, cycleID, c.SeedGrams, c.SaturateMl)
 		if err != nil {
 			return nil, err
 		}

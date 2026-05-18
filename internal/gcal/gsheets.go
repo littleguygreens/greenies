@@ -63,7 +63,7 @@ const cycleTab = "Cycle"
 // Push and pull functions look up columns by name, so reordering is safe.
 var cropsHeaders = []interface{}{
 	"name", "overnight_soak", "soak_hours", "seed_grams",
-	"medium_litres", "dark_days", "light_days", "yield_grams",
+	"medium_litres", "saturate_ml", "dark_days", "light_days", "yield_grams",
 	"seed_cost", "seed_purchase_weight", "unit_weight", "unit_sell_price",
 }
 
@@ -515,7 +515,8 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 		OvernightSoak      bool
 		SoakHours          int
 		SeedGrams          int
-		MediumLitres         float64
+		MediumLitres       float64
+		SaturateMl         int
 		DarkDays           int
 		LightDays          int
 		YieldGrams         int
@@ -555,7 +556,8 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			OvernightSoak:      parseBoolCell(row, cropsCol["overnight_soak"]),
 			SoakHours:          parseIntCell(row, cropsCol["soak_hours"]),
 			SeedGrams:          parseIntCell(row, cropsCol["seed_grams"]),
-			MediumLitres:         parseFloatCell(row, cropsCol["medium_litres"]),
+			MediumLitres:       parseFloatCell(row, cropsCol["medium_litres"]),
+			SaturateMl:         parseIntCell(row, cropsCol["saturate_ml"]),
 			DarkDays:           parseIntCell(row, cropsCol["dark_days"]),
 			LightDays:          parseIntCell(row, cropsCol["light_days"]),
 			YieldGrams:         parseIntCell(row, cropsCol["yield_grams"]),
@@ -640,7 +642,8 @@ func (sc *SheetsClient) PullCrops() ([]crop.Crop, error) {
 			OvernightSoak:      p.OvernightSoak,
 			SoakHours:          p.SoakHours,
 			SeedGrams:          p.SeedGrams,
-			MediumLitres:         p.MediumLitres,
+			MediumLitres:       p.MediumLitres,
+			SaturateMl:         p.SaturateMl,
 			DarkDays:           p.DarkDays,
 			LightDays:          p.LightDays,
 			YieldGrams:         p.YieldGrams,
@@ -711,6 +714,7 @@ func (sc *SheetsClient) PushCrops(crops []crop.Crop) error {
 		row[cropCol["soak_hours"]] = c.SoakHours
 		row[cropCol["seed_grams"]] = c.SeedGrams
 		row[cropCol["medium_litres"]] = mediumStr
+		row[cropCol["saturate_ml"]] = c.SaturateMl
 		row[cropCol["dark_days"]] = c.DarkDays
 		row[cropCol["light_days"]] = c.LightDays
 		row[cropCol["yield_grams"]] = c.YieldGrams

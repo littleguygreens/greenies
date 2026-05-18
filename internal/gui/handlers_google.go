@@ -15,8 +15,10 @@ import (
 	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/farm"
 	"github.com/littleguygreens/greenies/internal/gcal"
+	"github.com/littleguygreens/greenies/internal/scheduler"
 	"github.com/littleguygreens/greenies/internal/store"
 	"github.com/littleguygreens/greenies/internal/supply"
+	"github.com/littleguygreens/greenies/internal/task"
 	"github.com/littleguygreens/greenies/internal/trial"
 )
 
@@ -277,6 +279,194 @@ func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 
 	// Push existing local data to the new Sheet so the user doesn't have
 	// to re-enter everything by hand.
+	sc, clientErr := gcal.NewSheetsClient(ctx, sheetID)
+	if clientErr == nil {
+		pushAllToSheet(sc)
+	}
+
+	renderFragment(w, "sheets_setup_result.html", map[string]any{
+		"SheetID": sheetID,
+	})
+}
+
+// generateDemoSchedule creates a month's worth of demo crop cycles starting
+// from today. It schedules 8 cycles spread over 4 weeks — 2 per week, each
+// using 2 trays — so a new grower can see immediately what a busy schedule
+// looks like in the calendar without entering any data by hand.
+//
+// The crops used are, in order: sunnies, pea, broccoli, daikon. If the
+// grower's crop library doesn't include a crop by that name, that slot is
+// silently skipped. At least one crop must exist or the function returns an
+// error.
+//
+// Returns the generated farm.Cycle records and task.Task records ready to be
+// merged into the grower's local files.
+func generateDemoSchedule() ([]farm.Cycle, []task.Task, error) {
+	// Load the grower's crop library so we use their actual crop parameters.
+	cropsPath, err := crop.CropsFilePath()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not find crops file: %w", err)
+	}
+	source := crop.CSVSource{Path: cropsPath}
+	crops, err := source.LoadCrops()
+	if err != nil || len(crops) == 0 {
+		return nil, nil, fmt.Errorf("could not load crops: %w", err)
+	}
+
+	// Build a quick name→crop lookup so we can find varieties by name.
+	cropByName := make(map[string]crop.Crop, len(crops))
+	for _, c := range crops {
+		cropByName[strings.ToLower(c.Name)] = c
+	}
+
+	// Helper: find a crop by name (case-insensitive). Returns nil if not found.
+	find := func(name string) *crop.Crop {
+		c, ok := cropByName[strings.ToLower(name)]
+		if !ok {
+			return nil
+		}
+		return &c
+	}
+
+	// The demo schedule: 4 pairs of crops spread 2 days apart within each week,
+	// then the same pattern repeated a week later. Offsets are in days from today.
+	//
+	//   Week 1: sunnies +0, pea +2
+	//   Week 2: broccoli +7, daikon +9
+	//   Week 3: sunnies +14, pea +16
+	//   Week 4: broccoli +21, daikon +23
+	type demoEntry struct {
+		cropName   string
+		dayOffset  int
+	}
+	entries := []demoEntry{
+		{"sunnies",  0},
+		{"pea",      2},
+		{"broccoli", 7},
+		{"daikon",   9},
+		{"sunnies",  14},
+		{"pea",      16},
+		{"broccoli", 21},
+		{"daikon",   23},
+	}
+
+	today := time.Now()
+	const trays = 2
+
+	var allCycles []farm.Cycle
+	var allTasks  []task.Task
+
+	for _, entry := range entries {
+		c := find(entry.cropName)
+		if c == nil {
+			// This crop variety isn't in the library — skip it gracefully.
+			continue
+		}
+
+		sowDate := today.AddDate(0, 0, entry.dayOffset).Format(task.DateFormat)
+
+		preview, newTasks, err := scheduler.ScheduleForward(*c, sowDate, trays)
+		if err != nil || len(newTasks) == 0 {
+			continue // skip if scheduling fails for any reason
+		}
+
+		// Extract key dates from the preview (same logic as handlers_plan.go).
+		var sowDateStr string
+		for _, d := range preview {
+			if d.CropDay.Day == 1 {
+				sowDateStr = d.Date
+				break
+			}
+		}
+		harvestDateStr := preview[len(preview)-1].Date
+		baseSow, _ := time.Parse(task.DateFormat, sowDateStr)
+		moveToLight := baseSow.AddDate(0, 0, c.DarkDays+1)
+
+		allCycles = append(allCycles, farm.Cycle{
+			CycleID:         newTasks[0].CycleID,
+			CropName:        c.Name,
+			Trays:           trays,
+			SowDate:         sowDateStr,
+			HarvestDate:     harvestDateStr,
+			MoveToLightDate: moveToLight.Format(task.DateFormat),
+			LitEnvironment:  "any",
+			ExpectedGrams:   c.YieldGrams * trays,
+		})
+		allTasks = append(allTasks, newTasks...)
+	}
+
+	if len(allCycles) == 0 {
+		return nil, nil, fmt.Errorf("none of the demo crops (sunnies, pea, broccoli, daikon) were found in your crop library")
+	}
+
+	return allCycles, allTasks, nil
+}
+
+// handleSheetsDemoSetup creates a new Google Sheet pre-filled with a demo
+// schedule (POST /sheets-demo-setup).
+//
+// This is for first-time users who want to see the app in action before
+// entering their own data. It:
+//
+//  1. Generates 8 demo crop cycles spread over the next month
+//  2. Saves them to local cycles.json and tasks.json
+//  3. Creates a new Google Spreadsheet with all tabs
+//  4. Pushes all data (including the demo schedule) to the Sheet
+//
+// The response is the same sheets_setup_result.html fragment as the plain
+// "Create New Sheet" button, so the user lands in the same state either way.
+func handleSheetsDemoSetup(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+
+	// Generate the demo cycles and tasks.
+	demoCycles, demoTasks, err := generateDemoSchedule()
+	if err != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not generate demo schedule: %v", err),
+		})
+		return
+	}
+
+	// Merge the demo data into whatever the user already has locally.
+	// For a brand-new install this is a no-op (files don't exist yet),
+	// but merging is safer than overwriting in case there is existing data.
+	existingCycles, _ := farm.LoadCycles()
+	existingTasks, _ := store.Load()
+
+	if err := farm.SaveCycles(append(existingCycles, demoCycles...)); err != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not save demo cycles: %v", err),
+		})
+		return
+	}
+	if err := store.Save(append(existingTasks, demoTasks...)); err != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not save demo tasks: %v", err),
+		})
+		return
+	}
+
+	// Create the Google Sheet (same as handleSheetsSetup).
+	sheetID, err := gcal.CreateSheet(ctx)
+	if err != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Could not create Google Sheet: %v", err),
+		})
+		return
+	}
+
+	// Save the sheet ID to config.
+	cfg, _ := config.Load()
+	cfg.SheetsEnabled = true
+	cfg.SheetID = sheetID
+	if saveErr := config.Save(cfg); saveErr != nil {
+		renderFragment(w, "sheets_setup_result.html", map[string]any{
+			"Error": fmt.Sprintf("Created Sheet but could not save config: %v", saveErr),
+		})
+		return
+	}
+
+	// Push everything (including the demo schedule) to the new Sheet.
 	sc, clientErr := gcal.NewSheetsClient(ctx, sheetID)
 	if clientErr == nil {
 		pushAllToSheet(sc)
