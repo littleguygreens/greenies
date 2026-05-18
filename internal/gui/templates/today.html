@@ -22,6 +22,21 @@
 {{define "today.html"}}
 <h1>{{.Today}}</h1>
 
+<!-- ── Condensed environment capacity strip ───────────────────────────── -->
+{{if .Snapshot.HasData}}
+<div class="env-capacity-row">
+    {{range .Snapshot.Environments}}
+    <div class="env-capacity-item">
+        <div class="env-capacity-label">{{.Name}}</div>
+        <div class="snap-progress-track" style="margin-bottom: 0.3rem;">
+            <div class="snap-progress-fill snap-progress-{{.Type}}" style="width: {{if .Capacity}}{{printf "%.0f" (divf (mulf (itof .SlotsUsed) 100.0) (itof .Capacity))}}%{{else}}0%{{end}}"></div>
+        </div>
+        <div class="env-capacity-count">{{.SlotsUsed}} / {{.Capacity}}</div>
+    </div>
+    {{end}}
+</div>
+{{end}}
+
 <!-- ── Today's tasks ──────────────────────────────────────────────────── -->
 <h2>Today's Tasks</h2>
 {{if .HasTasks}}
@@ -40,6 +55,66 @@
     {{end}}
 {{else}}
     <p class="empty">No tasks scheduled for today.</p>
+{{end}}
+
+<!-- ── Farm snapshot ──────────────────────────────────────────────────── -->
+<h2>Farm Snapshot</h2>
+{{if .Snapshot.HasData}}
+
+    <!-- Environment cards — one per physical space, showing what's growing -->
+    {{range .Snapshot.Environments}}
+    <div class="snap-env-card">
+        <div class="snap-env-header">
+            <span class="snap-env-name">{{.Name}}</span>
+            {{if .Cycles}}
+                <span class="snap-env-slots">{{.SlotsUsed}} / {{.Capacity}} slots</span>
+            {{else}}
+                <span class="snap-env-empty">empty</span>
+            {{end}}
+        </div>
+
+        {{if .Cycles}}
+            <div class="snap-progress-track">
+                <div class="snap-progress-fill snap-progress-{{.Type}}" style="width: {{if .Capacity}}{{printf "%.0f" (divf (mulf (itof .SlotsUsed) 100.0) (itof .Capacity))}}%{{else}}0%{{end}}"></div>
+            </div>
+
+            {{range .Cycles}}
+            <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
+                <div class="snap-cycle-header">
+                    <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                    <span class="snap-stage snap-stage-{{.Stage}}">{{.StageLabel}}</span>
+                </div>
+                <div class="snap-cycle-dates">
+                    <span>sown {{.SowDate}}</span>
+                    <span>harvest {{.HarvestDate}}</span>
+                    {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray · {{fmtDollar .ProfitBatch}}/batch</span>{{end}}
+                </div>
+            </a>
+            {{end}}
+        {{end}}
+    </div>
+    {{end}}
+
+    <!-- Harvest today -->
+    {{if .Snapshot.HarvestToday}}
+    <div class="snap-section">
+        <h3 class="snap-section-title snap-harvest-title">Due for harvest today</h3>
+        {{range .Snapshot.HarvestToday}}
+        <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-harvest-card snap-cycle-link">
+            <div class="snap-cycle-header">
+                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+                <span class="snap-stage snap-stage-harvest">{{.StageLabel}}</span>
+            </div>
+            <div class="snap-cycle-dates">
+                <span>harvest {{.HarvestDate}}</span>
+            </div>
+        </a>
+        {{end}}
+    </div>
+    {{end}}
+
+{{else}}
+    <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
 {{end}}
 
 <!-- ── Swim-lane week calendar ────────────────────────────────────────── -->
@@ -98,79 +173,8 @@
 </div>
 {{end}}
 
-<!-- ── Farm snapshot ──────────────────────────────────────────────────── -->
-<h2>Farm Snapshot</h2>
+<!-- ── Tray inventory, financials, upcoming ───────────────────────────── -->
 {{if .Snapshot.HasData}}
-
-    <!-- Environment cards — same as the snapshot page but without the
-         date picker. Shows each physical space and what's growing in it. -->
-    {{range .Snapshot.Environments}}
-    <div class="snap-env-card">
-        <div class="snap-env-header">
-            <span class="snap-env-name">{{.Name}}</span>
-            {{if .Cycles}}
-                <span class="snap-env-slots">{{.SlotsUsed}} / {{.Capacity}} slots</span>
-            {{else}}
-                <span class="snap-env-empty">empty</span>
-            {{end}}
-        </div>
-
-        {{if .Cycles}}
-            <div class="snap-progress-track">
-                <div class="snap-progress-fill snap-progress-{{.Type}}" style="width: {{if .Capacity}}{{printf "%.0f" (divf (mulf (itof .SlotsUsed) 100.0) (itof .Capacity))}}%{{else}}0%{{end}}"></div>
-            </div>
-
-            {{range .Cycles}}
-            <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
-                <div class="snap-cycle-header">
-                    <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
-                    <span class="snap-stage snap-stage-{{.Stage}}">{{.StageLabel}}</span>
-                </div>
-                <div class="snap-cycle-dates">
-                    <span>sown {{.SowDate}}</span>
-                    <span>harvest {{.HarvestDate}}</span>
-                    {{if .HasProfit}}<span class="snap-cycle-profit">{{fmtDollar .ProfitPerTray}}/tray · {{fmtDollar .ProfitBatch}}/batch</span>{{end}}
-                </div>
-            </a>
-            {{end}}
-        {{end}}
-    </div>
-    {{end}}
-
-    <!-- Harvest today -->
-    {{if .Snapshot.HarvestToday}}
-    <div class="snap-section">
-        <h3 class="snap-section-title snap-harvest-title">Due for harvest today</h3>
-        {{range .Snapshot.HarvestToday}}
-        <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-harvest-card snap-cycle-link">
-            <div class="snap-cycle-header">
-                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
-                <span class="snap-stage snap-stage-harvest">{{.StageLabel}}</span>
-            </div>
-            <div class="snap-cycle-dates">
-                <span>harvest {{.HarvestDate}}</span>
-            </div>
-        </a>
-        {{end}}
-    </div>
-    {{end}}
-
-    <!-- Upcoming -->
-    {{if .Snapshot.Upcoming}}
-    <div class="snap-section">
-        <h3 class="snap-section-title">Upcoming (next 7 days)</h3>
-        {{range .Snapshot.Upcoming}}
-        <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
-            <div class="snap-cycle-header">
-                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
-            </div>
-            <div class="snap-cycle-dates">
-                <span>sow {{.SowDate}}</span>
-            </div>
-        </a>
-        {{end}}
-    </div>
-    {{end}}
 
     <!-- Tray inventory -->
     {{if .Snapshot.Inventory}}
@@ -191,10 +195,7 @@
     </div>
     {{end}}
 
-    <!-- Financial summary — only shown when at least one active cycle
-         has costing data entered (seed cost + sell price). This gives the
-         grower a quick at-a-glance view of expected cost, revenue, and
-         profit across all active batches. -->
+    <!-- Financial summary -->
     {{if .Snapshot.Financial.HasData}}
     <div class="snap-section">
         <h3 class="snap-section-title">Financials (this week)</h3>
@@ -215,6 +216,23 @@
     </div>
     {{end}}
 
+    <!-- Upcoming -->
+    {{if .Snapshot.Upcoming}}
+    <div class="snap-section">
+        <h3 class="snap-section-title">Upcoming (next 7 days)</h3>
+        {{range .Snapshot.Upcoming}}
+        <a href="/cycle?id={{.CycleID}}" class="snap-cycle-card snap-cycle-link">
+            <div class="snap-cycle-header">
+                <span class="snap-cycle-name">{{.CropName}} {{.Trays}}x</span>
+            </div>
+            <div class="snap-cycle-dates">
+                <span>sow {{.SowDate}}</span>
+            </div>
+        </a>
+        {{end}}
+    </div>
+    {{end}}
+
     <!-- Conflicts -->
     {{if .Snapshot.Conflicts}}
     <div class="snap-conflicts">
@@ -228,8 +246,6 @@
     </div>
     {{end}}
 
-{{else}}
-    <p class="empty">No farm data yet. Use "greenies plan" to schedule your first crop.</p>
 {{end}}
 
 {{end}}

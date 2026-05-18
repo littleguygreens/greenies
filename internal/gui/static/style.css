@@ -1721,6 +1721,42 @@ body.light .mcal-row-adjusted {
     background: #8bc34a;
 }
 
+/* ── Condensed environment capacity row ─────────────────────────────────── */
+/* One compact item per environment, all in a horizontal flex row.
+   Shows just the name, a thin progress bar, and the XX/XX slot count.
+   Used on the Today page as a quick at-a-glance capacity strip. */
+
+.env-capacity-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.env-capacity-item {
+    flex: 1;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+}
+
+.env-capacity-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.env-capacity-count {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 0.3rem;
+}
+
 /* ── Cycle cards ────────────────────────────────────────────────────────── */
 /* Each batch of trays inside an environment is a mini-card with the crop
    name, tray count, current stage, and key dates. */
