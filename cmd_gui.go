@@ -36,7 +36,7 @@ func runGui() {
 
 	// Start the server. This call blocks (keeps running) until the user
 	// presses Ctrl+C or the server hits a fatal error.
-	if err := gui.StartServer(port); err != nil {
+	if err := gui.StartServer(port, Version); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 		os.Exit(1)
 	}

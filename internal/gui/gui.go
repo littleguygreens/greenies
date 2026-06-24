@@ -366,7 +366,11 @@ func watchHeartbeat(server *http.Server) {
 // function), and starts listening for browser requests. The server runs
 // until the browser window is closed or the user presses Ctrl+C in the
 // terminal — whichever comes first.
-func StartServer(port int) error {
+//
+// version is the release string baked into the binary (e.g. "v1.1.0").
+// It is passed to the update handler so it can compare against the latest
+// GitHub release without needing a global variable.
+func StartServer(port int, version string) error {
 	// Step 1: Load all HTML templates into memory.
 	if err := loadTemplates(); err != nil {
 		return fmt.Errorf("failed to load templates: %w", err)
@@ -473,6 +477,13 @@ func StartServer(port int) error {
 		config.Save(cfg)
 		w.WriteHeader(http.StatusNoContent)
 	})
+
+	// ── Update endpoints ────────────────────────────────────────────────
+	// Powered by the "Check for Updates" button on the settings page.
+	// /update/check compares the running version against the latest GitHub
+	// release. /update/apply downloads and replaces the binary on disk.
+	mux.HandleFunc("GET /update/check", handleUpdateCheck(version))
+	mux.HandleFunc("POST /update/apply", handleUpdateApply)
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync-pull", handleSyncPull)

@@ -319,6 +319,10 @@
             Open Terminal
         </button>
 
+        <button class="btn btn-secondary" id="update-btn" onclick="checkForUpdate()">
+            Check for Updates
+        </button>
+
         {{/*
             Show the "Install Desktop Shortcut" button on Linux and macOS only.
             On Linux it creates a .desktop file; on macOS it creates a .app
@@ -345,6 +349,9 @@
     </p>
     <div id="install-result" style="display: none; margin-top: 0.75rem; background: rgba(139, 195, 74, 0.15); border: 1px solid var(--accent); border-radius: 8px; padding: 0.75rem 1.25rem; white-space: pre-line;"></div>
     {{end}}
+
+    <!-- Result area for the update check. Hidden until a check is run. -->
+    <div id="update-result" style="display: none; margin-top: 0.75rem; border-radius: 8px; padding: 0.75rem 1.25rem;"></div>
 </div>
 
 <!-- ── JavaScript for adding rows ──────────────────────────────────────── -->
@@ -399,6 +406,92 @@ function installDesktop() {
         })
         .catch(function() {
             btn.textContent = 'Install Failed';
+            btn.disabled = false;
+        });
+}
+
+// checkForUpdate calls /update/check to ask GitHub whether a newer release
+// exists. If one does, it swaps the button to "Apply update vX.X.X" so the
+// grower can download and install it in one more click.
+function checkForUpdate() {
+    var btn = document.getElementById('update-btn');
+    var result = document.getElementById('update-result');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    result.style.display = 'none';
+
+    fetch('/update/check')
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            result.style.display = 'block';
+            // Reset any error colouring from a previous run.
+            result.style.background = 'rgba(139, 195, 74, 0.15)';
+            result.style.border = '1px solid var(--accent)';
+
+            if (data.error) {
+                result.textContent = 'Error: ' + data.error;
+                result.style.background = 'rgba(224, 112, 112, 0.15)';
+                result.style.border = '1px solid #e07070';
+                btn.textContent = 'Check for Updates';
+                btn.disabled = false;
+                return;
+            }
+
+            if (!data.update_available) {
+                result.textContent = 'You\'re up to date (' + data.current + ').';
+                btn.textContent = 'Check for Updates';
+                btn.disabled = false;
+                return;
+            }
+
+            // An update is available — show what version and offer to apply it.
+            result.textContent = 'Update available: ' + data.latest + ' (current: ' + data.current + ')';
+            btn.textContent = 'Apply update ' + data.latest;
+            btn.disabled = false;
+            // Replace the onclick so the next click downloads and applies.
+            btn.onclick = function() { applyUpdate(data.download_url, data.latest); };
+        })
+        .catch(function() {
+            result.style.display = 'block';
+            result.textContent = 'Could not reach GitHub. Check your internet connection.';
+            result.style.background = 'rgba(224, 112, 112, 0.15)';
+            result.style.border = '1px solid #e07070';
+            btn.textContent = 'Check for Updates';
+            btn.disabled = false;
+        });
+}
+
+// applyUpdate downloads the binary at downloadURL and replaces the one on
+// disk. The grower needs to close and reopen the app to run the new version.
+function applyUpdate(downloadURL, version) {
+    var btn = document.getElementById('update-btn');
+    var result = document.getElementById('update-result');
+    btn.disabled = true;
+    btn.textContent = 'Downloading...';
+
+    fetch('/update/apply?url=' + encodeURIComponent(downloadURL), {method: 'POST'})
+        .then(function(resp) {
+            return resp.text().then(function(text) {
+                result.style.display = 'block';
+                if (resp.ok) {
+                    result.textContent = text;
+                    result.style.background = 'rgba(139, 195, 74, 0.15)';
+                    result.style.border = '1px solid var(--accent)';
+                    btn.textContent = 'Updated to ' + version;
+                } else {
+                    result.textContent = 'Error: ' + text;
+                    result.style.background = 'rgba(224, 112, 112, 0.15)';
+                    result.style.border = '1px solid #e07070';
+                    btn.textContent = 'Update Failed';
+                    btn.disabled = false;
+                }
+            });
+        })
+        .catch(function() {
+            result.textContent = 'Download failed. Check your internet connection.';
+            result.style.background = 'rgba(224, 112, 112, 0.15)';
+            result.style.border = '1px solid #e07070';
+            btn.textContent = 'Update Failed';
             btn.disabled = false;
         });
 }
