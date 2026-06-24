@@ -444,6 +444,18 @@ function checkForUpdate() {
                 return;
             }
 
+            // An update is available but no direct download exists for this
+            // platform (e.g. Android — the APK must be installed manually).
+            // Show a link to the releases page instead of a download button.
+            if (!data.download_url) {
+                result.innerHTML = 'Update available: ' + data.latest +
+                    ' — <a href="' + data.releases_url + '" target="_blank" ' +
+                    'style="color: var(--accent);">download from GitHub</a>';
+                btn.textContent = 'Check for Updates';
+                btn.disabled = false;
+                return;
+            }
+
             // An update is available — show what version and offer to apply it.
             result.textContent = 'Update available: ' + data.latest + ' (current: ' + data.current + ')';
             btn.textContent = 'Apply update ' + data.latest;

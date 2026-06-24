@@ -23,6 +23,11 @@ import (
 const repoOwner = "littleguygreens"
 const repoName = "greenies"
 
+// releasesPageURL is the human-facing GitHub releases page. Shown as a
+// fallback link on platforms (e.g. Android) where the binary can't be
+// replaced in-place and the user must download and install manually.
+const releasesPageURL = "https://github.com/" + repoOwner + "/" + repoName + "/releases/latest"
+
 // updateCheckResult is what we send back to the browser after checking GitHub.
 // The JS on the settings page reads these fields to decide what to display.
 type updateCheckResult struct {
@@ -33,8 +38,13 @@ type updateCheckResult struct {
 	// UpdateAvailable is true when Latest differs from Current.
 	UpdateAvailable bool `json:"update_available"`
 	// DownloadURL is the direct link to the new binary for this platform.
-	// Empty when UpdateAvailable is false or no matching asset was found.
+	// Empty when UpdateAvailable is false, or when no matching asset exists
+	// for this platform (e.g. Android — the APK must be installed via the
+	// system package installer, not replaced in-place).
 	DownloadURL string `json:"download_url"`
+	// ReleasesURL is always the human-facing GitHub releases page. Used as
+	// a fallback link when DownloadURL is empty but an update is available.
+	ReleasesURL string `json:"releases_url"`
 	// Error holds a human-readable message if something went wrong.
 	Error string `json:"error,omitempty"`
 }
@@ -51,8 +61,9 @@ func handleUpdateCheck(currentVersion string) http.HandlerFunc {
 		rel, err := updater.CheckLatest(repoOwner, repoName)
 		if err != nil {
 			json.NewEncoder(w).Encode(updateCheckResult{
-				Current: currentVersion,
-				Error:   "Could not reach GitHub: " + err.Error(),
+				Current:     currentVersion,
+				ReleasesURL: releasesPageURL,
+				Error:       "Could not reach GitHub: " + err.Error(),
 			})
 			return
 		}
@@ -62,6 +73,7 @@ func handleUpdateCheck(currentVersion string) http.HandlerFunc {
 			Latest:          rel.TagName,
 			UpdateAvailable: rel.TagName != currentVersion,
 			DownloadURL:     rel.DownloadURL,
+			ReleasesURL:     releasesPageURL,
 		})
 	}
 }
