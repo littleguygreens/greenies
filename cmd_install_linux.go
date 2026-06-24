@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // appIcon is the Greenies sprout icon (white on dark green, 192×192 PNG)
@@ -35,27 +36,75 @@ import (
 //go:embed desktop/icon.png
 var appIcon []byte
 
-// runInstallDesktop creates a .desktop shortcut file in two places:
-//   1. The grower's Desktop folder — so they see an icon to double-click
-//   2. ~/.local/share/applications/ — so it appears in the app menu
-//      (the searchable list of programs in the system tray)
-func runInstallDesktop() {
-	// Find the full path to the greenies binary. os.Executable() returns
-	// the path of the currently running program — we use this so the
-	// shortcut always points to the right place, even if the grower
-	// moves the binary later (well, not if they move it, but it captures
-	// wherever it is right now).
-	exePath, err := os.Executable()
+// findBinaryPath returns the absolute path of the compiled Greenies binary.
+//
+// The tricky case: when a developer runs "go run . install-desktop" instead
+// of the compiled binary, os.Executable() returns a path inside Go's
+// temporary build cache (~/.cache/go-build/...). That path is wiped between
+// builds, so a shortcut pointing there breaks immediately.
+//
+// To protect against this, we detect the build-cache situation and look for
+// a real compiled binary in the most likely locations (~/greenies/). If we
+// can't find one, we print a clear error telling the grower to build first.
+func findBinaryPath() (string, error) {
+	exe, err := os.Executable()
 	if err != nil {
-		fmt.Printf("Error: could not find the greenies binary path: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("could not find binary path: %w", err)
 	}
 
-	// Resolve any symbolic links (shortcuts within the filesystem) so the
-	// .desktop file points to the actual binary, not a link that might break.
-	exePath, err = filepath.EvalSymlinks(exePath)
+	// EvalSymlinks resolves any filesystem shortcuts so we get the true path.
+	exe, err = filepath.EvalSymlinks(exe)
 	if err != nil {
-		fmt.Printf("Error: could not resolve binary path: %v\n", err)
+		return "", fmt.Errorf("could not resolve binary path: %w", err)
+	}
+
+	// Detect if we're running from Go's temporary build cache. This happens
+	// when the grower uses "go run ." instead of a compiled binary.
+	// The build cache path always contains ".cache/go-build".
+	if strings.Contains(exe, ".cache/go-build") {
+		home, _ := os.UserHomeDir()
+
+		// Look for a compiled binary in the standard locations.
+		candidates := []string{
+			filepath.Join(home, "greenies", "greenies-linux-arm64"),
+			filepath.Join(home, "greenies", "greenies"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				fmt.Printf("Note: detected go run — using compiled binary at %s\n", c)
+				return c, nil
+			}
+		}
+
+		// No compiled binary found — tell the grower how to fix it.
+		return "", fmt.Errorf(
+			"install-desktop was run via 'go run', which uses a temporary\n"+
+				"build cache path that is wiped between builds.\n\n"+
+				"Please build the binary first, then install:\n"+
+				"  go build -o greenies-linux-arm64 .\n"+
+				"  ./greenies-linux-arm64 install-desktop",
+		)
+	}
+
+	return exe, nil
+}
+
+// runInstallDesktop creates a stable launcher symlink and .desktop shortcut
+// files so the grower can launch Greenies by double-clicking an icon.
+//
+// The shortcut does NOT point directly at the binary. Instead it points to a
+// symlink we create at ~/.local/bin/greenies. This means rebuilding the binary
+// (which replaces the file at the same path) never breaks the shortcut —
+// the symlink still points to the right place without any re-installation.
+//
+// Files created:
+//   ~/.local/bin/greenies              — symlink → the compiled binary
+//   ~/Desktop/greenies.desktop         — double-clickable icon
+//   ~/.local/share/applications/...    — app menu entry
+func runInstallDesktop() {
+	exePath, err := findBinaryPath()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -82,29 +131,58 @@ func runInstallDesktop() {
 		fmt.Printf("Installed icon: %s\n", iconPath)
 	}
 
+	// ── Install the launcher symlink ────────────────────────────────────
+	//
+	// Create ~/.local/bin/greenies as a symlink pointing to the compiled
+	// binary. The .desktop file's Exec line always uses THIS symlink path,
+	// never the binary path directly.
+	//
+	// Why a symlink? Rebuilding the binary with "go build -o greenies-linux-arm64 ."
+	// replaces the binary file at its path but leaves the symlink alone —
+	// the symlink still points to the same location, so the shortcut keeps
+	// working without any re-installation.
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		fmt.Printf("Warning: could not create %s: %v\n", binDir, err)
+	}
+	linkPath := filepath.Join(binDir, "greenies")
+
+	// Remove any previous symlink so we can create a fresh one.
+	// os.Remove on a missing file is harmless.
+	_ = os.Remove(linkPath)
+	if err := os.Symlink(exePath, linkPath); err != nil {
+		// Symlink creation failed — fall back to pointing directly at the binary.
+		// This still works, but rebuilds may break the shortcut again.
+		fmt.Printf("Warning: could not create launcher symlink at %s: %v\n", linkPath, err)
+		fmt.Printf("         Falling back to direct binary path — rebuild may break the shortcut.\n")
+		linkPath = exePath
+	} else {
+		fmt.Printf("Installed launcher: %s → %s\n", linkPath, exePath)
+	}
+
 	// Build the .desktop file content. This is a standard format defined by
 	// freedesktop.org — every Linux desktop environment knows how to read it.
 	//
 	// Key fields:
-	//   Name        — what appears under the icon
-	//   Exec        — the command to run when double-clicked
-	//   Icon        — path to the PNG icon shown on the desktop and app menu
-	//   Terminal     — false means "don't open a terminal window"
-	//   Type        — "Application" is the standard type for programs
-	//   Comment     — tooltip text shown when hovering over the icon
-	//   Categories  — where it appears in the app menu (Office = productivity)
+	//   Name          — what appears under the icon
+	//   Exec          — the command to run when double-clicked (uses the symlink)
+	//   Icon          — path to the PNG icon shown on the desktop and app menu
+	//   Terminal      — false means "don't open a terminal window"
+	//   Type          — "Application" is the standard type for programs
+	//   Comment       — tooltip text shown when hovering over the icon
+	//   Categories    — where it appears in the app menu (Office = productivity)
 	//   StartupNotify — false because the GUI opens in the browser, not as a
-	//                    native window, so the desktop shouldn't show a spinner
+	//                   native window, so the desktop shouldn't show a spinner
 	desktopEntry := fmt.Sprintf(`[Desktop Entry]
 Name=Greenies
 Comment=Microgreens farm scheduler
-Exec=%s
+Exec=%s gui
 Icon=%s
 Terminal=false
 Type=Application
 Categories=Office;
 StartupNotify=false
-`, exePath, iconPath)
+`, linkPath, iconPath)
 
 	// ── Place 1: the grower's Desktop folder ────────────────────────────
 	desktopDir := filepath.Join(home, "Desktop")
@@ -144,5 +222,6 @@ StartupNotify=false
 	}
 
 	fmt.Println("\nDone! You should now see Greenies in your app menu.")
+	fmt.Println("Rebuilding the binary will not break the shortcut.")
 	fmt.Println("If there's an icon on your Desktop, you can double-click it to launch the GUI.")
 }
