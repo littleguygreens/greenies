@@ -89,6 +89,15 @@ This tool should embody the same minimalism as the farm it serves.
 - Prefer simple, linear Git workflows — do not introduce branching strategies or
   advanced Git concepts until the basics are solid.
 
+## Version Number
+- The current version lives in `version.go` at the root of the project as `const Version`.
+- **Before every commit that will become a new release, update `Version` in `version.go`
+  to match the git tag that will be pushed.** For example, if the tag will be `v1.2.0`,
+  set `const Version = "v1.2.0"` before committing.
+- The in-app updater compares this string against the latest GitHub release tag. If they
+  don't match, the update checker will always show a false "update available" or "up to date"
+  result. Keeping them in sync is the only maintenance the updater needs.
+
 ## Reminders for Claude
 - If you are about to make an architectural decision, explain it in plain English
   before implementing it — do not just write code and explain afterward.
