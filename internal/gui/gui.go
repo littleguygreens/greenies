@@ -256,10 +256,11 @@ func renderPage(w http.ResponseWriter, name string, data any) {
 	cfg, _ := config.Load()
 
 	err = templates.ExecuteTemplate(w, "layout.html", map[string]any{
-		"Content":   template.HTML(buf.String()),
-		"Lowercase": cfg.Lowercase,
-		"Theme":     cfg.Theme,
-		"FlashyGUI": cfg.FlashyGUI,
+		"Content":      template.HTML(buf.String()),
+		"Lowercase":    cfg.Lowercase,
+		"Theme":        cfg.Theme,
+		"FlashyGUI":    cfg.FlashyGUI,
+		"MidnightSync": cfg.MidnightSync,
 	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Layout error: %v", err), http.StatusInternalServerError)

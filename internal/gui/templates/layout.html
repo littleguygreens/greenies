@@ -70,7 +70,17 @@
             midnight.setHours(24, 0, 0, 0); // 24:00:00 is the same as the next day's 00:00:00
             var msUntilMidnight = midnight - now;
             setTimeout(function() {
+                {{if .MidnightSync}}
+                // Auto-sync is on — pull the latest data from Google Sheets
+                // before reloading so the new day starts with fresh data.
+                // We fire the same request the Sync page's Pull button uses.
+                // If it fails (no internet, Sheets not linked), we reload anyway.
+                fetch('/sync-pull', {method: 'POST'})
+                    .catch(function() {})
+                    .finally(function() { window.location.reload(); });
+                {{else}}
                 window.location.reload();
+                {{end}}
             }, msUntilMidnight);
         })();
 

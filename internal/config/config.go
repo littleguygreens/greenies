@@ -79,6 +79,14 @@ type Config struct {
 	// calendar. When false (the default), the original clean look is used.
 	FlashyGUI bool `json:"flashy_gui"`
 
+	// MidnightSync controls whether the GUI automatically pulls fresh data
+	// from Google Sheets at midnight (just before the page reloads for the
+	// new day). When true, the midnight timer fires a sync-pull request so
+	// any changes made in the Sheet during the day land on this device
+	// overnight — without the grower having to open the Sync page manually.
+	// Only does anything if Google Sheets is linked (SheetsEnabled + SheetID).
+	MidnightSync bool `json:"midnight_sync"`
+
 	// SplitView remembers whether the grower had the GUI open in split-pane
 	// mode. When true, the server opens /split instead of / on the next launch.
 	SplitView bool `json:"split_view"`
