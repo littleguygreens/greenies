@@ -47,12 +47,17 @@ type githubRelease struct {
 
 // assetName returns the expected file name for the Greenies binary on this
 // machine. For example, on a 64-bit Linux ARM machine it returns
-// "greenies-linux-arm64". This must match the asset names in the GitHub
+// "greenies-linux-arm64". On Windows it adds ".exe" to match the release
+// asset naming convention. This must match the asset names in the GitHub
 // release — if the naming convention ever changes, update it here.
 func assetName() string {
 	// runtime.GOOS  is the operating system:   "linux", "darwin", "windows"
 	// runtime.GOARCH is the CPU architecture: "amd64", "arm64", "arm"
-	return fmt.Sprintf("greenies-%s-%s", runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("greenies-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
 }
 
 // CheckLatest asks the GitHub releases API for the newest release and returns
