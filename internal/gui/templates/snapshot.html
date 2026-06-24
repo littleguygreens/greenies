@@ -75,7 +75,7 @@
             <tr class="mcal-row">
                 <td class="mcal-crop-label"><a href="/cycle?id={{.CycleID}}" class="mcal-crop-link">{{.CropName}} {{.Trays}}x</a></td>
                 {{range .Cells}}
-                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
+                    <td class="mcal-cell{{if .IsHighlighted}} mcal-highlight{{end}}{{if eq .Stage "soak"}} mcal-soak{{end}}{{if .SameDaySoak}} mcal-soak-same-day{{end}}{{if eq .Stage "dark"}} mcal-dark{{end}}{{if eq .Stage "light"}} mcal-light{{end}}{{if eq .Stage "harvest"}} mcal-harvest{{end}}{{if .PosClass}} {{.PosClass}}{{end}}" data-date="{{.DateStr}}">
                         {{if .Stage}}
                         <a href="#" class="mcal-link" onclick="showMcalMenu(event,'/snapshot?date={{.DateStr}}','/cycle?id={{$cycleID}}')">
                         {{else}}

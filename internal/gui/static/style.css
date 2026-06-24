@@ -2506,6 +2506,49 @@ body.flashy .mcal-harvest {
     border-color: transparent;
 }
 
+/* ── Same-day soak cell ──────────────────────────────────────────────── */
+/* A crop with a same-day soak (e.g. Sunnies) soaks and is sown on the
+   same calendar day. The cell is split: blue on the left (soak), dark
+   green on the right (sow/blackout begins). A blue right-pointing arrow
+   sits at the midpoint — the same shape as the week-edge arrows — to
+   make it clear that both operations happen within a single day.
+
+   Overnight-soak crops (e.g. Peas) have a pure blue "soak" cell the day
+   before sowing, so there's no ambiguity to resolve there. */
+
+body.flashy .mcal-soak-same-day {
+    background: linear-gradient(to right, #1565c0 50%, #558b2f 50%);
+    /* Set the outgoing arrow colour to dark green: if this cell sits at
+       the right edge of a visible week and the cycle continues, the
+       week-edge arrow should match the stage that follows (blackout). */
+    --stage-color: #558b2f;
+    position: relative;
+}
+
+/* The standard stage-transition chevron (mcal-transition::after) would
+   draw a blue arrow poking into the next cell. We don't want that here —
+   the interior arrow below replaces it entirely. */
+body.flashy .mcal-soak-same-day.mcal-transition::after {
+    display: none;
+}
+
+/* Interior arrow: a right-pointing triangle at the 50% boundary,
+   coloured soak-blue. The clip-path is the same left-facing wedge used
+   for the transition chevrons — just centred inside the cell instead of
+   sitting at the right edge. */
+body.flashy .mcal-soak-same-day::before {
+    content: '';
+    position: absolute;
+    left: calc(50% - 7px); /* centre the 14px arrow on the midpoint */
+    top: 0;
+    bottom: 0;
+    width: 14px;
+    background: #1565c0;
+    clip-path: polygon(0 0, 50% 50%, 0 100%);
+    z-index: 3;
+    pointer-events: none;
+}
+
 /* ── Connected bar — position-based rounding ─────────────────────────── */
 /* Only the first and last cells of a same-stage run get rounded corners,
    so multiple days merge into one continuous coloured bar. */

@@ -32,6 +32,13 @@ type swimCycleInfo struct {
 	SowDate     string            // YYYY-MM-DD — used by label builder for date display
 	HarvestDate string            // YYYY-MM-DD — used by label builder for date display
 	DayStage    map[string]string // date (YYYY-MM-DD) → stage name
+
+	// SameDaySoakDates is the set of dates where the crop has a same-day
+	// soak — meaning the seed soaks for a few hours AND is sown on the
+	// same calendar day (e.g. Sunnies with a 4-hour soak). These cells get
+	// a split blue/green visual to distinguish them from overnight-soak
+	// crops, where the soak falls on the day before sowing.
+	SameDaySoakDates map[string]bool
 }
 
 // buildCycleStages takes a list of farm cycles and a crop lookup map, sorts
@@ -61,6 +68,7 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 		}
 
 		stages := map[string]string{}
+		sameDaySoakDates := map[string]bool{}
 		cr, hasCrop := cropMap[c.CropName]
 
 		// Soak day(s) — before the blackout bar starts.
@@ -68,7 +76,11 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 			soakDay := sowDate.AddDate(0, 0, -1)
 			stages[soakDay.Format(task.DateFormat)] = "soak"
 		} else if hasCrop && cr.SoakHours > 0 {
-			stages[sowDate.Format(task.DateFormat)] = "soak"
+			// Same-day soak: the seed soaks and is sown on the same day.
+			// Mark the date so the template can render the split visual.
+			ds := sowDate.Format(task.DateFormat)
+			stages[ds] = "soak"
+			sameDaySoakDates[ds] = true
 		}
 
 		// Walk from sow date to harvest date, assigning stages.
@@ -87,12 +99,13 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 		}
 
 		result = append(result, swimCycleInfo{
-			CycleID:     c.CycleID,
-			CropName:    c.CropName,
-			Trays:       c.Trays,
-			SowDate:     c.SowDate,
-			HarvestDate: c.HarvestDate,
-			DayStage:    stages,
+			CycleID:          c.CycleID,
+			CropName:         c.CropName,
+			Trays:            c.Trays,
+			SowDate:          c.SowDate,
+			HarvestDate:      c.HarvestDate,
+			DayStage:         stages,
+			SameDaySoakDates: sameDaySoakDates,
 		})
 	}
 
@@ -237,6 +250,7 @@ func buildSnapshotWeek(focusDate time.Time, cycles []farm.Cycle, weekStartPref s
 			row.Cells[i] = monthCell{
 				DayNum:        d.Day(),
 				Stage:         stage,
+				SameDaySoak:   ci.SameDaySoakDates[ds],
 				Trays:         ci.Trays,
 				InMonth:       true,
 				IsHighlighted: d.Equal(focusDate),
@@ -341,6 +355,14 @@ type monthCell struct {
 	// Stage is which phase of the crop cycle falls on this day:
 	// "soak", "dark", "light", "harvest", or "" (no activity).
 	Stage string
+
+	// SameDaySoak is true when Stage is "soak" AND the soak happens on the
+	// same day as sowing — i.e. the seed soaks for a few hours and is planted
+	// the same day (e.g. Sunnies). False for overnight-soak crops (Peas) where
+	// the soak day is the day before sowing.
+	// The template uses this to render the cell as half-blue/half-green with
+	// an interior arrow, showing both operations happen within one day.
+	SameDaySoak bool
 
 	// Label is the text shown on the first cell of each stage run — e.g.
 	// "sunnies 16x — dark". Empty on continuation cells (2nd, 3rd day
@@ -492,6 +514,7 @@ func buildAdjustSwimlane(cycles []farm.Cycle, highlightID string, rangeStart, ra
 				row.Cells[i] = monthCell{
 					DayNum:        d.Day(),
 					Stage:         stage,
+					SameDaySoak:   ci.SameDaySoakDates[ds],
 					Trays:         ci.Trays,
 					InMonth:       true,
 					IsHighlighted: d.Equal(today),

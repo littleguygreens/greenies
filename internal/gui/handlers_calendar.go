@@ -158,6 +158,7 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 				row.Cells[i] = monthCell{
 					DayNum:        d.Day(),
 					Stage:         stage,
+					SameDaySoak:   ci.SameDaySoakDates[ds],
 					Trays:         ci.Trays,
 					InMonth:       d.Month() == month,
 					IsHighlighted: d.Equal(now),
