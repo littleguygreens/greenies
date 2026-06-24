@@ -2539,7 +2539,7 @@ body.flashy .mcal-soak-same-day.mcal-transition::after {
 body.flashy .mcal-soak-same-day::before {
     content: '';
     position: absolute;
-    left: calc(50% - 7px); /* centre the 14px arrow on the midpoint */
+    left: 50%; /* left edge of the 14px arrow starts exactly at the colour split */
     top: 0;
     bottom: 0;
     width: 14px;
