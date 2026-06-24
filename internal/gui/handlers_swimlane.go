@@ -48,11 +48,28 @@ type swimCycleInfo struct {
 // (buildSnapshotWeek) call this so the date-walking and stage-assignment
 // logic is never duplicated.
 func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimCycleInfo {
+	// effectiveStart returns the first day a cycle is visible on the calendar.
+	// For overnight-soak crops that is the soak day (SowDate − 1), because
+	// the soak cell appears the day before sowing. For everything else it is
+	// just the SowDate.
+	effectiveStart := func(c farm.Cycle) string {
+		cr, hasCrop := cropMap[c.CropName]
+		if hasCrop && cr.OvernightSoak {
+			sowDate, err := time.Parse(task.DateFormat, c.SowDate)
+			if err == nil {
+				return sowDate.AddDate(0, 0, -1).Format(task.DateFormat)
+			}
+		}
+		return c.SowDate
+	}
+
 	// Sort cycles oldest-first so swim-lane rows appear in a stable,
-	// predictable order (earliest sow date at the top).
+	// predictable order (earliest visible day at the top).
 	sort.Slice(cycles, func(i, j int) bool {
-		if cycles[i].SowDate != cycles[j].SowDate {
-			return cycles[i].SowDate < cycles[j].SowDate
+		si := effectiveStart(cycles[i])
+		sj := effectiveStart(cycles[j])
+		if si != sj {
+			return si < sj
 		}
 		return cycles[i].CropName < cycles[j].CropName
 	})
