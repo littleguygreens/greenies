@@ -103,8 +103,23 @@
         </table>
         </details>
 
+        {{if .HasConsolidation}}
+            <!-- Consolidation notice — shown when an existing cycle of the same
+                 crop falls on the same sow date as one of the cycles being planned.
+                 The grower can merge them into one combined cycle instead of adding
+                 a separate row to the calendar. -->
+            <div class="plan-consolidation-notice">
+                <strong>Existing cycle{{if gt (len .ConsolidationMatches) 1}}s{{end}} found — consolidate?</strong>
+                <ul>
+                    {{range .ConsolidationMatches}}
+                        <li>{{.ExistingTrays}} existing + {{.NewTrays}} new = <strong>{{.CombinedTrays}} trays</strong> on {{.SowDateDisplay}}</li>
+                    {{end}}
+                </ul>
+            </div>
+        {{end}}
+
         {{if .HasConflicts}}
-            <!-- Conflict warnings — same data the CLI shows before asking
+            <!-- Capacity warnings — same data the CLI shows before asking
                  "save anyway?" We show them as a yellow warning box. -->
             <div class="plan-conflicts">
                 <strong>Capacity warnings:</strong>
@@ -121,10 +136,13 @@
             <p class="plan-repeat-note">{{.TotalCycles}} cycles total ({{.TotalCycles}} weeks).</p>
         {{end}}
 
-        <!-- Confirm button — sends the same form data to POST /plan/confirm.
+        <!-- Confirm form — sends the same form data to POST /plan/confirm.
              The hidden fields carry all the values needed to recreate the
              schedule and save it, so the server doesn't need to remember
-             anything between the preview and the confirm. -->
+             anything between the preview and the confirm.
+             When consolidation is available the submit buttons carry a
+             "consolidate" field value so the confirm handler knows which
+             path to take. -->
         <form hx-post="/plan/confirm"
               hx-target="#preview"
               hx-swap="innerHTML">
@@ -136,9 +154,22 @@
             <input type="hidden" name="repeats" value="{{.FormRepeats}}">
 
             <div class="plan-actions">
-                <button type="submit" class="btn btn-primary">
-                    Confirm — add to calendar
-                </button>
+                {{if .HasConsolidation}}
+                    <!-- "consolidate=yes" is submitted with the button's name/value,
+                         so only the clicked button's value is sent. The "Add separately"
+                         button sends no consolidate field, which the handler treats as
+                         the normal (non-consolidating) path. -->
+                    <button type="submit" name="consolidate" value="yes" class="btn btn-primary">
+                        Consolidate into existing cycle{{if gt (len .ConsolidationMatches) 1}}s{{end}}
+                    </button>
+                    <button type="submit" class="btn btn-secondary">
+                        Add as separate cycle
+                    </button>
+                {{else}}
+                    <button type="submit" class="btn btn-primary">
+                        Confirm — add to calendar
+                    </button>
+                {{end}}
             </div>
         </form>
     </div>
@@ -154,7 +185,16 @@
 */}}
 {{define "plan_success.html"}}
 <div class="plan-success">
-    <p>{{.TaskCount}} tasks added to the calendar ({{.CycleCount}} cycle{{if ne .CycleCount 1}}s{{end}}).</p>
+    {{if .ConsolidatedCount}}
+        <!-- Consolidation path: some cycles were merged into existing ones. -->
+        <p>
+            {{.TaskCount}} tasks saved —
+            {{.ConsolidatedCount}} cycle{{if ne .ConsolidatedCount 1}}s{{end}} merged{{if .CycleCount}},
+            {{.CycleCount}} new cycle{{if ne .CycleCount 1}}s{{end}} added{{end}}.
+        </p>
+    {{else}}
+        <p>{{.TaskCount}} tasks added to the calendar ({{.CycleCount}} cycle{{if ne .CycleCount 1}}s{{end}}).</p>
+    {{end}}
     <p>
         <a href="/list" class="btn btn-secondary">View calendar</a>
         <a href="/snapshot" class="btn btn-secondary">View snapshot</a>

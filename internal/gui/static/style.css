@@ -754,6 +754,34 @@ input:focus, select:focus, textarea:focus {
     color: var(--text-secondary);
 }
 
+/* Consolidation notice — info box shown when an existing cycle of the same
+   crop falls on the same sow date as a newly planned one. Blue to distinguish
+   it from conflict warnings (yellow) and errors (red). */
+.plan-consolidation-notice {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    color: var(--accent);
+}
+
+.plan-consolidation-notice strong {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.plan-consolidation-notice ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0.25rem 0;
+}
+
+.plan-consolidation-notice li {
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+}
+
 /* Note about total cycles from weekly repeats */
 .plan-repeat-note {
     color: var(--text-secondary);
@@ -2860,6 +2888,11 @@ body.flashy .plan-preview {
 body.flashy .plan-conflicts {
     border-radius: var(--radius-lg);
     box-shadow: 0 0 10px rgba(243,156,18,0.1);
+}
+
+body.flashy .plan-consolidation-notice {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 10px rgba(var(--accent-rgb, 38,166,154), 0.1);
 }
 
 body.flashy .plan-success {
