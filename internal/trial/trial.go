@@ -27,12 +27,14 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/littleguygreens/greenies/internal/crop"
 	"github.com/littleguygreens/greenies/internal/task"
 )
 
@@ -412,7 +414,7 @@ func countStages(days []TrialDayParams) (darkDays, lightDays int) {
 // misleading zeroes in the spreadsheet.
 type trialFields struct {
 	Soak, SoakHours, Seed, Medium, Yield string
-	Dark, Light                        string
+	Dark, Light                          string
 }
 
 func formatTrialFields(tr TrialRecord) trialFields {
@@ -508,54 +510,98 @@ func writeTrialsCSV(records []TrialRecord) error {
 // Promotion helper
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ToCrop converts a trial record into a crop.Crop value — the same shape
+// that crops.csv rows are read into. This is the bridge between the trial
+// system and the main crop library: promoting a trial means turning its
+// confirmed day-by-day parameters into an official Crop.
+//
+// A few fields need translating because trials record things slightly
+// differently from the crop library:
+//
+//   - SoakHours and SeedGrams are decimals in a trial (the grower might have
+//     tried 4.5 hours) but whole numbers in crops.csv, so they are rounded
+//     to the nearest whole number here.
+//   - ActualYieldGrams is the TOTAL weight the trial harvested, but the crop
+//     library stores yield PER TRAY — so we divide by the tray count.
+//   - MediumLitres defaults to 1 when the trial never recorded it, matching
+//     the crop library's own default for a blank cell.
+//   - Costing fields (seed cost, sell price) are not tracked during a trial,
+//     so they start at zero — "not configured yet". The grower fills them in
+//     later on the crop edit page.
+func (tr TrialRecord) ToCrop() crop.Crop {
+	darkDays, lightDays := countStages(tr.ConfirmedDays)
+
+	// Convert each confirmed trial day into a crop library day row.
+	days := make([]crop.CropDay, 0, len(tr.ConfirmedDays))
+	for _, d := range tr.ConfirmedDays {
+		days = append(days, crop.CropDay{
+			Day:   d.Day,
+			Stage: d.Stage,
+			Tasks: d.Tasks,
+		})
+	}
+
+	// Yield per tray = total harvested weight ÷ number of trays.
+	// math.Round gives the nearest whole gram rather than always rounding down.
+	yieldPerTray := 0
+	if tr.Trays > 0 && tr.ActualYieldGrams > 0 {
+		yieldPerTray = int(math.Round(float64(tr.ActualYieldGrams) / float64(tr.Trays)))
+	}
+
+	// The crop library treats a blank medium amount as 1 litre per tray.
+	// A trial that never recorded it (zero) should get the same default.
+	mediumLitres := tr.MediumLitres
+	if mediumLitres <= 0 {
+		mediumLitres = 1
+	}
+
+	return crop.Crop{
+		Name:          tr.CropName,
+		OvernightSoak: tr.OvernightSoak,
+		SoakHours:     int(math.Round(tr.SoakHours)),
+		SeedGrams:     int(math.Round(tr.SeedGrams)),
+		MediumLitres:  mediumLitres,
+		DarkDays:      darkDays,
+		LightDays:     lightDays,
+		YieldGrams:    yieldPerTray,
+		Days:          days,
+	}
+}
+
 // AppendToCropsCSV appends the confirmed parameters from a promoted trial to
 // the user's crops.csv file. This is what "promoting" a trial means: the
 // rows confirmed day by day through the manage flow become official crop
 // parameters that any future "greenies plan" can use.
 //
 // The function takes the path to crops.csv so it can be tested without
-// touching the real file. In practice, main.go passes the user's real path.
+// touching the real file. In practice, the CLI and GUI pass the user's real path.
 //
-// The appended rows use the same sparse format as the rest of crops.csv:
-// crop-level fields (soak, seed weight, etc.) only appear on the first row.
+// How it works: load every crop already in the file, add the promoted trial
+// to the end of that list, and write the whole file back out with the
+// standard crop.WriteCrops writer. Because that writer places every value
+// under its named column header, the promoted rows can never drift out of
+// line with the file's column layout — which is exactly the bug this used
+// to have when it wrote cells by position instead of by name.
+//
+// If the same crop name already exists, the promoted trial is added as a
+// second entry alongside it — intentional, and the promote flows warn the
+// grower first. One entry might be the old seed lot, the other the new one.
 func AppendToCropsCSV(cropsPath string, tr TrialRecord) error {
-	// Open crops.csv for appending. If the file doesn't exist yet, create it.
-	f, err := os.OpenFile(cropsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("could not open crops.csv for writing: %w", err)
-	}
-	defer f.Close()
-
-	w := csv.NewWriter(f)
-
-	tf := formatTrialFields(tr)
-
-	for i, d := range tr.ConfirmedDays {
-		var row []string
-		if i == 0 {
-			// First row: all crop-level fields matching crops.csv column order.
-			row = []string{
-				tr.CropName,
-				strconv.Itoa(d.Day), d.Stage, d.Tasks,
-				tf.Soak, tf.SoakHours, tf.Seed, tf.Medium,
-				tf.Dark, tf.Light, tf.Yield,
-			}
-		} else {
-			// Subsequent rows: sparse — only the per-day columns are filled.
-			row = []string{
-				tr.CropName,
-				strconv.Itoa(d.Day), d.Stage, d.Tasks,
-				"", "", "", "",
-				"", "", "",
-			}
+	// Load whatever is already in crops.csv so we can add to it rather than
+	// replace it. A missing file just means an empty library (first run).
+	var existing []crop.Crop
+	if _, statErr := os.Stat(cropsPath); statErr == nil {
+		loaded, loadErr := (crop.CSVSource{Path: cropsPath}).LoadCrops()
+		if loadErr != nil {
+			// The file exists but can't be read. Stop here rather than write
+			// over it — overwriting would destroy whatever the grower has.
+			return fmt.Errorf("could not read the existing crop library: %w", loadErr)
 		}
-		if err := w.Write(row); err != nil {
-			return err
-		}
+		existing = loaded
 	}
 
-	w.Flush()
-	return w.Error()
+	existing = append(existing, tr.ToCrop())
+	return crop.WriteCrops(cropsPath, existing)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
