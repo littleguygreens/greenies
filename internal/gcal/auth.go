@@ -30,10 +30,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync" // protects the pending sign-in state shared between two requests
 	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+
+	"github.com/littleguygreens/greenies/internal/task" // for GenerateID — random sign-in state
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -285,6 +288,34 @@ func AuthorizeClient(ctx context.Context) (*http.Client, error) {
 //
 // This works everywhere: Android WebView, desktop browser, Chromium --app.
 
+// ── The "state" check ────────────────────────────────────────────────────────
+//
+// OAuth2 includes a defence called "state": when we send the user to Google's
+// sign-in page, we attach a random one-time string, and Google echoes it back
+// in the callback. If the callback's state doesn't match the one WE generated,
+// the callback didn't come from a sign-in this app started — so we reject it.
+//
+// Why it matters: without this check, an attacker could start a sign-in with
+// THEIR Google account, keep the one-time code Google gave them, and trick the
+// grower's browser into delivering that code to our callback. Greenies would
+// then save a token for the attacker's account — and every future sync would
+// quietly copy the farm's schedule into a calendar the attacker can read.
+// A random, verified state makes that impossible: the attacker can't know the
+// string this app just generated.
+
+// pendingAuthState remembers the state for the GUI sign-in currently in
+// progress. It has to live here (not in a local variable) because the GUI
+// flow spans two separate browser requests — /auth/start generates the state,
+// and /auth/callback (seconds or minutes later) has to verify it.
+//
+// Only one sign-in can be pending at a time; starting a new one replaces the
+// old state. That is exactly right for a single-grower app.
+var pendingAuthState string
+
+// pendingAuthStateMu protects pendingAuthState, because the two requests
+// above are handled concurrently by the web server.
+var pendingAuthStateMu sync.Mutex
+
 // BuildAuthURL creates a Google sign-in URL that redirects back to the
 // given callback URL after the user approves. The callback URL should be
 // a route on the main Greenies server (e.g. http://127.0.0.1:8080/auth/callback).
@@ -298,9 +329,20 @@ func BuildAuthURL(callbackURL string) (string, error) {
 
 	config.RedirectURL = callbackURL
 
+	// Generate the random one-time state and remember it so the callback
+	// can be verified. task.GenerateID gives us 16 random hex characters
+	// from the operating system's secure random source — unguessable.
+	state, err := task.GenerateID()
+	if err != nil {
+		return "", fmt.Errorf("could not generate sign-in state: %w", err)
+	}
+	pendingAuthStateMu.Lock()
+	pendingAuthState = state
+	pendingAuthStateMu.Unlock()
+
 	// AccessTypeOffline means Google gives us a refresh token too, so the
 	// program can silently renew the permission without the browser again.
-	authURL := config.AuthCodeURL("state", oauth2.AccessTypeOffline)
+	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	return authURL, nil
 }
 
@@ -308,9 +350,24 @@ func BuildAuthURL(callbackURL string) (string, error) {
 // exchanges it for a long-lived token, and saves the token to disk.
 // This is called by the GUI's /auth/callback route handler.
 //
+// state is the value Google echoed back in the redirect. It must match the
+// random state BuildAuthURL generated for this sign-in, or the callback is
+// rejected — see the "state check" explanation above BuildAuthURL.
+//
 // The callbackURL must match exactly what was passed to BuildAuthURL —
 // Google verifies they're the same as a security check.
-func HandleAuthCallback(ctx context.Context, code string, callbackURL string) error {
+func HandleAuthCallback(ctx context.Context, code string, state string, callbackURL string) error {
+	// Verify the state, and clear it either way — each state is single-use,
+	// so even a correct value can never be accepted a second time.
+	pendingAuthStateMu.Lock()
+	expected := pendingAuthState
+	pendingAuthState = ""
+	pendingAuthStateMu.Unlock()
+
+	if expected == "" || state != expected {
+		return fmt.Errorf("sign-in rejected: this callback did not come from a sign-in Greenies started — please try signing in again")
+	}
+
 	config, err := loadConfig()
 	if err != nil {
 		return err
@@ -355,6 +412,15 @@ func runBrowserAuthFlow(ctx context.Context, config *oauth2.Config) (*oauth2.Tok
 	// one-time code here after the user clicks Allow.
 	config.RedirectURL = fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
+	// Generate a random one-time "state" string. Google echoes it back in
+	// the redirect, and the callback handler below checks it matches — proof
+	// the redirect belongs to THIS sign-in and not one an attacker started.
+	// (See the longer explanation above BuildAuthURL.)
+	expectedState, err := task.GenerateID()
+	if err != nil {
+		return nil, fmt.Errorf("could not generate sign-in state: %w", err)
+	}
+
 	// Channels are Go's way of sending values between concurrent tasks.
 	// codeCh receives the authorisation code when the redirect arrives.
 	// errCh receives any error from the redirect handler.
@@ -367,6 +433,13 @@ func runBrowserAuthFlow(ctx context.Context, config *oauth2.Config) (*oauth2.Tok
 	server := &http.Server{Handler: mux}
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		// Reject any redirect that doesn't carry the state we generated —
+		// it didn't come from the sign-in this program just started.
+		if r.URL.Query().Get("state") != expectedState {
+			errCh <- fmt.Errorf("sign-in rejected: the browser reply did not match this sign-in attempt — please run the command again")
+			fmt.Fprintf(w, "This reply didn't match the sign-in in progress. Please close this tab and try again.")
+			return
+		}
 		code := r.URL.Query().Get("code")
 		if code == "" {
 			errCh <- fmt.Errorf("no authorisation code received from Google")
@@ -385,7 +458,7 @@ func runBrowserAuthFlow(ctx context.Context, config *oauth2.Config) (*oauth2.Tok
 	// Build the URL the user needs to visit to grant permission.
 	// AccessTypeOffline means Google gives us a refresh token too, so the
 	// program can silently renew the permission without the browser again.
-	authURL := config.AuthCodeURL("state", oauth2.AccessTypeOffline)
+	authURL := config.AuthCodeURL(expectedState, oauth2.AccessTypeOffline)
 
 	fmt.Println("\nOpening your browser to authorise Greenies with Google Calendar...")
 	fmt.Println("If the browser doesn't open automatically, visit this URL:")

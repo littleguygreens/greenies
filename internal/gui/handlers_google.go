@@ -607,8 +607,14 @@ func handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// The callback URL must match exactly what BuildAuthURL used.
 	callbackURL := "http://" + r.Host + "/auth/callback"
 
+	// The state parameter is Google echoing back the random string we
+	// attached when the sign-in started. HandleAuthCallback verifies it
+	// matches — a mismatched or missing state means this callback did not
+	// come from a sign-in Greenies started, and is rejected.
+	state := r.URL.Query().Get("state")
+
 	ctx := context.Background()
-	if err := gcal.HandleAuthCallback(ctx, code, callbackURL); err != nil {
+	if err := gcal.HandleAuthCallback(ctx, code, state, callbackURL); err != nil {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<h2>Sign-in failed</h2><p>%v</p><p><a href="/sync">Back to sync</a></p>`, err)
 		return
