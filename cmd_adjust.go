@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"    // for reading a full line of user input, including spaces
-	"context"  // for context.Background(), used when pushing to Google Sheets
+	"bufio"   // for reading a full line of user input, including spaces
+	"context" // for context.Background(), used when pushing to Google Sheets
 	"fmt"
 	"os"      // for os.Exit and os.Stdin
 	"strconv" // for converting text like "2" into the number 2
@@ -37,11 +37,11 @@ type scheduleView struct {
 // The grower picks one "anchor" point up front — either the sow date or
 // the harvest date — and that anchor stays fixed for the whole session.
 //
-//   Anchor sow     — "I already sowed; I'm working forward."
-//                    Adding days to a stage pushes everything after it later.
+//	Anchor sow     — "I already sowed; I'm working forward."
+//	                 Adding days to a stage pushes everything after it later.
 //
-//   Anchor harvest — "I need to hit this harvest date, no matter what."
-//                    Adding days to a stage pulls the schedule earlier.
+//	Anchor harvest — "I need to hit this harvest date, no matter what."
+//	                 Adding days to a stage pulls the schedule earlier.
 //
 // Within one session the grower can make as many fine adjustments as they
 // need. Each one shows a side-by-side before/after preview and asks for
@@ -315,18 +315,20 @@ func runAdjust() {
 // Blackout adjustment changes how many days the crop spends in the dark stage.
 //
 // Anchor sow (sow is fixed):
-//   Adding N days pushes both move-to-light and harvest N days later.
-//   Removing N days pulls both N days earlier.
-//   Future tasks are deleted and regenerated with a shifted "phantom sow" date —
-//   this makes every remaining task's calendar date shift by exactly N days.
-//   All regenerated tasks are tagged "adjusted - be mindful".
+//
+//	Adding N days pushes both move-to-light and harvest N days later.
+//	Removing N days pulls both N days earlier.
+//	Future tasks are deleted and regenerated with a shifted "phantom sow" date —
+//	this makes every remaining task's calendar date shift by exactly N days.
+//	All regenerated tasks are tagged "adjusted - be mindful".
 //
 // Anchor harvest (harvest is fixed):
-//   Adding N days shifts the sow date N days earlier.
-//   Removing N days shifts the sow date N days later.
-//   Move-to-light and harvest do not change, so no calendar tasks move.
-//   This is "metadata only" — the snapshot will show a different Day N number
-//   because Day N is calculated from the sow date, but the calendar is untouched.
+//
+//	Adding N days shifts the sow date N days earlier.
+//	Removing N days shifts the sow date N days later.
+//	Move-to-light and harvest do not change, so no calendar tasks move.
+//	This is "metadata only" — the snapshot will show a different Day N number
+//	because Day N is calculated from the sow date, but the calendar is untouched.
 func doAdjustBlackout(reader *bufio.Reader, c farm.Cycle, sow, mtl, harv time.Time,
 	anchorSow bool, today time.Time, tasks []task.Task, cycles []farm.Cycle, envs []farm.Environment) {
 
@@ -470,23 +472,25 @@ func doAdjustBlackout(reader *bufio.Reader, c farm.Cycle, sow, mtl, harv time.Ti
 // Light adjustment changes how many days the crop spends on the lit rack.
 //
 // Anchor sow (sow is fixed):
-//   Adding N days pushes only the harvest date N days later.
-//   Removing N days pulls harvest N days earlier.
-//   Existing light-stage tasks are date-shifted in place.
-//   Only tasks whose date actually changes are tagged "adjusted - be mindful".
+//
+//	Adding N days pushes only the harvest date N days later.
+//	Removing N days pulls harvest N days earlier.
+//	Existing light-stage tasks are date-shifted in place.
+//	Only tasks whose date actually changes are tagged "adjusted - be mindful".
 //
 // Anchor harvest (harvest is fixed):
-//   Adding N days moves the move-to-light date N days earlier (the crop gets
-//   more time on the lit rack, but harvest stays fixed).
-//   Removing N days moves move-to-light N days later.
-//   Sow shifts by the same amount to preserve the blackout length.
 //
-//   If the crop is still in blackout (MTL is in the future): tasks are
-//   regenerated with a shifted phantom sow so their dates adjust correctly.
+//	Adding N days moves the move-to-light date N days earlier (the crop gets
+//	more time on the lit rack, but harvest stays fixed).
+//	Removing N days moves move-to-light N days later.
+//	Sow shifts by the same amount to preserve the blackout length.
 //
-//   If the crop is already on the lit rack (MTL is in the past): this is
-//   "metadata only" — records the corrected move-to-light date without
-//   changing any task dates.
+//	If the crop is still in blackout (MTL is in the future): tasks are
+//	regenerated with a shifted phantom sow so their dates adjust correctly.
+//
+//	If the crop is already on the lit rack (MTL is in the past): this is
+//	"metadata only" — records the corrected move-to-light date without
+//	changing any task dates.
 func doAdjustLight(reader *bufio.Reader, c farm.Cycle, sow, mtl, harv time.Time,
 	anchorSow bool, today time.Time, tasks []task.Task, cycles []farm.Cycle, envs []farm.Environment) {
 
@@ -812,11 +816,11 @@ func buildCycleView(sow, mtl, harvest time.Time) []scheduleView {
 //
 // Example output:
 //
-//	                   Before                   After
-//	                   ──────────────────────   ──────────────────────
-//	  Sun Mar 08       ───────────────────      Day 1 (sow)
-//	  Mon Mar 09       Day 1 (sow)              Day 2 (dark)
-//	  Tue Mar 11       Day 3 (dark)             Day 4 (dark)  ◄ today
+//	                 Before                   After
+//	                 ──────────────────────   ──────────────────────
+//	Sun Mar 08       ───────────────────      Day 1 (sow)
+//	Mon Mar 09       Day 1 (sow)              Day 2 (dark)
+//	Tue Mar 11       Day 3 (dark)             Day 4 (dark)  ◄ today
 func printAdjustPreview(before, after []scheduleView, today time.Time) {
 	// Build lookup maps from date string → label for fast access.
 	beforeMap := make(map[string]string)

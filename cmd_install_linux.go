@@ -78,10 +78,10 @@ func findBinaryPath() (string, error) {
 
 		// No compiled binary found — tell the grower how to fix it.
 		return "", fmt.Errorf(
-			"install-desktop was run via 'go run', which uses a temporary\n"+
-				"build cache path that is wiped between builds.\n\n"+
-				"Please build the binary first, then install:\n"+
-				"  go build -o greenies-linux-arm64 .\n"+
+			"install-desktop was run via 'go run', which uses a temporary\n" +
+				"build cache path that is wiped between builds.\n\n" +
+				"Please build the binary first, then install:\n" +
+				"  go build -o greenies-linux-arm64 .\n" +
 				"  ./greenies-linux-arm64 install-desktop",
 		)
 	}
@@ -98,9 +98,10 @@ func findBinaryPath() (string, error) {
 // the symlink still points to the right place without any re-installation.
 //
 // Files created:
-//   ~/.local/bin/greenies              — symlink → the compiled binary
-//   ~/Desktop/greenies.desktop         — double-clickable icon
-//   ~/.local/share/applications/...    — app menu entry
+//
+//	~/.local/bin/greenies              — symlink → the compiled binary
+//	~/Desktop/greenies.desktop         — double-clickable icon
+//	~/.local/share/applications/...    — app menu entry
 func runInstallDesktop() {
 	exePath, err := findBinaryPath()
 	if err != nil {

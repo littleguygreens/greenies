@@ -336,25 +336,25 @@ func generateDemoSchedule() ([]farm.Cycle, []task.Task, error) {
 	//   Week 3: sunnies +14, pea +16
 	//   Week 4: broccoli +21, daikon +23
 	type demoEntry struct {
-		cropName   string
-		dayOffset  int
+		cropName  string
+		dayOffset int
 	}
 	entries := []demoEntry{
-		{"sunnies",  0},
-		{"pea",      2},
+		{"sunnies", 0},
+		{"pea", 2},
 		{"broccoli", 7},
-		{"daikon",   9},
-		{"sunnies",  14},
-		{"pea",      16},
+		{"daikon", 9},
+		{"sunnies", 14},
+		{"pea", 16},
 		{"broccoli", 21},
-		{"daikon",   23},
+		{"daikon", 23},
 	}
 
 	today := time.Now()
 	const trays = 2
 
 	var allCycles []farm.Cycle
-	var allTasks  []task.Task
+	var allTasks []task.Task
 
 	for _, entry := range entries {
 		c := find(entry.cropName)
@@ -484,7 +484,9 @@ func handleSheetsDemoSetup(w http.ResponseWriter, r *http.Request) {
 // creating a duplicate. They paste the Sheet URL and we extract the ID.
 //
 // A Google Sheets URL looks like:
-//   https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
+//
+//	https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit
+//
 // We extract the SHEET_ID_HERE part.
 func handleSheetsLink(w http.ResponseWriter, r *http.Request) {
 	sheetURL := strings.TrimSpace(r.FormValue("sheet_url"))

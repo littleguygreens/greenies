@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"   // for reading a full line of user input from the terminal
+	"bufio" // for reading a full line of user input from the terminal
 	"fmt"
 	"math"    // for math.Ceil, which rounds a decimal up to the next whole number
 	"os"      // for os.Exit
@@ -548,13 +548,13 @@ func runBatchPlan(
 	// batchEntry holds everything we need for one crop cycle within the batch.
 	// We collect these in a slice and only save them all at the very end.
 	type batchEntry struct {
-		found     *crop.Crop        // the crop variety
-		trays     int               // how many trays
-		litEnv    string            // which lit environment
-		tasks     []task.Task       // the generated calendar tasks
-		sowDate   time.Time         // Day 1 date (for weekly repeat arithmetic)
-		harvest   time.Time         // harvest date (same for all, kept for arithmetic)
-		moveLight time.Time         // first day on a lit rack
+		found     *crop.Crop  // the crop variety
+		trays     int         // how many trays
+		litEnv    string      // which lit environment
+		tasks     []task.Task // the generated calendar tasks
+		sowDate   time.Time   // Day 1 date (for weekly repeat arithmetic)
+		harvest   time.Time   // harvest date (same for all, kept for arithmetic)
+		moveLight time.Time   // first day on a lit rack
 	}
 
 	var entries []batchEntry

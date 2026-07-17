@@ -26,7 +26,7 @@ import (
 // pre-computed once and then used by both the full-month calendar and the
 // snapshot-week mini calendar so the stage-assignment logic lives in one place.
 type swimCycleInfo struct {
-	CycleID     string            // unique cycle identifier — threaded to the template for linking
+	CycleID     string // unique cycle identifier — threaded to the template for linking
 	CropName    string
 	Trays       int
 	SowDate     string            // YYYY-MM-DD — used by label builder for date display
@@ -139,9 +139,10 @@ func buildCycleStages(cycles []farm.Cycle, cropMap map[string]crop.Crop) []swimC
 // once per row and centered across all active cells.
 //
 // Three tiers:
-//   span >= 3 : "sunnies 12x (mar 20 - mar 28)"
-//   span == 2 : "sunnies 12x"
-//   span == 1 : "sunnies"
+//
+//	span >= 3 : "sunnies 12x (mar 20 - mar 28)"
+//	span == 2 : "sunnies 12x"
+//	span == 1 : "sunnies"
 func swimLabel(cropName string, trays int, sowDateStr, harvestDateStr string, span int) string {
 	if span == 1 {
 		return cropName

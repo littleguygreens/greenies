@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"   // for reading a full line of user input from the terminal
+	"bufio" // for reading a full line of user input from the terminal
 	"fmt"
 	"os"      // for os.Exit and reading command-line arguments
 	"strings" // for string utilities used throughout

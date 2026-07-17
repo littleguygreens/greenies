@@ -196,7 +196,6 @@ func Save(supplies []Supply) error {
 	return w.Error()
 }
 
-
 // ─── Lookup helpers ─────────────────────────────────────────────────────────
 
 // FindByCategory returns the first supply item with the given category

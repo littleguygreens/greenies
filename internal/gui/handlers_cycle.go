@@ -36,14 +36,14 @@ type cycleInfoTask struct {
 // cycleInfoDay groups all tasks for one day of the cycle. Each day gets a
 // heading like "Day 3 — Mon Mar 11 (dark)" and a list of tasks underneath.
 type cycleInfoDay struct {
-	DayNum   int              // the day number in the cycle (1, 2, 3, …)
-	Date     string           // formatted date like "Mon Mar 11"
-	DateRaw  string           // YYYY-MM-DD for sorting
-	Stage    string           // "sow", "dark", "light", or "harvest"
-	Tasks    []cycleInfoTask  // the tasks on this day
-	HasTasks bool             // true if there are tasks (some days are empty)
-	IsToday  bool             // true if this day is today
-	IsPast   bool             // true if this day is in the past
+	DayNum   int             // the day number in the cycle (1, 2, 3, …)
+	Date     string          // formatted date like "Mon Mar 11"
+	DateRaw  string          // YYYY-MM-DD for sorting
+	Stage    string          // "sow", "dark", "light", or "harvest"
+	Tasks    []cycleInfoTask // the tasks on this day
+	HasTasks bool            // true if there are tasks (some days are empty)
+	IsToday  bool            // true if this day is today
+	IsPast   bool            // true if this day is in the past
 }
 
 // handleCycleInfoPage renders GET /cycle?id=XXX — the cycle information page.
@@ -235,16 +235,16 @@ func handleCycleInfoPage(w http.ResponseWriter, r *http.Request) {
 		"HasDays": len(days) > 0,
 
 		// Financials (batch-level)
-		"HasFinancials":     hasFinancials,
-		"BatchSeedCost":     batchSeedCost,
-		"BatchMediumCost":   batchMediumCost,
+		"HasFinancials":      hasFinancials,
+		"BatchSeedCost":      batchSeedCost,
+		"BatchMediumCost":    batchMediumCost,
 		"BatchPackagingCost": batchPackagingCost,
-		"SellableUnits":     sellableUnits,
-		"BatchCost":         batchCost,
-		"BatchRevenue":      batchRevenue,
-		"BatchProfit":       batchProfit,
-		"ProfitPerTray":     profitPerTray,
-		"ProfitMargin":      profitMargin,
+		"SellableUnits":      sellableUnits,
+		"BatchCost":          batchCost,
+		"BatchRevenue":       batchRevenue,
+		"BatchProfit":        batchProfit,
+		"ProfitPerTray":      profitPerTray,
+		"ProfitMargin":       profitMargin,
 	})
 }
 

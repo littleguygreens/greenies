@@ -14,11 +14,11 @@ package updater
 import (
 	"encoding/json" // for reading the GitHub API's JSON response
 	"fmt"
-	"io"      // for copying the downloaded bytes to a file
-	"net/http" // for making HTTPS requests to the GitHub API and CDN
-	"os"      // for file operations (create temp file, rename, chmod)
+	"io"            // for copying the downloaded bytes to a file
+	"net/http"      // for making HTTPS requests to the GitHub API and CDN
+	"os"            // for file operations (create temp file, rename, chmod)
 	"path/filepath" // for building the temp file path next to the binary
-	"runtime" // for detecting the operating system and CPU architecture
+	"runtime"       // for detecting the operating system and CPU architecture
 )
 
 // Release holds the information we care about from a GitHub release.

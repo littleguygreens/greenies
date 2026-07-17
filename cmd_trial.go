@@ -322,7 +322,7 @@ func startNewTrial(ask func(string) string, trials []trial.TrialRecord) {
 		OvernightSoak:  overnightSoak,
 		SoakHours:      soakHours,
 		SeedGrams:      seedGrams,
-		MediumLitres:     mediumLitres,
+		MediumLitres:   mediumLitres,
 		MoveToLightDay: moveToLightDay,
 		HarvestDay:     harvestDay,
 	}
@@ -897,8 +897,8 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 	}
 	// Load unit labels for display.
 	vcfg, _ := config.Load()
-	vwl := vcfg.WeightLabel()  // "g" or "oz"
-	vvl := vcfg.VolumeLabel()  // "L" or "gal"
+	vwl := vcfg.WeightLabel() // "g" or "oz"
+	vvl := vcfg.VolumeLabel() // "L" or "gal"
 
 	fmtYieldGrams := func(n int) string {
 		if n == 0 {
@@ -1137,4 +1137,3 @@ func printTrialDetail(trials ...trial.TrialRecord) {
 
 	fmt.Println()
 }
-

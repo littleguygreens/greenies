@@ -18,7 +18,7 @@ package store
 import (
 	"encoding/json" // Go's built-in package for reading and writing JSON data
 	"fmt"
-	"os"   // Go's built-in package for working with files and folders
+	"os"            // Go's built-in package for working with files and folders
 	"path/filepath" // helps build file paths correctly across different operating systems
 
 	"github.com/littleguygreens/greenies/internal/task"

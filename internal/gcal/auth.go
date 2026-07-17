@@ -5,14 +5,14 @@
 // storing that permission so it doesn't need to be asked again.
 //
 // How the permission flow works (plain English):
-//   1. The first time "greenies plan" runs after Google Calendar is set up,
-//      the program opens a browser window and shows a Google sign-in page.
-//   2. The user signs in and clicks "Allow".
-//   3. Google sends a one-time code back to the program.
-//   4. The program exchanges that code for a "token" — a permission slip that
-//      lasts a long time (and can be silently refreshed when it expires).
-//   5. The token is saved to ~/.greenies/token.json.
-//   6. On every future run, the program just loads that file — no browser needed.
+//  1. The first time "greenies plan" runs after Google Calendar is set up,
+//     the program opens a browser window and shows a Google sign-in page.
+//  2. The user signs in and clicks "Allow".
+//  3. Google sends a one-time code back to the program.
+//  4. The program exchanges that code for a "token" — a permission slip that
+//     lasts a long time (and can be silently refreshed when it expires).
+//  5. The token is saved to ~/.greenies/token.json.
+//  6. On every future run, the program just loads that file — no browser needed.
 //
 // This standard approach is called OAuth2 (Open Authorisation, version 2).
 // We use golang.org/x/oauth2, the Go team's own library for it, because

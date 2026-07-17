@@ -297,7 +297,7 @@ func runCrops() {
 		OvernightSoak:      overnightSoak,
 		SoakHours:          soakHours,
 		SeedGrams:          seedGrams,
-		MediumLitres:         mediumLitres,
+		MediumLitres:       mediumLitres,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         yieldGrams,
@@ -400,8 +400,8 @@ func editCropCLI(
 
 	// Load unit labels for display.
 	ecfg, _ := config.Load()
-	ewl := ecfg.WeightLabel()  // "g" or "oz"
-	evl := ecfg.VolumeLabel()  // "L" or "gal"
+	ewl := ecfg.WeightLabel() // "g" or "oz"
+	evl := ecfg.VolumeLabel() // "L" or "gal"
 
 	picked.SeedGrams = askInt(fmt.Sprintf("Seed %s per tray [%d]: ", ewl, picked.SeedGrams), picked.SeedGrams)
 	picked.MediumLitres = askFloat(fmt.Sprintf("Medium %s per tray [%.1f]: ", evl, picked.MediumLitres), picked.MediumLitres)
@@ -560,7 +560,7 @@ func editCropCLI(
 		OvernightSoak:      picked.OvernightSoak,
 		SoakHours:          picked.SoakHours,
 		SeedGrams:          picked.SeedGrams,
-		MediumLitres:         picked.MediumLitres,
+		MediumLitres:       picked.MediumLitres,
 		DarkDays:           darkDays,
 		LightDays:          lightDays,
 		YieldGrams:         picked.YieldGrams,

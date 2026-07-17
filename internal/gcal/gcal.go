@@ -3,34 +3,36 @@
 //
 // There are two ways to send data to Google:
 //
-//   Export (the interface method) — pushes each task as an individual all-day
-//   event to the user's primary Google Calendar. Available for quick use but
-//   not the primary sync path.
+//	Export (the interface method) — pushes each task as an individual all-day
+//	event to the user's primary Google Calendar. Available for quick use but
+//	not the primary sync path.
 //
-//   Sync (the "greenies sync" command) — sends the schedule to Google in two ways:
-//     1. Google Tasks: one checkable to-do entry per day, listing that day's work.
-//     2. Google Calendar: one all-day event per day, written to a dedicated
-//        calendar called "Farm". The description contains the full farm snapshot
-//        so the grower can see the live farm state when they tap on any day in
-//        their phone calendar.
+//	Sync (the "greenies sync" command) — sends the schedule to Google in two ways:
+//	  1. Google Tasks: one checkable to-do entry per day, listing that day's work.
+//	  2. Google Calendar: one all-day event per day, written to a dedicated
+//	     calendar called "Farm". The description contains the full farm snapshot
+//	     so the grower can see the live farm state when they tap on any day in
+//	     their phone calendar.
 //
 // Why a dedicated "Farm" calendar?
-//   Writing to a separate calendar (rather than the grower's main calendar)
-//   keeps farm events visually grouped and makes cleanup simple — when syncing,
-//   we delete everything from the Farm calendar going forward, with no need to
-//   tag events or filter by any special property.
+//
+//	Writing to a separate calendar (rather than the grower's main calendar)
+//	keeps farm events visually grouped and makes cleanup simple — when syncing,
+//	we delete everything from the Farm calendar going forward, with no need to
+//	tag events or filter by any special property.
 //
 // How sync works:
-//   When "greenies sync" runs, it:
-//     1. Finds or creates the "Greenies" task list, then deletes all future
-//        uncompleted tasks from it (clean slate — no stale entries)
-//     2. Creates fresh daily task entries for every upcoming day with work
-//     3. Finds or creates the "Farm" calendar, then deletes all events from it
-//        from today forward (clean slate)
-//     4. Creates one all-day calendar event per upcoming day with tasks
-//   Running Sync multiple times is safe — it always produces the same result.
-//   This is called "idempotent" (eye-dem-PO-tent), meaning you can repeat it
-//   without side effects like duplicate entries.
+//
+//	When "greenies sync" runs, it:
+//	  1. Finds or creates the "Greenies" task list, then deletes all future
+//	     uncompleted tasks from it (clean slate — no stale entries)
+//	  2. Creates fresh daily task entries for every upcoming day with work
+//	  3. Finds or creates the "Farm" calendar, then deletes all events from it
+//	     from today forward (clean slate)
+//	  4. Creates one all-day calendar event per upcoming day with tasks
+//	Running Sync multiple times is safe — it always produces the same result.
+//	This is called "idempotent" (eye-dem-PO-tent), meaning you can repeat it
+//	without side effects like duplicate entries.
 package gcal
 
 import (

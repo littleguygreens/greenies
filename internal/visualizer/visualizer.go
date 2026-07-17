@@ -180,9 +180,9 @@ type InventoryItem struct {
 // today's date. Only three of them are ever shown in the snapshot —
 // "completed" and "tooFar" are silently excluded.
 const (
-	statusBlackout  = "blackout"  // trays are in the blackout room right now
-	statusLit       = "lit"       // trays are on a lit rack; harvest-day cycles also get this status
-	                               // but are shown in "Due for harvest today", not the lit section
+	statusBlackout = "blackout" // trays are in the blackout room right now
+	statusLit      = "lit"      // trays are on a lit rack; harvest-day cycles also get this status
+	// but are shown in "Due for harvest today", not the lit section
 	statusUpcoming  = "upcoming"  // sow date is within the next 7 days
 	statusCompleted = "completed" // harvest date has already passed
 	statusTooFar    = "too_far"   // sow date is more than 7 days away — not yet relevant
@@ -225,7 +225,6 @@ func cycleStatus(today, sow, moveToLight, harvest time.Time) string {
 // ─────────────────────────────────────────────────────────────────────────────
 // Display helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
 
 // printCycleRow writes a single active cycle as a vertical block to w:
 //

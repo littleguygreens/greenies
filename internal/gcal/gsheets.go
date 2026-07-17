@@ -3,22 +3,22 @@
 // It lets the program create, read, and write a Google Spreadsheet that
 // mirrors the farm's local data files:
 //
-//   "Crops" — one row per crop variety with its parameters (seed weight,
-//   soak hours, dark days, light days, etc.). Two-way sync: edits in the
-//   Sheet are pulled down; local changes are pushed up.
+//	"Crops" — one row per crop variety with its parameters (seed weight,
+//	soak hours, dark days, light days, etc.). Two-way sync: edits in the
+//	Sheet are pulled down; local changes are pushed up.
 //
-//   "Cycle" — the day-by-day schedule for every crop. Two-way with Crops.
+//	"Cycle" — the day-by-day schedule for every crop. Two-way with Crops.
 //
-//   "Farm" — the physical farm layout (environments, slot capacities, and
-//   inventory counts). Two-way sync, same as Crops.
+//	"Farm" — the physical farm layout (environments, slot capacities, and
+//	inventory counts). Two-way sync, same as Crops.
 //
-//   "Trials" — trial run data (push-only).
+//	"Trials" — trial run data (push-only).
 //
-//   "Schedule Tasks" — every calendar task from tasks.json (push-only).
+//	"Schedule Tasks" — every calendar task from tasks.json (push-only).
 //
-//   "Schedule Cycles" — every planned crop cycle from cycles.json (push-only).
+//	"Schedule Cycles" — every planned crop cycle from cycles.json (push-only).
 //
-//   "Harvests" — the harvest log from harvests.json (push-only).
+//	"Harvests" — the harvest log from harvests.json (push-only).
 //
 // The Google Sheet is the "source of truth" for crops and farm layout —
 // when you edit them in Google Sheets, running "greenies sync" pulls those
@@ -376,12 +376,12 @@ func CreateSheet(ctx context.Context) (string, error) {
 		// user's saved token was created before the Sheets scope was added.
 		if isInsufficientScopeError(err) {
 			return "", fmt.Errorf(
-				"Google Sheets permission not granted.\n\n" +
-					"Your saved login token was created before Sheets support was added.\n" +
-					"To fix this:\n" +
-					"  1. Delete the file: ~/.greenies/token.json\n" +
-					"  2. Run \"greenies sync\" again\n" +
-					"  3. Approve the new permission in your browser\n\n" +
+				"Google Sheets permission not granted.\n\n"+
+					"Your saved login token was created before Sheets support was added.\n"+
+					"To fix this:\n"+
+					"  1. Delete the file: ~/.greenies/token.json\n"+
+					"  2. Run \"greenies sync\" again\n"+
+					"  3. Approve the new permission in your browser\n\n"+
 					"Original error: %w", err)
 		}
 		return "", fmt.Errorf("could not create Google Sheet: %w", err)
@@ -1381,7 +1381,7 @@ func (sc *SheetsClient) PullTrials() ([]trial.TrialRecord, error) {
 				OvernightSoak: parseBoolCell(row, col["overnight_soak"]),
 				SoakHours:     parseFloatCell(row, col["soak_hours"]),
 				SeedGrams:     parseFloatCell(row, col["seed_grams"]),
-				MediumLitres:    parseFloatCell(row, col["medium_litres"]),
+				MediumLitres:  parseFloatCell(row, col["medium_litres"]),
 			}
 
 			// Default medium to 1 litre if the cell was empty or zero.

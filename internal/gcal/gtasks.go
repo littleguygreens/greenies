@@ -2,16 +2,18 @@
 // that puts daily task instructions into the grower's Google Tasks list.
 //
 // Why Google Tasks alongside Calendar events?
-//   The multi-day stage blocks in Google Calendar give an at-a-glance view of
-//   which crops are in which phase. But they don't show what to actually DO
-//   each day. Google Tasks fills that gap: each day with real work gets a
-//   checkable to-do item (e.g. "Sunnies: top water, rotate stack") that the
-//   grower can tick off as they move through the farm.
+//
+//	The multi-day stage blocks in Google Calendar give an at-a-glance view of
+//	which crops are in which phase. But they don't show what to actually DO
+//	each day. Google Tasks fills that gap: each day with real work gets a
+//	checkable to-do item (e.g. "Sunnies: top water, rotate stack") that the
+//	grower can tick off as they move through the farm.
 //
 // The "Labor" task list:
-//   All task entries are created in a dedicated task list called "Labor".
-//   This keeps farm tasks separate from the grower's personal to-do list.
-//   The list is created automatically on the first sync — no manual setup needed.
+//
+//	All task entries are created in a dedicated task list called "Labor".
+//	This keeps farm tasks separate from the grower's personal to-do list.
+//	The list is created automatically on the first sync — no manual setup needed.
 package gcal
 
 import (

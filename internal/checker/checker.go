@@ -194,8 +194,8 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 
 	for _, date := range dates {
 		// Compute resource usage on this specific date for every cycle.
-		litUsage := map[string]int{}       // env name → trays in use
-		litNames := map[string][]string{}  // env name → contributing cycle labels
+		litUsage := map[string]int{}      // env name → trays in use
+		litNames := map[string][]string{} // env name → contributing cycle labels
 
 		growInUse := 0
 		var growNames []string
@@ -294,4 +294,3 @@ func Check(envs []farm.Environment, cycles []farm.Cycle) []string {
 
 	return warnings
 }
-

@@ -241,7 +241,7 @@ func parseCropParams(row []string, get func([]string, string) string) (Crop, err
 	}
 
 	return Crop{
-		Name:          get(row, "name"),
+		Name: get(row, "name"),
 		// CycleDays is not set here — it is derived from the last day row
 		// after all day entries for this crop have been loaded. See LoadCrops.
 		OvernightSoak: parseBool("overnight_soak"),

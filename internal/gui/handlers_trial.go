@@ -250,7 +250,7 @@ func handleTrialNew(w http.ResponseWriter, r *http.Request) {
 		OvernightSoak:  overnightSoak,
 		SoakHours:      soakHours,
 		SeedGrams:      seedGrams,
-		MediumLitres:     mediumLitres,
+		MediumLitres:   mediumLitres,
 		MoveToLightDay: moveToLightDay,
 		HarvestDay:     harvestDay,
 	}
@@ -813,7 +813,7 @@ type trialViewData struct {
 	Trays         int
 	Soak          string // "overnight", "4 hours", or "—"
 	SeedGrams     string // "50g" or "—"
-	MediumLitres    string // "1.0L" or "—"
+	MediumLitres  string // "1.0L" or "—"
 	MTLDay        string // "Day 5" or "—"
 	HarvestDay    string // "Day 9" or "—"
 	ActualYield   string // "1400g" or "not recorded"
@@ -922,7 +922,7 @@ func buildTrialViewData(tr trial.TrialRecord) trialViewData {
 		Trays:         tr.Trays,
 		Soak:          soak,
 		SeedGrams:     seedGrams,
-		MediumLitres:    mediumLitres,
+		MediumLitres:  mediumLitres,
 		MTLDay:        mtlDay,
 		HarvestDay:    harvestDay,
 		ActualYield:   actualYield,

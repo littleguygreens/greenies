@@ -1,8 +1,8 @@
 // profit.go — derived profitability calculations for a crop variety.
 //
 // None of these numbers are ever stored. They are calculated on the fly from:
-//   1. The crop's own parameters (SeedCost, SeedGrams, etc.)
-//   2. Farm-wide supply costs (medium, containers, labels) passed in by the caller.
+//  1. The crop's own parameters (SeedCost, SeedGrams, etc.)
+//  2. Farm-wide supply costs (medium, containers, labels) passed in by the caller.
 //
 // This keeps the crop package independent of the supply package — the caller
 // loads supplies and passes the relevant costs in via a SupplyCosts struct.

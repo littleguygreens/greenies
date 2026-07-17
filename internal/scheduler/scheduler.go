@@ -70,7 +70,7 @@ func buildTask(cropName string, day crop.CropDay, dateStr string, trays int, cyc
 // It holds the calculated calendar date alongside the crop day information,
 // so the preview can display both "March 7th" and "Day 1 — sow" together.
 type ScheduledDay struct {
-	Date    string      // calendar date in YYYY-MM-DD format
+	Date    string       // calendar date in YYYY-MM-DD format
 	CropDay crop.CropDay // the day entry from the crop library
 }
 
@@ -185,7 +185,6 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 	return preview, tasks, nil
 }
 
-
 // ScheduleFromDay generates calendar tasks for a cycle that is already in
 // progress, starting from a specific day number onwards. Past days are skipped.
 //
@@ -194,19 +193,20 @@ func ScheduleForward(c crop.Crop, sowDate string, trays int) ([]ScheduledDay, []
 // because blackout days were added or removed.
 //
 // Parameters:
-//   c          — the crop template loaded from crops.csv
-//   sowDate    — the Day 1 reference date in YYYY-MM-DD format.
-//                For a blackout-days adjustment, pass the *shifted* sow date
-//                so that every day-to-calendar-date mapping moves together.
-//   fromDayNum — the first day number to include. Days before this are skipped
-//                because they are already in the past.
-//                Compute as: int(today.Sub(originalSow).Hours()/24) + 2
-//                (that gives you "tomorrow's day number" in the original cycle)
-//   trays      — how many trays to use in the task titles and notes
-//   cycleID    — the *existing* CycleID to stamp on every generated task.
-//                Reusing the same ID keeps the tasks linked to the existing
-//                Cycle record in cycles.json — the snapshot, conflict checker,
-//                and delete command all continue to work without special cases.
+//
+//	c          — the crop template loaded from crops.csv
+//	sowDate    — the Day 1 reference date in YYYY-MM-DD format.
+//	             For a blackout-days adjustment, pass the *shifted* sow date
+//	             so that every day-to-calendar-date mapping moves together.
+//	fromDayNum — the first day number to include. Days before this are skipped
+//	             because they are already in the past.
+//	             Compute as: int(today.Sub(originalSow).Hours()/24) + 2
+//	             (that gives you "tomorrow's day number" in the original cycle)
+//	trays      — how many trays to use in the task titles and notes
+//	cycleID    — the *existing* CycleID to stamp on every generated task.
+//	             Reusing the same ID keeps the tasks linked to the existing
+//	             Cycle record in cycles.json — the snapshot, conflict checker,
+//	             and delete command all continue to work without special cases.
 //
 // Returns only a tasks slice (no preview) because the user has already
 // confirmed the change before this function is called.

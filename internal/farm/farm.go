@@ -12,13 +12,13 @@
 package farm
 
 import (
-	"encoding/csv"   // Go's built-in CSV reader and writer
-	"encoding/json"  // Go's built-in JSON reader and writer
+	"encoding/csv"  // Go's built-in CSV reader and writer
+	"encoding/json" // Go's built-in JSON reader and writer
 	"fmt"
-	"os"             // for reading, writing, and checking files
-	"path/filepath"  // for building file paths that work on any operating system
-	"strconv"        // for converting text like "64" into the number 64
-	"strings"        // for string utilities like replacing underscores with spaces
+	"os"            // for reading, writing, and checking files
+	"path/filepath" // for building file paths that work on any operating system
+	"strconv"       // for converting text like "64" into the number 64
+	"strings"       // for string utilities like replacing underscores with spaces
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
