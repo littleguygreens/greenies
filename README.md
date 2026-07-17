@@ -146,15 +146,40 @@ environments — the conflict checker tracks each one independently.
 Greenies can sync your data with a Google Sheet (two-way) and push tasks to
 Google Calendar and Google Tasks.
 
-To set this up:
-
-1. Create a Google Cloud project and enable the Sheets, Calendar, and Tasks APIs.
-2. Download `credentials.json` and place it at `~/.greenies/credentials.json`.
-3. Run `greenies sync` (or use the Sync page in the GUI) — you'll be prompted to
-   authorize in your browser on first use.
+No setup is needed — run `greenies sync` (or use the Sync page in the GUI)
+and you'll be prompted to sign in with Google in your browser on first use.
+Your sign-in token is stored privately at `~/.greenies/token.json`; nothing
+about your Google account ever touches this repository.
 
 The Google Sheet has eight tabs: Crops, Cycle, Farm, Supplies, Trials, Schedule
 Tasks, Schedule Cycles, and Harvests.
+
+### Using your own Google credentials (optional)
+
+Out of the box, Greenies identifies itself to Google using OAuth credentials
+for the shared Greenies Cloud project, embedded in the binary. Google treats
+credentials for desktop apps as non-confidential (the real security is your
+own Google sign-in), and embedding them is standard practice for open-source
+tools — rclone does the same. But every user of the shared project draws on
+one API quota, so if you'd rather use your own Google Cloud project, there
+are two ways:
+
+**Without rebuilding** — create a Google Cloud project, enable the Sheets,
+Calendar, and Tasks APIs, create an OAuth "Desktop app" client, download its
+`credentials.json`, and place it at `~/.greenies/credentials.json`. It takes
+priority over the embedded credentials automatically.
+
+**Baked into your own build** — if you compile from source, you can embed
+your own credentials so your binary stays a single self-contained file:
+
+```bash
+go build -ldflags "\
+  -X github.com/littleguygreens/greenies/internal/gcal.embeddedClientID=YOUR_CLIENT_ID \
+  -X github.com/littleguygreens/greenies/internal/gcal.embeddedClientSecret=YOUR_CLIENT_SECRET"
+```
+
+Set both flags together — a client ID from one project with a secret from
+another will fail to sign in.
 
 ## Android
 

@@ -58,11 +58,28 @@ import (
 // credentials in its public source code.
 //
 // If a user wants to use their own Google Cloud project (for example, to get
-// their own API quota), they can place a credentials.json file in ~/.greenies/
-// and it will override these embedded values.
+// their own API quota), there are two ways to override these values:
+//
+//  1. At build time — anyone compiling Greenies from source can bake their
+//     own credentials into their binary with Go's linker flags:
+//
+//	go build -ldflags "\
+//	  -X github.com/littleguygreens/greenies/internal/gcal.embeddedClientID=YOUR_ID \
+//	  -X github.com/littleguygreens/greenies/internal/gcal.embeddedClientSecret=YOUR_SECRET"
+//
+//     The "-X" flag tells the Go linker to replace a variable's value at the
+//     moment the binary is assembled — the same mechanism many projects use
+//     to stamp a version number. The result is still a single self-contained
+//     file, just carrying that person's credentials instead of ours. This is
+//     why the two values below are declared with "var" rather than "const":
+//     the linker can only overwrite variables.
+//
+//  2. At run time — place a credentials.json file (downloaded from the
+//     Google Cloud console) in ~/.greenies/ and it takes priority over the
+//     embedded values. No rebuilding required. See loadConfig below.
 
-const embeddedClientID = "817302381223-g81vtlpcd4l883fvah7et6hnq04i8ftq.apps.googleusercontent.com"
-const embeddedClientSecret = "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"
+var embeddedClientID = "817302381223-g81vtlpcd4l883fvah7et6hnq04i8ftq.apps.googleusercontent.com"
+var embeddedClientSecret = "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"
 
 // credentialsPath returns the full path to credentials.json — an optional
 // override file. If a user places their own credentials.json here, it takes

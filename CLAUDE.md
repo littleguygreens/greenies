@@ -256,13 +256,18 @@ The layout is defined in a configuration file — never hardcoded.
   targets Linux only (`.desktop` file). Add support for macOS (`.app` bundle)
   and Windows (GUI-mode build + shortcut creation) so the program can be
   launched by double-clicking an icon on any OS, with no terminal window
-- **Embedded Google OAuth credentials** — embed the OAuth client ID and secret
-  directly in the binary so new users can sign in with one click instead of
-  manually creating a Google Cloud project and downloading credentials.json.
-  This is standard practice for open-source desktop apps (e.g. rclone) —
-  Google treats desktop client secrets as non-confidential. Tradeoffs to
-  consider before enabling: all users share one API quota (could hit limits
-  if the tool gets popular), abuse by third parties could get the Cloud
-  project suspended, and Google requires a verification review before more
-  than 100 users can authorise. Best to revisit once the tool is published
-  and user count is known.
+- **Embedded Google OAuth credentials** — ✅ DONE (shipped during the Android
+  work; decision ratified in the v1.2.1 code review). The OAuth client ID and
+  secret are embedded in `internal/gcal/auth.go` so new users can sign in with
+  one click. This is standard practice for open-source desktop apps (e.g.
+  rclone) — Google treats desktop client secrets as non-confidential, and this
+  is a deliberate, documented exception to the "never commit secrets" rule.
+  Users who prefer their own Google Cloud project have two override paths,
+  both documented in the README: a `credentials.json` file in `~/.greenies/`
+  (no rebuild), or baking their own credentials into a source build via
+  `go build -ldflags -X`. Accepted tradeoffs, to revisit if the user count
+  grows: all default users share one API quota, third-party abuse of the
+  credentials could get the shared Cloud project suspended, and Google's
+  consent screen caps sign-ins at 100 users until the project passes a
+  verification review — check the consent screen's testing/production status
+  in the Google Cloud console before promoting the tool widely.
