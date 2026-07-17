@@ -407,17 +407,132 @@ func runPlan() {
 			additionalWeeks+1, additionalWeeks+1)
 	}
 
+	// ── Consolidation check ──────────────────────────────────────────────────
+	//
+	// If an existing cycle of the same crop already has the same sow date as
+	// one of the new cycles, the grower probably wants ONE bigger batch on the
+	// calendar, not two rows for the same crop on the same day. Offer to merge
+	// them: the existing cycle keeps its identity (its CycleID), its tray
+	// count becomes the sum, and its calendar tasks are regenerated with the
+	// combined count.
+	//
+	// This mirrors the consolidation feature on the GUI plan page
+	// (internal/gui/handlers_plan.go) — the two copies are deliberately kept
+	// in step, so if you change the behaviour here, change it there too.
+	//
+	// mergedExistingIDs — the existing CycleIDs being absorbed. Their old
+	//   tasks must be removed from the store before we write the regenerated
+	//   versions (which carry the combined tray count).
+	// consolidatedExistingCycles — the existing cycles list with the merged
+	//   entries updated in place. nil means no consolidation ran.
+	mergedExistingIDs := map[string]bool{}
+	var consolidatedExistingCycles []farm.Cycle
+
+	// Load the saved cycles once — used by both the consolidation check here
+	// and the conflict check below.
+	existingCyclesForCheck, checkErr := farm.LoadCycles()
+
+	if checkErr == nil {
+		matches := findConsolidations(existingCyclesForCheck, newCycleRecords, trays)
+		if len(matches) > 0 {
+			// Tell the grower what was found, one line per matching sow date.
+			fmt.Printf("\nExisting %s cycle(s) found on the same sow date:\n", task.Capitalize(found.Name))
+			for _, m := range matches {
+				fmt.Printf("  %d existing + %d new = %d trays on %s\n",
+					m.existingTrays, m.newTrays, m.combinedTrays, m.sowDateDisplay)
+			}
+			fmt.Println()
+
+			// Blank input defaults to "add separately" — the choice that
+			// changes nothing already on the calendar.
+			consChoice := strings.ToLower(ask("(c)onsolidate into the existing cycle(s), or (a)dd separately? [a]: "))
+			if consChoice == "c" || consChoice == "consolidate" {
+				consolidatedExistingCycles = existingCyclesForCheck
+
+				// Index matches by their week position so we can look them up
+				// while filtering the new cycles and tasks below.
+				byWeek := make(map[int]consolidationMatch, len(matches))
+				for _, m := range matches {
+					byWeek[m.weekIndex] = m
+				}
+
+				// The scheduler assigned fresh CycleIDs to the new planned
+				// cycles. Drop the tasks of the ones being merged — they will
+				// be replaced by regenerated tasks with the combined count.
+				droppedNewIDs := map[string]bool{}
+				for weekIdx := range byWeek {
+					droppedNewIDs[newCycleRecords[weekIdx].CycleID] = true
+				}
+				var keptTasks []task.Task
+				for _, t := range allNewTasks {
+					if !droppedNewIDs[t.CycleID] {
+						keptTasks = append(keptTasks, t)
+					}
+				}
+				allNewTasks = keptTasks
+
+				// For each merged week, regenerate tasks with the combined tray
+				// count and stamp the EXISTING CycleID on them so they join the
+				// existing cycle on the calendar.
+				for weekIdx, m := range byWeek {
+					mergedExistingIDs[m.existingCycleID] = true
+
+					weekSow := sowDateStr
+					if weekIdx > 0 {
+						weekSow = baseSow.AddDate(0, 0, weekIdx*7).Format(task.DateFormat)
+					}
+					_, replaceTasks, schedErr := scheduler.ScheduleForward(*found, weekSow, m.combinedTrays)
+					if schedErr != nil {
+						fmt.Printf("Error regenerating merged schedule: %v\n", schedErr)
+						os.Exit(1)
+					}
+					for i := range replaceTasks {
+						replaceTasks[i].CycleID = m.existingCycleID
+					}
+					allNewTasks = append(allNewTasks, replaceTasks...)
+
+					// Update the tray count and yield estimate on the existing
+					// cycle record in our local copy of the cycles list.
+					for i := range consolidatedExistingCycles {
+						if consolidatedExistingCycles[i].CycleID == m.existingCycleID {
+							consolidatedExistingCycles[i].Trays = m.combinedTrays
+							consolidatedExistingCycles[i].ExpectedGrams = found.YieldGrams * m.combinedTrays
+							break
+						}
+					}
+				}
+
+				// Remove the merged week entries from newCycleRecords — those
+				// cycles already exist and were updated in place above.
+				var filteredRecords []farm.Cycle
+				for i, cr := range newCycleRecords {
+					if _, merged := byWeek[i]; !merged {
+						filteredRecords = append(filteredRecords, cr)
+					}
+				}
+				newCycleRecords = filteredRecords
+
+				fmt.Printf("Merging into %d existing cycle(s) — tasks regenerated with the combined tray counts.\n",
+					len(mergedExistingIDs))
+			}
+		}
+	}
+
 	// ── Conflict check ───────────────────────────────────────────────────────
 	//
 	// Before saving, combine the newly created cycle records with any cycles
 	// already on file and run the conflict checker. If problems are found we
 	// show them as a warning and give the grower a chance to bail out.
 	//
-	// We load cycles here (before saving) so we can check the combined picture.
-	existingCyclesForCheck, checkErr := farm.LoadCycles()
+	// When consolidation ran above, we check the MERGED picture (the patched
+	// existing cycles plus the remaining new ones), so the warnings describe
+	// what will actually be saved — not a double-counted version.
 	if checkErr == nil {
-		// Combine existing cycles with all the new ones (including repeats).
-		allCyclesForCheck := append(existingCyclesForCheck, newCycleRecords...)
+		baseForCheck := existingCyclesForCheck
+		if consolidatedExistingCycles != nil {
+			baseForCheck = consolidatedExistingCycles
+		}
+		allCyclesForCheck := append(baseForCheck, newCycleRecords...)
 		conflicts := checker.Check(farmEnvs, allCyclesForCheck)
 
 		if len(conflicts) > 0 {
@@ -433,7 +548,15 @@ func runPlan() {
 			// has 4 slots left and you're adding 8 trays, a split would put 4
 			// trays in main tent and 4 in test tent — two separate cycles, each
 			// tracked independently by the snapshot.
-			sp, canSplit := computeSingleCycleSplit(litEnvs, existingCyclesForCheck, newCycleRecords)
+			//
+			// The split is not offered when a consolidation was just applied —
+			// the merged weeks are no longer uniform standalone new cycles, so
+			// a clean per-cycle split can't be computed for them.
+			var sp litSplit
+			canSplit := false
+			if consolidatedExistingCycles == nil {
+				sp, canSplit = computeSingleCycleSplit(litEnvs, existingCyclesForCheck, newCycleRecords)
+			}
 			if canSplit {
 				fmt.Printf("  → (s)plit: %d trays → %s + %d trays → %s\n\n",
 					sp.splitA, farm.DisplayName(sp.envA),
@@ -484,6 +607,19 @@ func runPlan() {
 		os.Exit(1)
 	}
 
+	// When consolidating, remove the merged cycles' old tasks first so the
+	// regenerated ones (with the combined tray count) replace them cleanly —
+	// otherwise the calendar would show both the old and new versions.
+	if len(mergedExistingIDs) > 0 {
+		var filtered []task.Task
+		for _, t := range existing {
+			if !mergedExistingIDs[t.CycleID] {
+				filtered = append(filtered, t)
+			}
+		}
+		existing = filtered
+	}
+
 	all := append(existing, allNewTasks...)
 	if err := store.Save(all); err != nil {
 		fmt.Printf("Error saving tasks: %v\n", err)
@@ -494,17 +630,32 @@ func runPlan() {
 	// We use a warning rather than a fatal error here because the calendar tasks
 	// are already saved — the core scheduling functionality is intact. The
 	// snapshot just won't show this cycle until the records are re-created.
-	existingCycles, err := farm.LoadCycles()
-	if err != nil {
-		fmt.Printf("Warning: could not load existing cycle records: %v\n", err)
-	} else {
-		allCycles := append(existingCycles, newCycleRecords...)
+	if consolidatedExistingCycles != nil {
+		// Consolidation already loaded and patched the cycles list — write it
+		// back with the remaining new records appended, rather than re-reading
+		// the file and losing the patched tray counts.
+		allCycles := append(consolidatedExistingCycles, newCycleRecords...)
 		if err := farm.SaveCycles(allCycles); err != nil {
 			fmt.Printf("Warning: could not save cycle records: %v\n", err)
 		}
+	} else {
+		existingCycles, err := farm.LoadCycles()
+		if err != nil {
+			fmt.Printf("Warning: could not load existing cycle records: %v\n", err)
+		} else {
+			allCycles := append(existingCycles, newCycleRecords...)
+			if err := farm.SaveCycles(allCycles); err != nil {
+				fmt.Printf("Warning: could not save cycle records: %v\n", err)
+			}
+		}
 	}
 
-	fmt.Printf("%d tasks added to the calendar.\n", len(allNewTasks))
+	if len(mergedExistingIDs) > 0 {
+		fmt.Printf("%d tasks saved — %d cycle(s) merged into existing ones.\n",
+			len(allNewTasks), len(mergedExistingIDs))
+	} else {
+		fmt.Printf("%d tasks added to the calendar.\n", len(allNewTasks))
+	}
 	fmt.Println("Run \"greenies list\" to see the schedule.")
 	fmt.Println("Run \"greenies snapshot\" to see the farm view.")
 }
@@ -1088,6 +1239,57 @@ func resolveLitEnv(input string, litEnvs []farm.Environment) string {
 
 	// No match at all — default to first.
 	return litEnvs[0].Name
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Consolidation helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// consolidationMatch describes an existing cycle that can be merged with one
+// of the newly planned cycles because they share the same crop name and sow
+// date. Merging replaces both with a single cycle whose tray count is the sum.
+//
+// NOTE: this mirrors the same-named type in internal/gui/handlers_plan.go.
+// The CLI and GUI deliberately keep their own copies for now — if you change
+// the matching rules here, change them there too.
+type consolidationMatch struct {
+	existingCycleID string // CycleID of the existing cycle being merged into
+	existingTrays   int    // how many trays are already in that existing cycle
+	newTrays        int    // the tray count of the new cycle being planned
+	combinedTrays   int    // existingTrays + newTrays
+	sowDateDisplay  string // human-readable shared sow date, e.g. "Wed Jun 10"
+	weekIndex       int    // which planned cycle this matches (0=base, 1=first repeat…)
+}
+
+// findConsolidations checks a list of newly planned cycles against the
+// grower's saved cycles and returns one match for every pair that shares the
+// same crop name and sow date. newTrays is the tray count for each new cycle
+// — the same value for the base and every weekly repeat.
+//
+// NOTE: mirrors findConsolidations in internal/gui/handlers_plan.go — keep
+// the two in step.
+func findConsolidations(existingCycles, newCycles []farm.Cycle, newTrays int) []consolidationMatch {
+	var matches []consolidationMatch
+	for weekIdx, nc := range newCycles {
+		for _, ec := range existingCycles {
+			if ec.CropName == nc.CropName && ec.SowDate == nc.SowDate {
+				display := nc.SowDate // fallback if date parsing fails
+				if t, err := time.Parse(task.DateFormat, nc.SowDate); err == nil {
+					display = t.Format("Mon Jan 02")
+				}
+				matches = append(matches, consolidationMatch{
+					existingCycleID: ec.CycleID,
+					existingTrays:   ec.Trays,
+					newTrays:        newTrays,
+					combinedTrays:   ec.Trays + newTrays,
+					sowDateDisplay:  display,
+					weekIndex:       weekIdx,
+				})
+				break // one existing cycle per new cycle is enough
+			}
+		}
+	}
+	return matches
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
