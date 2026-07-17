@@ -209,6 +209,40 @@ internal/
   gui/                  Browser GUI (server, handlers, templates, static assets)
 ```
 
+## Tests and automation
+
+Run the automated test suite from the project root:
+
+```bash
+go test ./...
+```
+
+Two GitHub Actions workflows (recipe files in `.github/workflows/`) run
+automatically on GitHub's machines:
+
+- **tests.yml** — on every push and pull request: checks formatting, runs
+  `go vet`, and runs the full test suite. The commit gets a green checkmark
+  or a red X on GitHub.
+- **release.yml** — on every version tag: builds the binaries for Linux,
+  macOS, and Windows (Intel and ARM) and attaches them to a GitHub release,
+  named exactly as the in-app updater expects.
+
+## Releasing a new version
+
+1. Set `Version` in `version.go` to the new tag (e.g. `v1.2.2`) and commit.
+   The release workflow refuses to build if this doesn't match the tag —
+   the in-app updater depends on the two staying in sync.
+2. Tag and push:
+
+   ```bash
+   git tag v1.2.2
+   git push origin v1.2.2
+   ```
+
+3. A few minutes later the release appears on GitHub with every platform's
+   binary attached, and the in-app "Check for Updates" button starts
+   offering it to users.
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).

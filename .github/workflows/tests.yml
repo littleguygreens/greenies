@@ -1,0 +1,63 @@
+# Test runner — GitHub's robot checks every push.
+#
+# This file is a recipe for GitHub Actions. Whenever code is pushed to the
+# repository (or someone proposes a change via a pull request), GitHub starts
+# a fresh Linux machine in its data center, follows the steps below, and
+# marks the commit with a green checkmark (all passed) or a red X (something
+# failed). If it fails, GitHub emails the repository owner.
+#
+# Nothing here runs on your own computer, and nothing here changes the
+# program itself — it is a safety net around the code, not part of it.
+
+name: Tests
+
+# "on" says WHEN the robot should wake up:
+#   push          — any commit pushed to any branch
+#   pull_request  — any proposed change from a contributor
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    # The kind of machine GitHub should use. Ubuntu is a Linux flavour —
+    # the same family as the Linux Mint machine this project is built on.
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: download the repository's code onto the fresh machine.
+      # "actions/checkout" is a standard building block published by GitHub.
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Step 2: install Go. "go-version-file: go.mod" means "read the go.mod
+      # file and install whatever Go version the project itself asks for" —
+      # so this recipe never needs updating when the Go version changes.
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Step 3: check formatting. "gofmt -l ." lists any file that is not in
+      # Go's standard format; the test -z part fails the job if that list is
+      # not empty. Fix locally by running: gofmt -w .
+      - name: Check formatting (gofmt)
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "These files need 'gofmt -w .' run on them:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      # Step 4: run Go's built-in mistake detector. "vet" looks for common
+      # slip-ups the compiler alone doesn't catch.
+      - name: Run go vet
+        run: go vet ./...
+
+      # Step 5: run the automated test suite — the same command used locally.
+      # This is the heart of the whole recipe: if the scheduler's date math,
+      # the capacity checker, the CSV round trip, or the consolidation logic
+      # stops keeping its promises, this step fails and the push gets a red X.
+      - name: Run tests
+        run: go test ./...

@@ -1,0 +1,101 @@
+# Release builder — GitHub's robot builds every platform's binary.
+#
+# This recipe wakes up when a version tag (like v1.2.2) is pushed. It builds
+# the Greenies binary for every supported operating system and CPU type,
+# names each file EXACTLY the way the in-app updater expects (see
+# internal/updater/updater.go assetName), and attaches them all to a GitHub
+# release. The whole release process becomes:
+#
+#   1. Set Version in version.go to the new tag (e.g. "v1.2.2") and commit.
+#   2. git tag v1.2.2 && git push origin v1.2.2
+#   3. Wait a few minutes — the release appears with every binary attached.
+#
+# The robot can't typo a filename, so the "Check for Updates" button keeps
+# working on every platform, every release.
+
+name: Release binaries
+
+# Wake up only when a tag starting with "v" is pushed — normal commits to
+# branches never trigger a release.
+on:
+  push:
+    tags: ['v*']
+
+# The robot needs permission to create a release on this repository.
+# "contents: write" grants exactly that and nothing more.
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Guard rail: version.go must match the tag being released.
+      #
+      # The in-app updater compares the Version constant baked into the
+      # binary against the newest release tag on GitHub. If they disagree,
+      # every user sees a false "update available" (or a false "up to date")
+      # forever. CLAUDE.md documents this as the one maintenance rule the
+      # updater has — this step turns the rule into a hard stop: forget to
+      # bump version.go and the release simply refuses to build.
+      - name: Verify version.go matches the tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if ! grep -q "const Version = \"$TAG\"" version.go; then
+            echo "version.go does not contain: const Version = \"$TAG\""
+            echo "Update version.go to match the tag, commit, then re-tag."
+            exit 1
+          fi
+
+      # Run the test suite one last time. A release is the worst possible
+      # moment to skip the safety net.
+      - name: Run tests
+        run: go test ./...
+
+      # Build one binary per platform. Go can build for any operating system
+      # from this single Linux machine ("cross-compiling") — GOOS picks the
+      # operating system and GOARCH picks the CPU type.
+      #
+      # The output names MUST match assetName() in internal/updater/updater.go:
+      #   greenies-<GOOS>-<GOARCH>          (plus ".exe" on Windows)
+      #
+      # CGO_ENABLED=0 tells Go to use no C code at all, so each binary is
+      # fully self-contained — the single-file portability promise.
+      # -ldflags "-s -w" strips debugging bookkeeping from the binaries,
+      # making the downloads meaningfully smaller with no behaviour change.
+      - name: Build binaries for every platform
+        run: |
+          mkdir -p dist
+          build() {
+            GOOS="$1" GOARCH="$2" CGO_ENABLED=0 \
+              go build -ldflags "-s -w" -o "dist/$3" .
+            echo "built dist/$3"
+          }
+          build linux   amd64 greenies-linux-amd64        # ordinary Linux PCs
+          build linux   arm64 greenies-linux-arm64        # Raspberry Pi 4/5 and ARM laptops
+          build darwin  amd64 greenies-darwin-amd64       # Intel Macs
+          build darwin  arm64 greenies-darwin-arm64       # Apple Silicon Macs (M1 and later)
+          build windows amd64 greenies-windows-amd64.exe  # ordinary Windows PCs
+
+      # Create the GitHub release and attach every binary.
+      #
+      # "gh" is GitHub's own command-line tool, pre-installed on the robot's
+      # machine. --generate-notes writes a summary of the commits since the
+      # previous release. If the release was already created by hand, the
+      # first command fails and the fallback uploads the binaries to it
+      # instead (--clobber replaces any half-uploaded files).
+      - name: Create the release with binaries attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber
