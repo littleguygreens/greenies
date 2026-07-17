@@ -20,13 +20,15 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"net" // for splitting "host:port" strings in the request gatekeeper
 	"net/http"
+	"net/url" // for reading the Origin header in the request gatekeeper
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"  // for sync.Mutex — a lock that prevents two things from reading/writing at the same time
+	"sync" // for sync.Mutex — a lock that prevents two things from reading/writing at the same time
 	"time"
 
 	"github.com/littleguygreens/greenies/internal/config"
@@ -224,10 +226,10 @@ func handleSplit(w http.ResponseWriter, r *http.Request) {
 // has the page-specific HTML).
 //
 // How it works (two-step render):
-//   1. Render the page-specific template (e.g. "dashboard.html") into a
-//      string of HTML — this is the "content" of the page.
-//   2. Pass that HTML string into layout.html, which wraps it with the
-//      nav bar and page structure.
+//  1. Render the page-specific template (e.g. "dashboard.html") into a
+//     string of HTML — this is the "content" of the page.
+//  2. Pass that HTML string into layout.html, which wraps it with the
+//     nav bar and page structure.
 //
 // We do it in two steps because Go's {{template}} directive requires a
 // fixed name — you can't pass a variable. So we render the inner template
@@ -280,6 +282,73 @@ func renderFragment(w http.ResponseWriter, name string, data any) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Server
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Request gatekeeper — only the grower's own browser window may talk to us
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The server only listens on 127.0.0.1 (this machine), so nobody else on the
+// network can reach it. But there is a sneakier risk: any WEBSITE open in a
+// browser on this same machine can also send requests to 127.0.0.1. A
+// malicious page could quietly submit a form to, say, POST /clear (wipe the
+// calendar) or POST /update/apply (replace the program) while the GUI is
+// running. Browsers allow this kind of cross-site form submission by default.
+//
+// Two checks close that door:
+//
+//  1. The Host check. Every request carries a "Host" header saying what
+//     address the browser thinks it is talking to. Our own pages always say
+//     127.0.0.1 or localhost. A trick called DNS rebinding makes a victim's
+//     browser send requests to 127.0.0.1 while the Host header still names
+//     the attacker's website — so any non-local Host is rejected.
+//
+//  2. The Origin check, for requests that change data (anything except GET).
+//     Browsers stamp cross-site requests with an "Origin" header naming the
+//     website the request came FROM. If that website isn't this local server,
+//     the request didn't come from a Greenies page — rejected.
+//
+// Requests with no Origin header at all are allowed through: that covers
+// tools like curl on the grower's own machine, and same-page requests from
+// older browsers that don't send the header.
+
+// isLocalHostname reports whether a hostname refers to this machine.
+// These are the only addresses the Greenies GUI is ever served on.
+func isLocalHostname(host string) bool {
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+// hostnameOnly strips the port number (":8080") off a host string, leaving
+// just the name or address. Handles IPv6 addresses like "[::1]:8080" too.
+func hostnameOnly(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		// No port present — the string is already just a hostname.
+		return hostport
+	}
+	return host
+}
+
+// requestAllowed applies the two gatekeeper checks described above.
+// Returns false if the request should be rejected.
+func requestAllowed(r *http.Request) bool {
+	// Check 1: the Host header must name this machine.
+	if !isLocalHostname(hostnameOnly(r.Host)) {
+		return false
+	}
+
+	// Check 2: data-changing requests must not come from another website.
+	if r.Method != http.MethodGet {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			parsed, err := url.Parse(origin)
+			if err != nil || !isLocalHostname(parsed.Hostname()) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Heartbeat — automatic shutdown when the browser window is closed
@@ -483,7 +552,7 @@ func StartServer(port int, version string) error {
 	// /update/check compares the running version against the latest GitHub
 	// release. /update/apply downloads and replaces the binary on disk.
 	mux.HandleFunc("GET /update/check", handleUpdateCheck(version))
-	mux.HandleFunc("POST /update/apply", handleUpdateApply)
+	mux.HandleFunc("POST /update/apply", handleUpdateApply(version))
 
 	mux.HandleFunc("GET /sync", handleSyncPage)
 	mux.HandleFunc("POST /sync-pull", handleSyncPull)
@@ -553,6 +622,12 @@ func StartServer(port int, version string) error {
 	// hasn't started sending heartbeat pings yet.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The gatekeeper runs before anything else — see the "Request
+		// gatekeeper" section above for why this matters.
+		if !requestAllowed(r) {
+			http.Error(w, "Forbidden — Greenies only accepts requests from its own window.", http.StatusForbidden)
+			return
+		}
 		recordHeartbeat()
 		mux.ServeHTTP(w, r)
 	})

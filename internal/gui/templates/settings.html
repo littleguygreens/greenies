@@ -461,7 +461,7 @@ function checkForUpdate() {
             btn.textContent = 'Apply update ' + data.latest;
             btn.disabled = false;
             // Replace the onclick so the next click downloads and applies.
-            btn.onclick = function() { applyUpdate(data.download_url, data.latest); };
+            btn.onclick = function() { applyUpdate(data.latest); };
         })
         .catch(function() {
             result.style.display = 'block';
@@ -473,15 +473,17 @@ function checkForUpdate() {
         });
 }
 
-// applyUpdate downloads the binary at downloadURL and replaces the one on
-// disk. The grower needs to close and reopen the app to run the new version.
-function applyUpdate(downloadURL, version) {
+// applyUpdate tells the server to download the latest release and replace
+// the binary on disk. The grower needs to close and reopen the app to run
+// the new version. The server looks up the download address from GitHub
+// itself — the page never supplies it (see handleUpdateApply for why).
+function applyUpdate(version) {
     var btn = document.getElementById('update-btn');
     var result = document.getElementById('update-result');
     btn.disabled = true;
     btn.textContent = 'Downloading...';
 
-    fetch('/update/apply?url=' + encodeURIComponent(downloadURL), {method: 'POST'})
+    fetch('/update/apply', {method: 'POST'})
         .then(function(resp) {
             return resp.text().then(function(text) {
                 result.style.display = 'block';

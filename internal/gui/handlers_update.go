@@ -2,14 +2,14 @@
 //
 // These two handlers power the "Check for Updates" button on the settings page.
 //
-//   GET /update/check  — asks GitHub for the latest release and compares it
-//                        against the version baked into this binary. Returns
-//                        a short JSON blob the browser JS reads to decide what
-//                        to show (up to date, or update available).
+//	GET /update/check  — asks GitHub for the latest release and compares it
+//	                     against the version baked into this binary. Returns
+//	                     a short JSON blob the browser JS reads to decide what
+//	                     to show (up to date, or update available).
 //
-//   POST /update/apply — downloads the new binary and replaces the one on
-//                        disk. Returns plain text describing what happened.
-//                        The grower closes and reopens the app to run it.
+//	POST /update/apply — downloads the new binary and replaces the one on
+//	                     disk. Returns plain text describing what happened.
+//	                     The grower closes and reopens the app to run it.
 package gui
 
 import (
@@ -78,24 +78,46 @@ func handleUpdateCheck(currentVersion string) http.HandlerFunc {
 	}
 }
 
-// handleUpdateApply downloads the new binary from the URL supplied in the
-// "url" query parameter and replaces the running binary on disk.
-//
-// The grower must close and reopen the app to run the new version.
+// handleUpdateApply downloads the new binary and replaces the running binary
+// on disk. The grower must close and reopen the app to run the new version.
 // This handler returns plain text so the JS can display it directly.
-func handleUpdateApply(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
+//
+// SECURITY: this handler deliberately does NOT accept a download address
+// from the browser. It asks GitHub for the latest release itself and uses
+// the address GitHub returns. An earlier version took the address as a
+// request parameter — but any website open in a browser on this machine can
+// send requests to a local server like this one, so a malicious page could
+// have pointed the updater at a fake "greenies" binary. By looking up the
+// address server-side, the only thing a request can ever install is the
+// genuine latest release from our own GitHub releases page.
+func handleUpdateApply(currentVersion string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
 
-	downloadURL := r.URL.Query().Get("url")
-	if downloadURL == "" {
-		http.Error(w, "Missing download URL.", http.StatusBadRequest)
-		return
+		// Ask GitHub for the latest release — the same lookup the "Check for
+		// Updates" button does. We repeat it here rather than trusting the
+		// browser to tell us the answer.
+		rel, err := updater.CheckLatest(repoOwner, repoName)
+		if err != nil {
+			http.Error(w, "Could not reach GitHub: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		if rel.TagName == currentVersion {
+			http.Error(w, "Already running the latest version ("+currentVersion+").", http.StatusConflict)
+			return
+		}
+
+		if rel.DownloadURL == "" {
+			http.Error(w, "No download available for this platform — get it from "+releasesPageURL, http.StatusNotFound)
+			return
+		}
+
+		if err := updater.ApplyUpdate(rel.DownloadURL); err != nil {
+			http.Error(w, "Update failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte("Update applied. Close and reopen Greenies to run the new version."))
 	}
-
-	if err := updater.ApplyUpdate(downloadURL); err != nil {
-		http.Error(w, "Update failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Write([]byte("Update applied. Close and reopen Greenies to run the new version."))
 }
