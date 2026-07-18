@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime" // for detecting the CPU architecture (amd64, arm64, …)
 	"strings"
 )
 
@@ -44,8 +45,8 @@ var appIcon []byte
 // builds, so a shortcut pointing there breaks immediately.
 //
 // To protect against this, we detect the build-cache situation and look for
-// a real compiled binary in the most likely locations (~/greenies/). If we
-// can't find one, we print a clear error telling the grower to build first.
+// a real compiled binary in the developer's checkout folder (~/greenies/).
+// If we can't find one, we print a clear error telling them to build first.
 func findBinaryPath() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -64,9 +65,15 @@ func findBinaryPath() (string, error) {
 	if strings.Contains(exe, ".cache/go-build") {
 		home, _ := os.UserHomeDir()
 
-		// Look for a compiled binary in the standard locations.
+		// The release naming convention is "greenies-linux-<architecture>"
+		// (e.g. greenies-linux-amd64 on a typical PC, greenies-linux-arm64
+		// on ARM machines). runtime.GOARCH tells us which CPU architecture
+		// this build is for, so the name matches whatever machine we're on.
+		archName := fmt.Sprintf("greenies-linux-%s", runtime.GOARCH)
+
+		// Look for a compiled binary in the developer's checkout folder.
 		candidates := []string{
-			filepath.Join(home, "greenies", "greenies-linux-arm64"),
+			filepath.Join(home, "greenies", archName),
 			filepath.Join(home, "greenies", "greenies"),
 		}
 		for _, c := range candidates {
@@ -78,11 +85,12 @@ func findBinaryPath() (string, error) {
 
 		// No compiled binary found — tell the grower how to fix it.
 		return "", fmt.Errorf(
-			"install-desktop was run via 'go run', which uses a temporary\n" +
-				"build cache path that is wiped between builds.\n\n" +
-				"Please build the binary first, then install:\n" +
-				"  go build -o greenies-linux-arm64 .\n" +
-				"  ./greenies-linux-arm64 install-desktop",
+			"install-desktop was run via 'go run', which uses a temporary\n"+
+				"build cache path that is wiped between builds.\n\n"+
+				"Please build the binary first, then install:\n"+
+				"  go build -o %s .\n"+
+				"  ./%s install-desktop",
+			archName, archName,
 		)
 	}
 
