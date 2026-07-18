@@ -131,7 +131,7 @@ Commands:
   harvestlog       View full harvest history
   trial            Start, manage, or compare crop trials
   adjust           Mid-cycle tray adjustments (add/remove days)
-  sync             Push schedule to Google Calendar + Tasks
+  sync             Sync with Google Sheets, Calendar, and Tasks
   delete           Remove a task or entire crop cycle
   clear            Wipe all tasks (asks for confirmation)
   install-desktop  Create a desktop shortcut (Linux, macOS, Windows)

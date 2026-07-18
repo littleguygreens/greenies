@@ -84,12 +84,12 @@ func handleUpdateCheck(currentVersion string) http.HandlerFunc {
 //
 // SECURITY: this handler deliberately does NOT accept a download address
 // from the browser. It asks GitHub for the latest release itself and uses
-// the address GitHub returns. An earlier version took the address as a
-// request parameter — but any website open in a browser on this machine can
-// send requests to a local server like this one, so a malicious page could
-// have pointed the updater at a fake "greenies" binary. By looking up the
-// address server-side, the only thing a request can ever install is the
-// genuine latest release from our own GitHub releases page.
+// the address GitHub returns. If we took the address as a request
+// parameter, any website open in a browser on this machine could send
+// requests to a local server like this one and point the updater at a
+// fake "greenies" binary. By looking up the address server-side, the only
+// thing a request can ever install is the genuine latest release from our
+// own GitHub releases page.
 func handleUpdateApply(currentVersion string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")

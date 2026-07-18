@@ -5,10 +5,9 @@
 // expected harvest date. These markers help the grower see upcoming trial
 // milestones alongside their regular production schedule.
 //
-// The four functions in this file are used by both the CLI (cmd_trial.go)
-// and the GUI (handlers_trial.go). They were originally copy-pasted in
-// both places — now they live here once so any fix or change applies
-// everywhere automatically.
+// The four functions in this file are shared by the CLI (cmd_trial.go)
+// and the GUI (handlers_trial.go), so any fix or change applies to both
+// automatically.
 package trial
 
 import (

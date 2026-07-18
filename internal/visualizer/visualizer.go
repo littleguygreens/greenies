@@ -329,7 +329,7 @@ func writeSnapshot(w io.Writer, envs []farm.Environment, cycles []farm.Cycle, to
 
 	// ── Step 2: resolve "any" lit-stage cycles ─────────────────────────────
 	//
-	// "Either" means the grower hadn't picked a specific tent at plan time.
+	// "any" means the grower hadn't picked a specific tent at plan time.
 	// We assign each "any" cycle to the first lit environment with enough
 	// free slots, spilling to the next if that one is full.
 

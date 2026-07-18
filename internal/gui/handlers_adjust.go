@@ -835,8 +835,8 @@ func buildGUICycleView(sow, mtl, harvest time.Time) []adjustPreviewRow {
 // not the other get an empty label (rendered as "---" in the template).
 //
 // Uses the real time.Time stored in each row's .Date field — no string
-// parsing needed, which avoids the year-guessing bug that plagued the old
-// version.
+// parsing needed, so there is never any guessing about which year a
+// date belongs to.
 func buildPreviewRows(before, after []adjustPreviewRow, today time.Time) []adjustPreviewRow {
 	// Build lookup maps keyed by "2006-01-02" so we can merge the two
 	// timelines into one table.

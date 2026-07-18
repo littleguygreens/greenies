@@ -168,8 +168,8 @@ func swimLabel(cropName string, trays int, sowDateStr, harvestDateStr string, sp
 
 // placeRowLabel finds the first and last active cells in a 7-cell row,
 // calculates the total span, picks the right label, and writes it onto
-// the first active cell. This gives each swim-lane row exactly one
-// centered label instead of one per stage transition.
+// the first active cell — so each swim-lane row has exactly one
+// centered label.
 func placeRowLabel(cells *[7]monthCell, cropName string, trays int, sowDate, harvestDate string) {
 	// Find first and last active cell indices.
 	first := -1
@@ -382,9 +382,10 @@ type monthCell struct {
 	// an interior arrow, showing both operations happen within one day.
 	SameDaySoak bool
 
-	// Label is the text shown on the first cell of each stage run — e.g.
-	// "sunnies 16x — dark". Empty on continuation cells (2nd, 3rd day
-	// of the same stage) so the text only appears once at the start.
+	// Label is the row's single label text — e.g. "sunnies 12x (mar 20 -
+	// mar 28)". placeRowLabel writes it onto the first active cell of the
+	// row and the CSS centers it across the whole run; every other cell
+	// leaves this empty.
 	Label string
 
 	// Trays is the batch size — shown as a tooltip or label so the grower
@@ -440,8 +441,10 @@ type monthCycleRow struct {
 	// distinguish "sunnies 16x" from "sunnies 12x" in the same week.
 	Trays int
 
-	// Cells holds exactly 7 entries, one per day (Monday index 0 through
-	// Sunday index 6). Each cell is either coloured by stage or empty.
+	// Cells holds exactly 7 entries, one per day of the week. Index 0 is
+	// whichever day the grower's week starts on (Sunday by default, Monday
+	// if chosen on the Settings page). Each cell is either coloured by
+	// stage or empty.
 	Cells [7]monthCell
 }
 
@@ -452,8 +455,8 @@ type monthCycleRow struct {
 // parameter marks which cycle row should be visually highlighted — this
 // is the cycle being adjusted, so the grower can see it in context.
 //
-// Returns the weeks, the day labels (Mon–Sun or Sun–Sat), and the week
-// start preference string so the template can render the grid.
+// Returns the weeks and the day labels (Mon–Sun or Sun–Sat) so the
+// template can render the grid.
 func buildAdjustSwimlane(cycles []farm.Cycle, highlightID string, rangeStart, rangeEnd, today time.Time) ([]monthWeek, [7]string) {
 	// Load crop library for soak settings.
 	cropMap := map[string]crop.Crop{}
@@ -579,8 +582,9 @@ type monthDayHeader struct {
 
 // monthWeek groups all the cycle rows that have activity in one calendar week.
 type monthWeek struct {
-	// Headers holds 7 entries (Mon–Sun) with the date number and
-	// whether that day is inside the displayed month.
+	// Headers holds 7 entries, one per day of the week in the grower's
+	// chosen week order, with the date number and whether that day is
+	// inside the displayed month.
 	Headers [7]monthDayHeader
 
 	// Rows holds one swim-lane row per cycle that has activity this week.

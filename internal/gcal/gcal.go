@@ -27,8 +27,8 @@
 //	  1. Finds or creates the "Greenies" task list, then deletes all future
 //	     uncompleted tasks from it (clean slate — no stale entries)
 //	  2. Creates fresh daily task entries for every upcoming day with work
-//	  3. Finds or creates the "Farm" calendar, then deletes all events from it
-//	     from today forward (clean slate)
+//	  3. Finds or creates the "Farm" calendar, then deletes every event
+//	     from it (clean slate)
 //	  4. Creates one all-day calendar event per upcoming day with tasks
 //	Running Sync multiple times is safe — it always produces the same result.
 //	This is called "idempotent" (eye-dem-PO-tent), meaning you can repeat it
@@ -132,8 +132,8 @@ func (g *GoogleCalendarExporter) Export(tasks []task.Task) error {
 //  1. Filters the task list to today and later (past tasks aren't useful to add)
 //  2. Finds or creates the shared "Greenies" task list, clears all future tasks,
 //     then creates fresh daily task entries for every upcoming day with work
-//  3. Finds or creates the dedicated "Farm" calendar, clears all events from it
-//     from today forward, then creates one all-day event per upcoming day —
+//  3. Finds or creates the dedicated "Farm" calendar, clears every event
+//     from it, then creates one all-day event per upcoming day —
 //     with the full farm snapshot for THAT DAY embedded in the description
 //
 // envs and cycles are the raw farm configuration data. They are passed through
@@ -197,8 +197,8 @@ func (g *GoogleCalendarExporter) Sync(tasks []task.Task, envs []farm.Environment
 	// ── Google Calendar event sync ────────────────────────────────────────────
 
 	// Find or create the dedicated "Farm" calendar. Because we own this entire
-	// calendar, cleaning up is simple — we delete everything from today forward
-	// and recreate it fresh, with no need to tag or filter individual events.
+	// calendar, cleaning up is simple — we delete everything and recreate it
+	// fresh, with no need to tag or filter individual events.
 	fmt.Println("Finding Farm calendar...")
 	farmCalID, err := g.ensureFarmCalendar()
 	if err != nil {
@@ -350,8 +350,9 @@ func (g *GoogleCalendarExporter) syncCalendarEvents(upcoming []task.Task, calend
 			continue
 		}
 
-		// Compute the calendar title and snapshot for THIS day specifically.
-		// Each event now shows live data for its own date rather than today's.
+		// Compute the calendar title and snapshot for THIS day specifically,
+		// so the event shows the farm as it will be on its own date — not as
+		// it happens to look at the moment the sync runs.
 		title := visualizer.CalendarTitle(envs, cycles, eventDate)
 		snapshotText := visualizer.SnapshotText(envs, cycles, eventDate)
 

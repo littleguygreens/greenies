@@ -16,9 +16,9 @@ import (
 	"path/filepath" // for building file paths that work on any operating system
 )
 
-// Config holds program-wide settings. Right now it only stores Google Sheets
-// information, but more fields can be added here later without breaking
-// anything.
+// Config holds program-wide settings — the Google Sheets link details plus
+// display and behaviour preferences. New fields can be added here later
+// without breaking anything.
 type Config struct {
 	// SheetsEnabled is true once the user has linked a Google Sheet for
 	// their crop library. When false, the program ignores Sheets entirely

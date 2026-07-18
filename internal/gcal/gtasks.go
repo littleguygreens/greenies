@@ -3,10 +3,10 @@
 //
 // Why Google Tasks alongside Calendar events?
 //
-//	The multi-day stage blocks in Google Calendar give an at-a-glance view of
-//	which crops are in which phase. But they don't show what to actually DO
-//	each day. Google Tasks fills that gap: each day with real work gets a
-//	checkable to-do item (e.g. "Sunnies: top water, rotate stack") that the
+//	The all-day events in Google Calendar show the farm-wide picture — a
+//	snapshot of everything growing on each date. But a calendar event can't
+//	be ticked off. Google Tasks fills that gap: each day with real work gets
+//	a checkable to-do item (e.g. "Sunnies: top water, rotate stack") that the
 //	grower can tick off as they move through the farm.
 //
 // The "Labor" task list:

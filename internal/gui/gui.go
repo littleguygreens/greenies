@@ -356,9 +356,9 @@ func requestAllowed(r *http.Request) bool {
 //
 // The browser page sends a tiny "I'm still here" ping to /heartbeat every 2
 // seconds (see the <script> in layout.html). A background goroutine on the
-// server watches for these pings. If none arrive for 6 seconds (3 missed
-// beats), the server assumes the browser window was closed and shuts itself
-// down cleanly — no need to press Ctrl+C in the terminal.
+// server watches for these pings. If none arrive within the timeout (see
+// heartbeatTimeout below), the server assumes the browser window was closed
+// and shuts itself down cleanly — no need to press Ctrl+C in the terminal.
 //
 // Think of it like a dead man's switch: as long as someone is watching, the
 // server stays alive. The moment nobody is watching, it stops on its own.
@@ -380,7 +380,7 @@ var heartbeatMu sync.Mutex
 // browserConnected tracks whether the browser has ever sent a heartbeat
 // ping. The watcher goroutine ignores the timeout until this is true —
 // so on a slow machine, the server will wait patiently for the browser
-// to finish loading instead of shutting down after 6 seconds.
+// to finish loading instead of shutting down before the first page opens.
 var browserConnected bool
 
 // recordHeartbeat updates the last-seen timestamp. Called by the /heartbeat

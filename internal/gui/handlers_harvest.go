@@ -77,13 +77,6 @@ func handleHarvestLog(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Delete
-// ─────────────────────────────────────────────────────────────────────────────
-
-// deleteTask is the template-friendly version of a task for the delete page.
-// It adds a HasCycle flag so the template knows whether to show the
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Harvest
 // ─────────────────────────────────────────────────────────────────────────────
 

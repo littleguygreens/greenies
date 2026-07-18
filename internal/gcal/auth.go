@@ -130,7 +130,7 @@ func TokenExists() bool {
 // which app is asking for permission and what permissions it needs.
 //
 // By default, this uses the credentials embedded in the binary (see the
-// constants above). If the user has placed their own credentials.json file
+// variables above). If the user has placed their own credentials.json file
 // in ~/.greenies/, that file takes priority — this lets power users use
 // their own Google Cloud project with its own API quota.
 func loadConfig() (*oauth2.Config, error) {

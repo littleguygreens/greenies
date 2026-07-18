@@ -77,7 +77,7 @@ func runPlan() {
 	// --- Upfront choice: single cycle or a harvest batch? ---
 	// A harvest batch lets the grower plan multiple crop varieties that all
 	// share the same harvest date — ideal for planning a farmers market day.
-	// A single cycle is the existing flow for planning one crop at a time.
+	// A single cycle plans one crop at a time.
 	planType := ask("Plan a (c)ycle or a (b)atch harvest day? [c]: ")
 	if strings.ToLower(planType) == "b" || strings.EqualFold(planType, "batch") {
 		runBatchPlan(reader, ask, farmEnvs, litEnvs, crops)
@@ -301,9 +301,6 @@ func runPlan() {
 	//
 	// Example: sunnies DarkDays=4 → first light = Day 6 = sow + 5 days ✓
 	// Example: peas    DarkDays=3 → first light = Day 5 = sow + 4 days ✓
-	//
-	// NOTE: This formula has been verified on paper. Test it carefully with
-	// greenies snapshot after planning real cycles.
 	baseMoveToLight := baseSow.AddDate(0, 0, found.DarkDays+1)
 
 	// --- Question 4: which lit environment? ---

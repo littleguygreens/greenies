@@ -12,6 +12,9 @@
 //	"Farm" — the physical farm layout (environments, slot capacities, and
 //	inventory counts). Two-way sync, same as Crops.
 //
+//	"Supplies" — farm-wide supply costs (labels, containers, grow medium).
+//	Two-way sync, same as Crops.
+//
 //	"Trials" — trial run data (push-only).
 //
 //	"Schedule Tasks" — every calendar task from tasks.json (push-only).
@@ -331,7 +334,7 @@ func (sc *SheetsClient) readTab(tab string) (col map[string]int, rows [][]interf
 	return col, rows, nil
 }
 
-// CreateSheet creates a brand-new Google Spreadsheet with all seven tabs
+// CreateSheet creates a brand-new Google Spreadsheet with every tab
 // and their header rows already in place.
 //
 // This is called only once — the very first time the user runs "greenies sync"
@@ -351,7 +354,7 @@ func CreateSheet(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not create Google Sheets service: %w", err)
 	}
 
-	// Define the spreadsheet structure: seven tabs with specific names.
+	// Define the spreadsheet structure: one entry per tab.
 	// Google always creates a default "Sheet1" tab, but by specifying our
 	// own tabs here it only creates the ones we ask for.
 	spreadsheet := &sheets.Spreadsheet{
@@ -387,7 +390,7 @@ func CreateSheet(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not create Google Sheet: %w", err)
 	}
 
-	// Write the header rows to both tabs so the grower sees column labels
+	// Write the header rows to every tab so the grower sees column labels
 	// even before any crop data is pushed.
 	sheetID := created.SpreadsheetId
 

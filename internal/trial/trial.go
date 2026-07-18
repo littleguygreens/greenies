@@ -580,8 +580,8 @@ func (tr TrialRecord) ToCrop() crop.Crop {
 // to the end of that list, and write the whole file back out with the
 // standard crop.WriteCrops writer. Because that writer places every value
 // under its named column header, the promoted rows can never drift out of
-// line with the file's column layout — which is exactly the bug this used
-// to have when it wrote cells by position instead of by name.
+// line with the file's column layout. (Writing cells by position instead of
+// by name is the failure mode promote_test.go guards against.)
 //
 // If the same crop name already exists, the promoted trial is added as a
 // second entry alongside it — intentional, and the promote flows warn the

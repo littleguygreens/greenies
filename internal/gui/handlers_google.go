@@ -246,8 +246,8 @@ func handleSyncPush(w http.ResponseWriter, r *http.Request) {
 // in the terminal during the first "greenies sync". When the user clicks the
 // "Link Google Sheets" button on the sync page, this handler:
 //
-//  1. Creates a new Google Spreadsheet with all seven tabs
-//     (Crops, Cycle, Farm, Trials, Schedule, Batches, Harvests)
+//  1. Creates a new Google Spreadsheet with every tab (Crops, Cycle, Farm,
+//     Supplies, Trials, Schedule Tasks, Schedule Cycles, Harvests)
 //  2. Saves the spreadsheet ID to config.json
 //  3. Pushes all existing local data to the new Sheet
 //  4. Returns an htmx fragment showing the Sheet URL and a "Sync Now" button
@@ -257,7 +257,7 @@ func handleSyncPush(w http.ResponseWriter, r *http.Request) {
 func handleSheetsSetup(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
-	// Create the Google Sheet with all seven tabs and headers.
+	// Create the Google Sheet with every tab and its headers.
 	sheetID, err := gcal.CreateSheet(ctx)
 	if err != nil {
 		renderFragment(w, "sheets_setup_result.html", map[string]any{
