@@ -86,6 +86,50 @@ jobs:
           build darwin  arm64 greenies-darwin-arm64       # Apple Silicon Macs (M1 and later)
           build windows amd64 greenies-windows-amd64.exe  # ordinary Windows PCs
 
+      # ── Android APK ────────────────────────────────────────────────────
+      #
+      # desktop/android/build.sh already does every step (cross-compile Go,
+      # compile resources, compile Java, convert to DEX, assemble, align,
+      # sign) — the robot just needs the same tools a human would install by
+      # hand, plus the signing key. That key is never stored in this repo
+      # (public!); it lives only as the ANDROID_DEBUG_KEYSTORE_B64 secret,
+      # decoded to a file right before build.sh runs. build.sh already skips
+      # generating a new key when debug.keystore exists, so dropping the
+      # real one in first makes it sign with that instead.
+      #
+      # Using the SAME key on every release (not a fresh one each time) is
+      # what lets users install an update over the old app without Android
+      # refusing it as a "different app."
+      - name: Install JDK (for javac + sdkmanager, both Java tools)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          cd "$HOME/android-sdk/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-*.zip
+          mv cmdline-tools latest
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+      - name: Install build-tools and the Android 34 platform
+        run: yes | sdkmanager --licenses > /dev/null; sdkmanager 'build-tools;36.0.0' 'platforms;android-34'
+
+      - name: Restore the signing key from its GitHub secret
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: echo "$KEYSTORE_B64" | base64 -d > desktop/android/debug.keystore
+
+      - name: Build the Android APK
+        run: |
+          cd desktop/android
+          ./build.sh
+          mv greenies.apk ../../dist/greenies-android-arm64.apk
+
       # Create the GitHub release and attach every binary.
       #
       # "gh" is GitHub's own command-line tool, pre-installed on the robot's
