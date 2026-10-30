@@ -68,7 +68,21 @@ func handlePlanPage(w http.ResponseWriter, r *http.Request) {
 		"LitEnvs":  litEnvs,
 		"HasEnvs":  len(litEnvs) > 0,
 		"Today":    task.Today().Format(task.DateFormat),
+		// The choices for the "Repeat every ___" dropdown: 1, 2, 3 … up to
+		// task.MaxRepeatWeeks. Built here rather than typed into the page
+		// so the dropdown always matches the limit the server accepts.
+		"RepeatChoices": repeatChoices(),
 	})
+}
+
+// repeatChoices lists every allowed repeat gap in weeks, from 1 (weekly)
+// up to task.MaxRepeatWeeks, for the Plan page's dropdown.
+func repeatChoices() []int {
+	choices := make([]int, task.MaxRepeatWeeks)
+	for i := range choices {
+		choices[i] = i + 1
+	}
+	return choices
 }
 
 // previewDay holds the display data for one day in the schedule preview table.
@@ -122,6 +136,22 @@ func findConsolidations(existingCycles, newCycles []farm.Cycle, newTrays int) []
 	return matches
 }
 
+// parseRepeatInterval reads the "Repeat every ___" dropdown and returns the
+// number of weeks between repeats (1 to task.MaxRepeatWeeks). Anything
+// missing or out of range falls back to 1 (weekly), so an old bookmarked
+// form or a hand-edited request still behaves exactly as it did before
+// this option existed.
+//
+// NOTE: the CLI asks the same question in askRepeatInterval (cmd_plan.go)
+// — keep the allowed range in step via task.MaxRepeatWeeks.
+func parseRepeatInterval(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > task.MaxRepeatWeeks {
+		return 1
+	}
+	return n
+}
+
 // handlePlanPreview handles POST /plan/preview.
 //
 // This is called by htmx when the grower clicks "Preview Schedule". It reads
@@ -145,6 +175,8 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.FormValue("date")
 	litEnv := r.FormValue("lit_env")
 	repeatsStr := r.FormValue("repeats")
+	intervalWeeks := parseRepeatInterval(r.FormValue("interval"))
+	gapDays := intervalWeeks * 7 // days between each repeat
 
 	// ── Validate the crop ────────────────────────────────────────────────
 	source, err := crop.GetSource()
@@ -289,9 +321,10 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 		LitEnvironment:  envForCycle,
 	})
 
-	// Weekly repeat cycles.
+	// Repeat cycles, one gap apart (7 days for weekly, 14 for every other
+	// week, and so on).
 	for week := 1; week <= repeats; week++ {
-		shift := week * 7
+		shift := week * gapDays
 		tempCycles = append(tempCycles, farm.Cycle{
 			CropName:        found.Name,
 			Trays:           trays,
@@ -317,6 +350,17 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 	// Check whether any of the planned cycles can be consolidated with an
 	// existing cycle of the same crop on the same sow date.
 	consolidations := findConsolidations(existingCycles, tempCycles, trays)
+
+	// ── Build the repeat summary ─────────────────────────────────────────
+	// e.g. "4 cycles, every 3 weeks — last harvest Sat Jan 16 2027".
+	// Showing the last harvest lets the grower check the repeats cover the
+	// whole season they had in mind without counting weeks by hand.
+	repeatNote := ""
+	if repeats > 0 {
+		lastHarvest := baseHarvest.AddDate(0, 0, repeats*gapDays)
+		repeatNote = fmt.Sprintf("%d cycles, %s — last harvest %s.",
+			totalCycles, task.RepeatPhrase(intervalWeeks), lastHarvest.Format("Mon Jan 02 2006"))
+	}
 
 	// ── Build the header line ────────────────────────────────────────────
 	trayWord := task.TrayWord(trays)
@@ -362,6 +406,7 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 		"Conflicts":    conflicts,
 		"HasConflicts": len(conflicts) > 0,
 		"TotalCycles":  totalCycles,
+		"RepeatNote":   repeatNote,
 		// Swimlane preview data.
 		"SwimWeeks":     swimWeeks,
 		"SwimDayLabels": swimDayLabels,
@@ -376,6 +421,7 @@ func handlePlanPreview(w http.ResponseWriter, r *http.Request) {
 		"FormDate":      dateStr,
 		"FormLitEnv":    litEnv,
 		"FormRepeats":   strconv.Itoa(repeats),
+		"FormInterval":  strconv.Itoa(intervalWeeks),
 	})
 }
 
@@ -401,6 +447,8 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.FormValue("date")
 	litEnv := r.FormValue("lit_env")
 	repeatsStr := r.FormValue("repeats")
+	intervalWeeks := parseRepeatInterval(r.FormValue("interval"))
+	gapDays := intervalWeeks * 7 // days between each repeat
 
 	// ── Load the crop ────────────────────────────────────────────────────
 	source, err := crop.GetSource()
@@ -488,14 +536,14 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 		ExpectedGrams:   found.YieldGrams * trays,
 	})
 
-	// ── Weekly repeats ───────────────────────────────────────────────────
-	// Same logic as the CLI: shift the anchor date by 7 days per repeat
+	// ── Repeats ──────────────────────────────────────────────────────────
+	// Same logic as the CLI: shift the anchor date by one gap per repeat
 	// and regenerate the schedule.
 	if repeats > 0 {
 		baseDate, _ := time.Parse(task.DateFormat, dateStr)
 
 		for week := 1; week <= repeats; week++ {
-			weeklyDate := baseDate.AddDate(0, 0, week*7).Format(task.DateFormat)
+			weeklyDate := baseDate.AddDate(0, 0, week*gapDays).Format(task.DateFormat)
 			var weekTasks []task.Task
 
 			if fromHarvest {
@@ -512,9 +560,9 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 
 			allNewTasks = append(allNewTasks, weekTasks...)
 
-			weekSow := baseSow.AddDate(0, 0, week*7)
-			weekHarvest := baseHarvest.AddDate(0, 0, week*7)
-			weekMoveToLight := baseMoveToLight.AddDate(0, 0, week*7)
+			weekSow := baseSow.AddDate(0, 0, week*gapDays)
+			weekHarvest := baseHarvest.AddDate(0, 0, week*gapDays)
+			weekMoveToLight := baseMoveToLight.AddDate(0, 0, week*gapDays)
 
 			newCycleRecords = append(newCycleRecords, farm.Cycle{
 				CycleID:         weekTasks[0].CycleID,
@@ -580,7 +628,7 @@ func handlePlanConfirm(w http.ResponseWriter, r *http.Request) {
 
 					weekSow := sowDateStr
 					if weekIdx > 0 {
-						weekSow = baseSow.AddDate(0, 0, weekIdx*7).Format(task.DateFormat)
+						weekSow = baseSow.AddDate(0, 0, weekIdx*gapDays).Format(task.DateFormat)
 					}
 					_, replaceTasks, schedErr := scheduler.ScheduleForward(*found, weekSow, m.CombinedTrays)
 					if schedErr == nil {

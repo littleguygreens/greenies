@@ -343,15 +343,20 @@ func runPlan() {
 		ExpectedGrams: found.YieldGrams * trays,
 	})
 
-	// --- Optional: weekly repetition ---
-	// Many growers sow the same crop every week to maintain a steady harvest
-	// rhythm. If the user wants repeats, we generate additional copies of the
-	// schedule, each shifted forward by one week (7 days) at a time.
-	// Blank input defaults to 1 additional week; type 0 to skip repeating.
+	// --- Optional: repetition ---
+	// Many growers sow the same crop on a regular rhythm to keep a steady
+	// harvest. If the user wants repeats, we generate additional copies of the
+	// schedule, each shifted forward by a fixed gap: every week, every 2
+	// weeks, every 3 weeks, or every 4 weeks.
+	//
+	// The longer gaps make rotations easy: to have three crops take turns on
+	// Saturdays, plan each one "every 3 weeks" with first harvests on three
+	// consecutive Saturdays.
+	// Blank input defaults to 1 additional cycle; type 0 to skip repeating.
 	allNewTasks := newTasks // start with the first cycle
 
-	weeksStr := ask("Repeat weekly? Additional weeks (0 to skip) [1]: ")
-	additionalWeeks := 1 // default: one additional week
+	weeksStr := ask("Repeat? Additional cycles (0 to skip) [1]: ")
+	additionalWeeks := 1 // default: one additional cycle
 	if weeksStr != "" {
 		w, convErr := strconv.Atoi(weeksStr)
 		if convErr != nil || w < 0 {
@@ -359,6 +364,14 @@ func runPlan() {
 			os.Exit(1)
 		}
 		additionalWeeks = w
+	}
+
+	// gapDays is how many days apart each repeat lands — 7 for weekly,
+	// 14 for every other week, and so on. It is also used by the
+	// consolidation step below to work out each repeat's sow date.
+	gapDays := 7
+	if additionalWeeks > 0 {
+		gapDays = askRepeatInterval(ask) * 7
 	}
 
 	if additionalWeeks > 0 {
@@ -369,8 +382,8 @@ func runPlan() {
 		baseDate, _ := time.Parse(task.DateFormat, displayDate)
 
 		for week := 1; week <= additionalWeeks; week++ {
-			// Shift the anchor date forward by 7 days per additional week.
-			weeklyDate := baseDate.AddDate(0, 0, week*7).Format(task.DateFormat)
+			// Shift the anchor date forward by one gap per repeat.
+			weeklyDate := baseDate.AddDate(0, 0, week*gapDays).Format(task.DateFormat)
 
 			// Use the same scheduling direction as the first cycle.
 			var weekTasks []task.Task
@@ -386,10 +399,10 @@ func runPlan() {
 			allNewTasks = append(allNewTasks, weekTasks...)
 
 			// Create a cycle record for this week's repeat.
-			// All dates for week i are shifted by exactly i×7 days from the base.
-			weekSow := baseSow.AddDate(0, 0, week*7)
-			weekHarvest := baseHarvest.AddDate(0, 0, week*7)
-			weekMoveToLight := baseMoveToLight.AddDate(0, 0, week*7)
+			// All dates for repeat i are shifted by exactly i gaps from the base.
+			weekSow := baseSow.AddDate(0, 0, week*gapDays)
+			weekHarvest := baseHarvest.AddDate(0, 0, week*gapDays)
+			weekMoveToLight := baseMoveToLight.AddDate(0, 0, week*gapDays)
 
 			newCycleRecords = append(newCycleRecords, farm.Cycle{
 				CycleID:         weekTasks[0].CycleID,
@@ -403,8 +416,11 @@ func runPlan() {
 			})
 		}
 
-		fmt.Printf("%d cycles scheduled (%d weeks total).\n",
-			additionalWeeks+1, additionalWeeks+1)
+		// Show the last harvest so the grower can check the repeats cover
+		// the whole season they had in mind.
+		lastHarvest := baseHarvest.AddDate(0, 0, additionalWeeks*gapDays)
+		fmt.Printf("%d cycles scheduled, %s — last harvest %s.\n",
+			additionalWeeks+1, task.RepeatPhrase(gapDays/7), lastHarvest.Format("Mon Jan 02 2006"))
 	}
 
 	// ── Consolidation check ──────────────────────────────────────────────────
@@ -479,7 +495,7 @@ func runPlan() {
 
 					weekSow := sowDateStr
 					if weekIdx > 0 {
-						weekSow = baseSow.AddDate(0, 0, weekIdx*7).Format(task.DateFormat)
+						weekSow = baseSow.AddDate(0, 0, weekIdx*gapDays).Format(task.DateFormat)
 					}
 					_, replaceTasks, schedErr := scheduler.ScheduleForward(*found, weekSow, m.combinedTrays)
 					if schedErr != nil {
@@ -886,9 +902,9 @@ func runBatchPlan(
 		})
 	}
 
-	// Blank input defaults to 1 additional week; type 0 to skip repeating.
-	batchWeeksStr := ask("Repeat weekly? Additional weeks (0 to skip) [1]: ")
-	additionalWeeks := 1 // default: one additional week
+	// Blank input defaults to 1 additional repeat; type 0 to skip repeating.
+	batchWeeksStr := ask("Repeat this batch? Additional repeats (0 to skip) [1]: ")
+	additionalWeeks := 1 // default: one additional repeat
 	if batchWeeksStr != "" {
 		w, convErr := strconv.Atoi(batchWeeksStr)
 		if convErr != nil || w < 0 {
@@ -898,14 +914,22 @@ func runBatchPlan(
 		additionalWeeks = w
 	}
 
+	// gapDays is how many days apart each repeat of the batch lands — 7 for
+	// weekly, 14 for every other week, and so on. The split step further
+	// down uses it too, so every rebuilt repeat stays on the same rhythm.
+	gapDays := 7
+	if additionalWeeks > 0 {
+		gapDays = askRepeatInterval(ask) * 7
+	}
+
 	if additionalWeeks > 0 {
 
-		// For each additional week, regenerate every crop's schedule shifted
-		// forward by week×7 days, using a new harvest date per week.
+		// For each repeat, regenerate every crop's schedule shifted forward
+		// by one gap per repeat, using a new harvest date each time.
 		baseHarvest, _ := time.Parse(task.DateFormat, harvestDate)
 
 		for week := 1; week <= additionalWeeks; week++ {
-			weeklyHarvest := baseHarvest.AddDate(0, 0, week*7).Format(task.DateFormat)
+			weeklyHarvest := baseHarvest.AddDate(0, 0, week*gapDays).Format(task.DateFormat)
 
 			for _, e := range entries {
 				_, weekTasks, schedErr := scheduler.Schedule(*e.found, weeklyHarvest, e.trays)
@@ -916,9 +940,9 @@ func runBatchPlan(
 				allTasks = append(allTasks, weekTasks...)
 
 				// Shift all three key dates forward by the same number of days.
-				weekSow := e.sowDate.AddDate(0, 0, week*7)
-				weekHarvest := e.harvest.AddDate(0, 0, week*7)
-				weekMoveToLight := e.moveLight.AddDate(0, 0, week*7)
+				weekSow := e.sowDate.AddDate(0, 0, week*gapDays)
+				weekHarvest := e.harvest.AddDate(0, 0, week*gapDays)
+				weekMoveToLight := e.moveLight.AddDate(0, 0, week*gapDays)
 
 				allCycleRecords = append(allCycleRecords, farm.Cycle{
 					CycleID:         weekTasks[0].CycleID,
@@ -933,8 +957,10 @@ func runBatchPlan(
 			}
 		}
 
-		fmt.Printf("%d crops × %d weeks = %d cycles total.\n",
-			len(entries), additionalWeeks+1, len(entries)*(additionalWeeks+1))
+		lastHarvest := baseHarvest.AddDate(0, 0, additionalWeeks*gapDays)
+		fmt.Printf("%d crops × %d harvest days = %d cycles total, %s — last harvest %s.\n",
+			len(entries), additionalWeeks+1, len(entries)*(additionalWeeks+1),
+			task.RepeatPhrase(gapDays/7), lastHarvest.Format("Mon Jan 02 2006"))
 	}
 
 	// --- Step 4: combined summary ---
@@ -1087,7 +1113,7 @@ func runBatchPlan(
 				allCycleRecords = nil
 
 				for week := 0; week <= additionalWeeks; week++ {
-					shift := week * 7
+					shift := week * gapDays
 					for i, e := range entries {
 						aTrays := batchAssignments[i][0]
 						bTrays := batchAssignments[i][1]
@@ -1188,6 +1214,32 @@ func runBatchPlan(
 	fmt.Printf("%d tasks added to the calendar.\n", len(allTasks))
 	fmt.Println("Run \"greenies list\" to see the schedule.")
 	fmt.Println("Run \"greenies snapshot\" to see the farm view.")
+}
+
+// askRepeatInterval asks how many weeks apart each repeat should land and
+// returns the answer as a whole number of weeks (1 to task.MaxRepeatWeeks).
+// ask is the same "print a question, read the answer" helper the calling
+// command already uses, passed in so this works from both plan flows.
+//
+// 1 is the classic weekly rhythm. Longer gaps let the grower build a
+// rotation: for example, three crops each planned "every 3 weeks" with
+// first harvests on three consecutive Saturdays will take turns, so every
+// Saturday has exactly one of them ready.
+//
+// Blank input keeps the weekly default, so growers who never rotate can
+// just press Enter and nothing about their usual flow changes.
+func askRepeatInterval(ask func(prompt string) string) int {
+	prompt := fmt.Sprintf("Repeat every how many weeks? (1-%d) [1]: ", task.MaxRepeatWeeks)
+	answer := ask(prompt)
+	if answer == "" {
+		return 1
+	}
+	n, err := strconv.Atoi(answer)
+	if err != nil || n < 1 || n > task.MaxRepeatWeeks {
+		fmt.Printf("Please enter a whole number from 1 to %d.\n", task.MaxRepeatWeeks)
+		os.Exit(1)
+	}
+	return n
 }
 
 // resolveLitEnv maps what the user typed to a lit environment name.

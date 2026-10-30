@@ -12,6 +12,7 @@ package task
 import (
 	"crypto/rand"  // Go's built-in secure random number generator
 	"encoding/hex" // converts random bytes into a readable string of letters and numbers
+	"strconv"      // turns numbers into text, used by RepeatPhrase
 	"strings"      // for strings.ToUpper, used by Capitalize
 	"time"         // Go's built-in package for working with dates and times
 )
@@ -181,4 +182,20 @@ func TrayWord(count int) string {
 		return "tray"
 	}
 	return "trays"
+}
+
+// MaxRepeatWeeks is the longest gap allowed between repeats of a planned
+// cycle. Six weeks leaves room for long-season rotations (for example,
+// one crop every 6 weeks); raise it here if an even longer rotation is
+// ever needed — the CLI question and the GUI dropdown both follow it.
+const MaxRepeatWeeks = 6
+
+// RepeatPhrase describes how often planned repeats land, in plain words:
+// "every week" for 1, "every 2 weeks" for 2, and so on. Used in the plan
+// summaries so the grower can confirm the rhythm they picked.
+func RepeatPhrase(weeks int) string {
+	if weeks <= 1 {
+		return "every week"
+	}
+	return "every " + strconv.Itoa(weeks) + " weeks"
 }

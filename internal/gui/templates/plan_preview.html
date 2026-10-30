@@ -132,8 +132,8 @@
             </div>
         {{end}}
 
-        {{if .TotalCycles}}
-            <p class="plan-repeat-note">{{.TotalCycles}} cycles total ({{.TotalCycles}} weeks).</p>
+        {{if .RepeatNote}}
+            <p class="plan-repeat-note">{{.RepeatNote}}</p>
         {{end}}
 
         <!-- Confirm form — sends the same form data to POST /plan/confirm.
@@ -152,6 +152,7 @@
             <input type="hidden" name="date" value="{{.FormDate}}">
             <input type="hidden" name="lit_env" value="{{.FormLitEnv}}">
             <input type="hidden" name="repeats" value="{{.FormRepeats}}">
+            <input type="hidden" name="interval" value="{{.FormInterval}}">
 
             <div class="plan-actions">
                 {{if .HasConsolidation}}
